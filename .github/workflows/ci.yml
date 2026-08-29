@@ -1,0 +1,43 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: elinor_test
+          POSTGRES_USER: elinor
+          POSTGRES_PASSWORD: test-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U elinor -d elinor_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python manage.py check --deploy
+        env:
+          DATABASE_URL: postgresql://elinor:test-password@localhost:5432/elinor_test
+          SECRET_KEY: ci-only-secret-key-not-used-in-production
+          ALLOWED_HOSTS: localhost
+      - run: python manage.py makemigrations --check --dry-run
+        env:
+          DATABASE_URL: postgresql://elinor:test-password@localhost:5432/elinor_test
+          SECRET_KEY: ci-only-secret-key-not-used-in-production
+      - run: python manage.py test
+        env:
+          DATABASE_URL: postgresql://elinor:test-password@localhost:5432/elinor_test
+          SECRET_KEY: ci-only-secret-key-not-used-in-production
+      - run: docker compose config --quiet

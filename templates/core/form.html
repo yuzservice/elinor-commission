@@ -1,0 +1,2 @@
+{% extends 'base.html' %}{% block content %}<div class="page-head"><div><p class="eyebrow">فرم جدید</p><h1>{{ title }}</h1></div></div><article class="card form-card"><form method="post" enctype="multipart/form-data">{% csrf_token %}{% for field in form %}<div class="field"><label>{{ field.label }}{% if field.field.required %}<em>*</em>{% endif %}</label>{{ field }}{% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>{% endfor %}<button class="primary">{{ submit }}</button></form></article>{% endblock %}
+

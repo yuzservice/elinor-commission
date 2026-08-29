@@ -1,0 +1,13 @@
+{% extends 'base.html' %}{% block title %}{{ title }}{% endblock %}{% block content %}
+<div class="page-head"><div><p class="eyebrow">فعالیت روزانه</p><h1>{{ title }}</h1><p>امتیاز بر اساس تعریف فعالیت و به‌صورت خودکار محاسبه می‌شود.</p></div><a class="secondary" href="{% url 'activities' %}">بازگشت</a></div>
+<form class="card form-card wide" method="post" enctype="multipart/form-data">{% csrf_token %}
+{% if form.non_field_errors %}<div class="message error">{{ form.non_field_errors }}</div>{% endif %}
+<div class="form-grid">{% for field in form %}<div class="field {% if field.name == 'employee_note' %}span-2{% endif %}" id="field-{{ field.name }}"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<small class="help">{{ field.help_text }}</small>{% endif %}{% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>{% endfor %}</div>
+<div class="score-preview"><span>امتیاز محاسبه‌شده</span><strong id="score-preview">—</strong><small id="score-method">پس از انتخاب فعالیت نمایش داده می‌شود</small></div>
+<div class="form-actions"><button class="secondary" name="action" value="draft">ذخیره پیش‌نویس</button><button class="primary" name="action" value="submit">ثبت و ارسال</button></div>
+</form>
+{{ activity_type_data|json_script:"activity-type-data" }}
+<script>
+const definitions=JSON.parse(document.getElementById('activity-type-data').textContent);const type=document.getElementById('id_activity_type'),value=document.getElementById('id_value'),valueField=document.getElementById('field-value'),score=document.getElementById('score-preview'),method=document.getElementById('score-method'),evidence=document.getElementById('field-evidence');
+function updateScore(){const d=definitions.find(x=>String(x.id)===type.value);if(!d){score.textContent='—';return}const noUnit=d.unit==='بدون واحد';valueField.style.display=noUnit?'none':'block';if(noUnit)value.value='1';const v=Number(value.value||1);let total=d.method==='FIXED'?Number(d.score):d.method==='QUANTITY_MULTIPLIER'?v*Number(d.multiplier):v;score.textContent=new Intl.NumberFormat('fa-IR',{maximumFractionDigits:2}).format(total);method.textContent=d.method_label+(d.unit?' · واحد: '+d.unit:'');evidence.style.display=d.requires_evidence?'block':'none'}type.addEventListener('change',updateScore);value.addEventListener('input',updateScore);updateScore();
+</script>{% endblock %}
