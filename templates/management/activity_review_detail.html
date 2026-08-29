@@ -1,1 +1,117 @@
-{% extends 'base.html' %}{% load persian %}{% block title %}بررسی فعالیت{% endblock %}{% block content %}<div class="page-head"><div><p class="eyebrow">بررسی فعالیت</p><h1>{{ activity.activity_type.title }}</h1><p>{{ activity.employee.full_name }} · {{ activity.activity_date|jalali }}</p></div><a class="secondary" href="{% url 'management_activity_reviews' %}">بازگشت به صف</a></div><div class="detail-columns"><article class="card"><h2>جزئیات</h2><dl><dt>دسته</dt><dd>{{ activity.activity_type.category.title }}</dd><dt>مقدار</dt><dd>{{ activity.value|floatformat:-2 }} {{ activity.activity_type.unit }}</dd><dt>امتیاز محاسبه‌شده</dt><dd>{{ activity.calculated_score|floatformat:-2 }}</dd><dt>توضیح کارمند</dt><dd>{{ activity.employee_note|default:'—' }}</dd><dt>مدرک</dt><dd>{% if activity.evidence %}<a target="_blank" rel="noopener" class="table-link" href="{{ activity.evidence.url }}">مشاهده فایل</a>{% else %}—{% endif %}</dd><dt>ارسال</dt><dd>{{ activity.submitted_at|jalali_datetime }}</dd></dl></article><form class="card" method="post">{% csrf_token %}<h2>ثبت تصمیم</h2>{% for field in form %}<div class="field"><label>{{ field.label }}</label>{{ field }}{% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>{% endfor %}<button class="primary">ثبت نتیجه بررسی</button></form></div><article class="card"><h2>تاریخچه</h2><div class="timeline">{% for history in activity.status_history.all %}<div><i></i><p><b>{{ history.get_new_status_display }}</b><small>{{ history.actor.username }} · {{ history.created_at|jalali_datetime }}</small>{% if history.note %}<span>{{ history.note }}</span>{% endif %}</p></div>{% endfor %}</div></article>{% endblock %}
+{% extends 'base.html' %}
+{% load persian %}
+{% block title %}بررسی فعالیت{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <p class="eyebrow">بررسی فعالیت</p>
+    <h1>{{ activity.activity_type.title }}</h1>
+    <p>
+      {{ activity.employee.full_name }}
+      ·
+      {{ activity.activity_date|jalali }}
+    </p>
+  </div>
+
+  <a class="secondary" href="{% url 'management_activity_reviews' %}">
+    بازگشت به صف
+  </a>
+</div>
+
+<div class="detail-columns">
+
+  <article class="card">
+    <h2>جزئیات فعالیت</h2>
+
+    <dl>
+      <dt>دسته</dt>
+      <dd>{{ activity.activity_type.category.title }}</dd>
+
+      <dt>ساعت شروع</dt>
+      <dd>{{ activity.start_time|time:"H:i"|default:"—" }}</dd>
+
+      <dt>ساعت پایان</dt>
+      <dd>{{ activity.end_time|time:"H:i"|default:"—" }}</dd>
+
+      <dt>مدت فعالیت</dt>
+      <dd>{{ activity.duration_display }}</dd>
+
+      {% if activity.activity_type.requires_quantity %}
+        <dt>مقدار</dt>
+        <dd>
+          {{ activity.value|floatformat:-2 }}
+          {{ activity.activity_type.unit }}
+        </dd>
+      {% endif %}
+
+      <dt>امتیاز محاسبه‌شده</dt>
+      <dd>{{ activity.calculated_score|floatformat:-2 }}</dd>
+
+      <dt>توضیح کارمند</dt>
+      <dd>{{ activity.employee_note|default:'—' }}</dd>
+
+      <dt>مدرک</dt>
+      <dd>
+        {% if activity.evidence %}
+          <a target="_blank" rel="noopener" class="table-link"
+             href="{{ activity.evidence.url }}">
+            مشاهده فایل
+          </a>
+        {% else %}
+          —
+        {% endif %}
+      </dd>
+
+      <dt>زمان ارسال</dt>
+      <dd>{{ activity.submitted_at|jalali_datetime }}</dd>
+    </dl>
+  </article>
+
+  <form class="card" method="post">
+    {% csrf_token %}
+
+    <h2>ثبت تصمیم</h2>
+
+    {% for field in form %}
+      <div class="field">
+        <label>{{ field.label }}</label>
+        {{ field }}
+
+        {% for error in field.errors %}
+          <small class="field-error">{{ error }}</small>
+        {% endfor %}
+      </div>
+    {% endfor %}
+
+    <button class="primary">ثبت نتیجه بررسی</button>
+  </form>
+
+</div>
+
+<article class="card">
+  <h2>تاریخچه</h2>
+
+  <div class="timeline">
+    {% for history in activity.status_history.all %}
+      <div>
+        <i></i>
+        <p>
+          <b>{{ history.get_new_status_display }}</b>
+
+          <small>
+            {{ history.actor.username }}
+            ·
+            {{ history.created_at|jalali_datetime }}
+          </small>
+
+          {% if history.note %}
+            <span>{{ history.note }}</span>
+          {% endif %}
+        </p>
+      </div>
+    {% endfor %}
+  </div>
+</article>
+
+{% endblock %}

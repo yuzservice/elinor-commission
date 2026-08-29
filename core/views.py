@@ -62,10 +62,27 @@ def activity_create(request):
                 Employee.objects.select_for_update().get(pk=employee.pk)
                 obj=form.save(commit=False); obj.employee=employee; obj.submitted_by=request.user; kind=obj.activity_type
                 if action=="submit": validate_daily_limit(employee,kind,obj.activity_date)
-                obj.definition_score_snapshot=kind.score_value; obj.multiplier_snapshot=kind.multiplier
-                obj.calculated_score=kind.calculate_score(obj.value); obj.final_score=obj.calculated_score; obj.status=Activity.Status.DRAFT; obj.save()
+                obj.definition_score_snapshot=kind.score_value
+                obj.multiplier_snapshot=kind.multiplier
+                obj.update_duration()
+                obj.calculated_score=kind.calculate_score(obj.value)
+                obj.final_score=obj.calculated_score
+                obj.status=Activity.Status.DRAFT
+                obj.save()
                 ActivityStatusHistory.objects.create(activity=obj,previous_status="",new_status=Activity.Status.DRAFT,actor=request.user,note="ایجاد فعالیت")
-                audit(actor=request.user,action="activity.created",instance=obj,new_values={"status":obj.status,"value":str(obj.value),"score":str(obj.calculated_score)})
+                audit(
+                    actor=request.user,
+                    action="activity.created",
+                    instance=obj,
+                    new_values={
+                        "status": obj.status,
+                        "start_time": str(obj.start_time or ""),
+                        "end_time": str(obj.end_time or ""),
+                        "duration_minutes": obj.duration_minutes,
+                        "value": str(obj.value) if kind.requires_quantity else None,
+                        "score": str(obj.calculated_score),
+                    }
+                )
                 if action=="submit": transition_activity(obj,Activity.Status.PENDING if kind.requires_manager_approval else Activity.Status.APPROVED,request.user,audit_action="activity.submitted")
         except ValidationError as exc: form.add_error(None,exc)
         else:
@@ -119,8 +136,24 @@ def activity_edit(request,pk):
             with transaction.atomic():
                 Employee.objects.select_for_update().get(pk=employee.pk); obj=form.save(commit=False); kind=obj.activity_type
                 if action=="submit": validate_daily_limit(employee,kind,obj.activity_date,obj.pk)
-                obj.definition_score_snapshot=kind.score_value; obj.multiplier_snapshot=kind.multiplier; obj.calculated_score=kind.calculate_score(obj.value); obj.final_score=obj.calculated_score; obj.save()
-                audit(actor=request.user,action="activity.updated",instance=obj,new_values={"value":str(obj.value),"score":str(obj.calculated_score)})
+                obj.definition_score_snapshot=kind.score_value
+                obj.multiplier_snapshot=kind.multiplier
+                obj.update_duration()
+                obj.calculated_score=kind.calculate_score(obj.value)
+                obj.final_score=obj.calculated_score
+                obj.save()
+                audit(
+                    actor=request.user,
+                    action="activity.updated",
+                    instance=obj,
+                    new_values={
+                        "start_time": str(obj.start_time or ""),
+                        "end_time": str(obj.end_time or ""),
+                        "duration_minutes": obj.duration_minutes,
+                        "value": str(obj.value) if kind.requires_quantity else None,
+                        "score": str(obj.calculated_score),
+                    }
+                )
                 if action=="submit": transition_activity(obj,Activity.Status.PENDING if kind.requires_manager_approval else Activity.Status.APPROVED,request.user,audit_action="activity.resubmitted" if previous==Activity.Status.NEEDS_REVISION else "activity.submitted")
         except ValidationError as exc: form.add_error(None,exc)
         else:
@@ -128,7 +161,16 @@ def activity_edit(request,pk):
     return render(request,"activities/form.html",{"form":form,"activity":activity,"title":"اصلاح فعالیت","activity_type_data":activity_type_form_data(form)})
 
 def activity_type_form_data(form):
-    return [{"id":item.pk,"method":item.scoring_method,"method_label":item.get_scoring_method_display(),"score":str(item.score_value),"multiplier":str(item.multiplier),"unit":item.unit,"requires_evidence":item.requires_evidence} for item in form.fields["activity_type"].queryset]
+    return [
+        {
+            "id": item.pk,
+            "unit": item.unit,
+            "requires_evidence": item.requires_evidence,
+            "requires_time_tracking": item.requires_time_tracking,
+            "requires_quantity": item.requires_quantity,
+        }
+        for item in form.fields["activity_type"].queryset
+    ]
 
 def activity_type_snapshot(obj):
     return {"title":obj.title,"code":obj.code,"category":obj.category_id,"scoring_method":obj.scoring_method,"score_value":str(obj.score_value),"multiplier":str(obj.multiplier),"active":obj.active}

@@ -22,7 +22,7 @@ class BaseEmployeeTest(TestCase):
 
 class CommissionTests(BaseEmployeeTest):
     def setUp(self):
-        super().setUp(); self.category=ActivityCategory.objects.create(code="MAIN",title="عملکرد اصلی"); self.kind=ActivityType.objects.create(code="M1",title="فعالیت",category=self.category,scoring_method=ActivityType.ScoringMethod.QUANTITY_MULTIPLIER,multiplier=10,all_departments=True)
+        super().setUp(); self.category=ActivityCategory.objects.create(code="MAIN",title="عملکرد اصلی"); self.kind=ActivityType.objects.create(code="M1",title="فعالیت",category=self.category,scoring_method=ActivityType.ScoringMethod.QUANTITY_MULTIPLIER,multiplier=10,requires_quantity=True,all_departments=True)
     def test_only_approved_activity_counts(self):
         for status in [Activity.Status.APPROVED,Activity.Status.PENDING]: Activity.objects.create(employee=self.employee,activity_type=self.kind,activity_date=date.today(),value=2,definition_score_snapshot=1,multiplier_snapshot=10,calculated_score=20,final_score=20,status=status,submitted_by=self.employee_user)
         m=employee_metrics(self.employee,date.today(),date.today()); self.assertEqual(m["score"],20); self.assertEqual(m["gross"],28000)
@@ -31,27 +31,99 @@ class CommissionTests(BaseEmployeeTest):
         Violation.objects.create(employee=self.employee,rule=rule,violation_date=date.today(),occurrence=1,points_snapshot=2,description="x",recorded_by=self.manager_user)
         m=employee_metrics(self.employee,date.today(),date.today()); self.assertEqual(m["deduction"],12000); self.assertEqual(m["commission"],0)
     def test_jalali_date_input_is_stored_as_gregorian(self):
-        form=ActivityForm(data={"activity_type":self.kind.pk,"activity_date":"۱۴۰۵/۰۶/۰۷","value":"1","employee_note":""},employee=self.employee)
+        form=ActivityForm(data={"activity_type":self.kind.pk,"activity_date":"۱۴۰۵/۰۶/۰۷","start_time":"09:00","end_time":"10:00","value":"1","employee_note":""},employee=self.employee)
         self.assertTrue(form.is_valid(),form.errors); self.assertEqual(form.cleaned_data["activity_date"],date(2026,8,29))
 
 class ActivityWorkflowTests(BaseEmployeeTest):
     def setUp(self):
         super().setUp()
         self.category=ActivityCategory.objects.create(code="OP",title="وظیفه عملیاتی")
-        self.kind=ActivityType.objects.create(code="A01",title="کمک انبار",category=self.category,scoring_method=ActivityType.ScoringMethod.QUANTITY_MULTIPLIER,multiplier=2,requires_manager_approval=True,max_daily_submissions=1)
+        self.kind=ActivityType.objects.create(code="A01",title="کمک انبار",category=self.category,scoring_method=ActivityType.ScoringMethod.QUANTITY_MULTIPLIER,multiplier=2,requires_quantity=True,requires_time_tracking=True,requires_manager_approval=True,max_daily_submissions=1)
         self.kind.departments.add(self.department)
         self.jalali_today="۱۴۰۵/۰۶/۰۷"
     def payload(self,**overrides):
-        data={"activity_type":self.kind.pk,"activity_date":self.jalali_today,"value":"3","employee_note":"انجام شد","action":"submit"}; data.update(overrides); return data
+        data={"activity_type":self.kind.pk,"activity_date":self.jalali_today,"start_time":"09:15","end_time":"10:45","value":"3","employee_note":"انجام شد","action":"submit"}; data.update(overrides); return data
     def submit(self,**overrides):
         self.client.force_login(self.employee_user); return self.client.post(reverse("activity_create"),self.payload(**overrides))
     def test_employee_submission_calculates_score_on_server(self):
         response=self.submit(calculated_score="9999"); self.assertEqual(response.status_code,302)
-        item=Activity.objects.get(); self.assertEqual(item.calculated_score,6); self.assertEqual(item.final_score,6); self.assertEqual(item.status,Activity.Status.PENDING); self.assertEqual(item.employee,self.employee)
+        item=Activity.objects.get(); self.assertEqual(item.calculated_score,6); self.assertEqual(item.final_score,6); self.assertEqual(item.duration_minutes,90); self.assertEqual(item.status,Activity.Status.PENDING); self.assertEqual(item.employee,self.employee)
         self.assertTrue(ActivityStatusHistory.objects.filter(activity=item,new_status=Activity.Status.PENDING).exists()); self.assertTrue(AuditLog.objects.filter(action="activity.submitted").exists())
     def test_draft_can_be_edited_and_submitted(self):
         response=self.submit(action="draft"); item=Activity.objects.get(); self.assertEqual(item.status,Activity.Status.DRAFT)
         response=self.client.post(reverse("activity_edit",args=[item.pk]),self.payload(value="4")); self.assertEqual(response.status_code,302); item.refresh_from_db(); self.assertEqual(item.status,Activity.Status.PENDING); self.assertEqual(item.final_score,8)
+    def test_employee_form_never_exposes_score_fields(self):
+        form=ActivityForm(employee=self.employee)
+        self.assertNotIn("calculated_score",form.fields)
+        self.assertNotIn("final_score",form.fields)
+        self.assertNotIn("definition_score_snapshot",form.fields)
+        self.assertNotIn("multiplier_snapshot",form.fields)
+
+    def test_score_post_tampering_is_ignored(self):
+        response=self.submit(
+            calculated_score="999999",
+            final_score="999999",
+            definition_score_snapshot="999999",
+            multiplier_snapshot="999999",
+        )
+        self.assertEqual(response.status_code,302)
+        item=Activity.objects.get()
+        self.assertEqual(item.calculated_score,6)
+        self.assertEqual(item.final_score,6)
+        self.assertEqual(item.multiplier_snapshot,2)
+
+    def test_end_time_must_be_after_start_time(self):
+        response=self.submit(start_time="11:00",end_time="10:00")
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(Activity.objects.count(),0)
+        self.assertContains(response,"ساعت پایان باید بعد از ساعت شروع باشد")
+
+    def test_quantity_is_required_only_when_definition_requires_it(self):
+        response=self.submit(value="")
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(Activity.objects.count(),0)
+        self.assertContains(response,"ثبت مقدار")
+
+        self.kind.requires_quantity=False
+        self.kind.scoring_method=ActivityType.ScoringMethod.FIXED
+        self.kind.score_value=7
+        self.kind.save()
+
+        response=self.submit(value="")
+        self.assertEqual(response.status_code,302)
+
+        item=Activity.objects.get()
+        self.assertEqual(item.value,1)
+        self.assertEqual(item.calculated_score,7)
+
+    def test_time_is_required_only_when_definition_requires_it(self):
+        response=self.submit(start_time="",end_time="")
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(Activity.objects.count(),0)
+        self.assertContains(response,"ثبت ساعت شروع")
+
+        self.kind.requires_time_tracking=False
+        self.kind.save()
+
+        response=self.submit(start_time="",end_time="")
+        self.assertEqual(response.status_code,302)
+
+        item=Activity.objects.get()
+        self.assertIsNone(item.start_time)
+        self.assertIsNone(item.end_time)
+        self.assertIsNone(item.duration_minutes)
+
+    def test_duration_is_calculated_server_side(self):
+        response=self.submit(
+            start_time="08:10",
+            end_time="11:25",
+            duration_minutes="99999",
+        )
+        self.assertEqual(response.status_code,302)
+
+        item=Activity.objects.get()
+        self.assertEqual(item.duration_minutes,195)
+
     def test_daily_limit_is_enforced(self):
         self.submit(); response=self.submit(); self.assertEqual(response.status_code,200); self.assertEqual(Activity.objects.count(),1); self.assertContains(response,"حداکثر ثبت روزانه")
     def test_employee_cannot_view_another_employee_activity(self):

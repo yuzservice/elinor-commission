@@ -44,3 +44,39 @@ Migration `0003_activity_workflow` ساختار قبلی ActivityType/Activity �
 - قفل دوره محاسبه و snapshot نهایی حقوق
 - نهایی‌سازی ضریب صبح و قواعد دقیق شیت
 - اعلان درخواست اصلاح و نتیجه بررسی
+
+## Activity Raw Input Correction — 2026-08-29
+
+Completed after Batch 1:
+
+- Employee activity submission no longer exposes score inputs.
+- Added `start_time` and `end_time` to Activity.
+- Added server-calculated `duration_minutes`.
+- Added `requires_time_tracking` to ActivityType.
+- Added `requires_quantity` to ActivityType.
+- Quantity is shown/required only for definitions that require measurable quantity.
+- Quantity unit comes from ActivityType `unit`.
+- Existing QUANTITY_MULTIPLIER and DIRECT_VALUE definitions were migrated to `requires_quantity=True`.
+- Score remains server-side only.
+- POST tampering of score/final score/snapshots is ignored.
+- End time must be later than start time.
+- Manager review shows start time, end time, duration, quantity and unit.
+- Existing activity records were preserved.
+
+Migration:
+- `0004_activity_duration_minutes_activity_end_time_and_more`
+
+Validation:
+- PostgreSQL test suite: 36 tests passed.
+- Django system check: clean.
+- Health endpoint: healthy.
+
+Important product rule:
+Employee submits raw operational data:
+activity type + date + start/end time + optional quantity + note/evidence.
+Employee never enters score.
+Scoring and commission calculations remain server-side.
+
+Current technical note:
+All existing ActivityTypes currently have `requires_time_tracking=True`.
+Managers may disable time tracking per ActivityType where it is not applicable.

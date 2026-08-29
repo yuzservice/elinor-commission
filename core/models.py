@@ -114,6 +114,8 @@ class ActivityType(models.Model):
     is_commission_eligible = models.BooleanField("مشمول پورسانت", default=True)
     requires_manager_approval = models.BooleanField("نیازمند تأیید مدیر", default=True)
     requires_evidence = models.BooleanField("نیازمند مدرک", default=False)
+    requires_time_tracking = models.BooleanField("نیازمند ثبت ساعت شروع و پایان", default=True)
+    requires_quantity = models.BooleanField("نیازمند ثبت مقدار", default=False)
     allow_employee_note = models.BooleanField("اجازه توضیح کارمند", default=True)
     recurrence_type = models.CharField("تناوب", max_length=12, choices=RecurrenceType.choices, default=RecurrenceType.OCCASIONAL)
     max_daily_submissions = models.PositiveIntegerField("حداکثر ثبت روزانه", null=True, blank=True)
@@ -139,6 +141,9 @@ class Activity(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="activities")
     activity_type = models.ForeignKey(ActivityType, on_delete=models.PROTECT, related_name="activities")
     activity_date = models.DateField("تاریخ فعالیت")
+    start_time = models.TimeField("ساعت شروع", null=True, blank=True)
+    end_time = models.TimeField("ساعت پایان", null=True, blank=True)
+    duration_minutes = models.PositiveIntegerField("مدت فعالیت به دقیقه", null=True, blank=True)
     value = models.DecimalField("مقدار", max_digits=14, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))], default=1)
     definition_score_snapshot = models.DecimalField("مقدار امتیاز تعریف هنگام ثبت", max_digits=12, decimal_places=2, default=1)
     multiplier_snapshot = models.DecimalField("ضریب هنگام ثبت", max_digits=12, decimal_places=2, default=1)
@@ -161,6 +166,25 @@ class Activity(models.Model):
     def quantity(self): return self.value
     @property
     def description(self): return self.employee_note
+
+    @property
+    def duration_display(self):
+        if self.duration_minutes is None:
+            return "—"
+        hours, minutes = divmod(self.duration_minutes, 60)
+        if hours and minutes:
+            return f"{hours} ساعت و {minutes} دقیقه"
+        if hours:
+            return f"{hours} ساعت"
+        return f"{minutes} دقیقه"
+
+    def update_duration(self):
+        if not self.start_time or not self.end_time:
+            self.duration_minutes = None
+            return
+        start = self.start_time.hour * 60 + self.start_time.minute
+        end = self.end_time.hour * 60 + self.end_time.minute
+        self.duration_minutes = end - start
 
 class ActivityStatusHistory(models.Model):
     activity = models.ForeignKey(Activity, on_delete=models.CASCADE, related_name="status_history")
