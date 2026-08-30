@@ -24,7 +24,6 @@
 <nav class="tabs">
     <a class="{% if tab == 'summary' %}active{% endif %}" href="?tab=summary">خلاصه</a>
     <a class="{% if tab == 'performance' %}active{% endif %}" href="?tab=performance">عملکرد</a>
-    <a class="{% if tab == 'activities' %}active{% endif %}" href="?tab=activities">فعالیت‌ها</a>
     <a class="{% if tab == 'violations' %}active{% endif %}" href="?tab=violations">تخلفات</a>
     <a class="{% if tab == 'commission' %}active{% endif %}" href="?tab=commission">پورسانت</a>
     <a class="{% if tab == 'levels' %}active{% endif %}" href="?tab=levels">تاریخچه Level</a>
@@ -58,10 +57,6 @@
     <article>
         <span>کد پرسنلی</span>
         <strong>{{ employee.employee_code }}</strong>
-    </article>
-    <article>
-        <span>تعداد فعالیت‌ها</span>
-        <strong>{{ employee.activities.count }}</strong>
     </article>
     <article>
         <span>تعداد تخلفات</span>
@@ -117,12 +112,6 @@
     <div><span>بخش اصلی</span><b>{{ employee.primary_department|default:'—' }}</b></div>
     <div><span>همه بخش‌های مجاز</span><b>{% for d in employee.departments.all %}{{ d.name }}{% if not forloop.last %}، {% endif %}{% empty %}—{% endfor %}</b></div>
     <div><span>تاریخ شروع همکاری</span><b>{{ employee.start_date|jalali }}</b></div>
-</article>
-
-{% elif tab == 'activities' %}
-<article class="card">
-    <h2>فعالیت‌های اخیر</h2>
-    {% include 'core/activity_table.html' with activities=activities %}
 </article>
 
 {% elif tab == 'violations' %}

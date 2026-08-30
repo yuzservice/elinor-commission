@@ -40,9 +40,7 @@
         <a href="{% url 'shift_log_create' %}">⏱️ ثبت کارکرد روزانه</a>
         <a href="{% url 'shift_logs' %}">📋 کارکردهای من</a>
 
-        <div class="nav-group-title">فعالیت و تخلفات</div>
-        <a href="{% url 'activity_create' %}">➕ ثبت فعالیت</a>
-        <a href="{% url 'activities' %}">📑 فهرست فعالیت‌ها</a>
+        <div class="nav-group-title">تخلفات</div>
         <a href="{% url 'violations' %}">⚠️ تخلفات</a>
 
         {% if user.employee.can_review %}
@@ -53,9 +51,7 @@
         <a href="{% url 'management_shift_logs' %}">👥 گزارش کارکرد پرسنل</a>
 
         <div class="nav-group-title">تنظیمات و تعاریف</div>
-        <a href="{% url 'management_activity_reviews' %}">📥 صف بررسی فعالیت‌ها</a>
         <a href="{% url 'management_shifts' %}">🕒 تعریف شیفت‌ها</a>
-        <a href="{% url 'management_activity_types' %}">📝 تعریف نوع فعالیت</a>
         <a href="{% url 'management_employees' %}">👥 مدیریت کارکنان</a>
         <a href="{% url 'violation_create' %}">⚠️ ثبت تخلف پرسنل</a>
         <a href="{% url 'branding_settings' %}">🎨 تنظیمات برندینگ</a>

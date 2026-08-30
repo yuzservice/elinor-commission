@@ -16,8 +16,6 @@ from django.utils import timezone
 import jdatetime
 from .decorators import manager_required, reviewer_required
 from .forms import (
-    ActivityForm,
-    ActivityTypeForm,
     BrandingForm,
     DailyShiftLogForm,
     SupportLineIntervalFormSet,
@@ -27,15 +25,10 @@ from .forms import (
     LineShiftPerformanceForm,
     ManagerPasswordResetForm,
     ProfilePhotoForm,
-    ReviewForm,
     ShiftForm,
     ViolationForm,
 )
 from .models import (
-    Activity,
-    ActivityCategory,
-    ActivityStatusHistory,
-    ActivityType,
     AuditLog,
     CommissionLevel,
     DailyShiftLog,
@@ -48,7 +41,7 @@ from .models import (
     SystemSettings,
     Violation,
 )
-from .services import audit, change_employee_level, employee_metrics, transition_activity
+from .services import audit, change_employee_level, employee_metrics
 
 def health(request):
     return JsonResponse({"status": "ok"})
@@ -77,7 +70,6 @@ def employee_dashboard(request):
     emp = request.user.employee
     start, end = month_range()
     metrics = employee_metrics(emp, start, end)
-    recent = emp.activities.select_related("activity_type")[:8]
     recent_shift_logs = emp.shift_logs.select_related("shift", "main_department").prefetch_related("support_departments")[:5]
     return render(
         request,
@@ -85,7 +77,6 @@ def employee_dashboard(request):
         {
             "employee": emp,
             "metrics": metrics,
-            "recent": recent,
             "recent_shift_logs": recent_shift_logs,
             "start": start,
         },
@@ -97,7 +88,6 @@ def manager_dashboard(request):
     start, end = month_range()
     employees = supervised_employees(request.user.employee).select_related("commission_level")
     rows = [{"employee": e, **employee_metrics(e, start, end)} for e in employees]
-    pending = Activity.objects.filter(status=Activity.Status.PENDING, employee__in=employees).select_related("employee", "activity_type")
     today_shift_logs = DailyShiftLog.objects.filter(date=timezone.localdate()).select_related("employee", "shift", "main_department")
     today_performances = LineShiftPerformance.objects.filter(date=timezone.localdate()).select_related("shift", "department")
     return render(
@@ -105,15 +95,12 @@ def manager_dashboard(request):
         "core/manager_dashboard.html",
         {
             "rows": rows,
-            "pending": pending[:6],
-            "pending_count": pending.count(),
             "today_shift_logs": today_shift_logs[:6],
             "today_shift_logs_count": today_shift_logs.count(),
             "today_performances": today_performances[:6],
             "today_performances_count": today_performances.count(),
             "total_score": sum(r["score"] for r in rows),
             "total_commission": sum(r["commission"] for r in rows),
-            "today_count": Activity.objects.filter(activity_date=timezone.localdate()).count(),
         },
     )
 
@@ -713,336 +700,6 @@ def management_commission_report(request):
     )
 
 # ==========================================
-# Activities
-# ==========================================
-
-@login_required
-def activity_create(request):
-    employee = getattr(request.user, "employee", None)
-    if not employee:
-        raise PermissionDenied
-    form = ActivityForm(request.POST or None, request.FILES or None, employee=employee)
-    if request.method == "POST" and form.is_valid():
-        action = request.POST.get("action", "submit")
-        try:
-            with transaction.atomic():
-                Employee.objects.select_for_update().get(pk=employee.pk)
-                obj = form.save(commit=False)
-                obj.employee = employee
-                obj.submitted_by = request.user
-                kind = obj.activity_type
-                if action == "submit":
-                    validate_daily_limit(employee, kind, obj.activity_date)
-                obj.definition_score_snapshot = kind.score_value
-                obj.multiplier_snapshot = kind.multiplier
-                obj.update_duration()
-                obj.calculated_score = kind.calculate_score(obj.value)
-                obj.final_score = obj.calculated_score
-                obj.status = Activity.Status.DRAFT
-                obj.save()
-                ActivityStatusHistory.objects.create(
-                    activity=obj, previous_status="", new_status=Activity.Status.DRAFT, actor=request.user, note="ایجاد فعالیت"
-                )
-                audit(
-                    actor=request.user,
-                    action="activity.created",
-                    instance=obj,
-                    new_values={
-                        "status": obj.status,
-                        "start_time": str(obj.start_time or ""),
-                        "end_time": str(obj.end_time or ""),
-                        "duration_minutes": obj.duration_minutes,
-                        "value": str(obj.value) if kind.requires_quantity else None,
-                        "score": str(obj.calculated_score),
-                    },
-                )
-                if action == "submit":
-                    transition_activity(
-                        obj,
-                        Activity.Status.PENDING if kind.requires_manager_approval else Activity.Status.APPROVED,
-                        request.user,
-                        audit_action="activity.submitted",
-                    )
-        except ValidationError as exc:
-            form.add_error(None, exc)
-        else:
-            messages.success(request, "فعالیت ذخیره شد.")
-            return redirect("activity_detail", pk=obj.pk)
-    return render(
-        request,
-        "activities/form.html",
-        {"form": form, "title": "ثبت فعالیت روزانه", "activity_type_data": activity_type_form_data(form)},
-    )
-
-@login_required
-def activity_list(request):
-    qs = Activity.objects.select_related("employee", "activity_type")
-    if not request.user.employee.can_review:
-        qs = qs.filter(employee=request.user.employee)
-    status = request.GET.get("status", "")
-    kind = request.GET.get("type", "")
-    date_value = request.GET.get("date", "")
-    search = request.GET.get("q", "").strip()
-    if status:
-        qs = qs.filter(status=status)
-    if kind:
-        qs = qs.filter(activity_type_id=kind)
-    if date_value:
-        try:
-            qs = qs.filter(activity_date=JalaliDateField().clean(date_value))
-        except Exception:
-            pass
-    if search:
-        qs = qs.filter(employee_note__icontains=search)
-    return render(
-        request,
-        "activities/list.html",
-        {
-            "activities": qs[:200],
-            "activity_types": ActivityType.objects.filter(active=True),
-            "statuses": Activity.Status.choices,
-        },
-    )
-
-@login_required
-@reviewer_required
-def review_queue(request):
-    return redirect("management_activity_reviews")
-
-@login_required
-@reviewer_required
-def activity_review(request, pk):
-    return redirect("management_activity_review_detail", pk=pk)
-
-def validate_daily_limit(employee, kind, activity_date, exclude_pk=None):
-    if not kind.max_daily_submissions:
-        return
-    qs = Activity.objects.filter(
-        employee=employee, activity_type=kind, activity_date=activity_date
-    ).exclude(status__in=[Activity.Status.DRAFT, Activity.Status.REJECTED])
-    if exclude_pk:
-        qs = qs.exclude(pk=exclude_pk)
-    if qs.count() >= kind.max_daily_submissions:
-        raise ValidationError(f"حداکثر ثبت روزانه این فعالیت {kind.max_daily_submissions} بار است.")
-
-@login_required
-def activity_detail(request, pk):
-    qs = Activity.objects.select_related("activity_type__category", "employee", "reviewed_by").prefetch_related(
-        "status_history__actor"
-    )
-    if not request.user.employee.can_review:
-        qs = qs.filter(employee=request.user.employee)
-    return render(request, "activities/detail.html", {"activity": get_object_or_404(qs, pk=pk)})
-
-@login_required
-def activity_edit(request, pk):
-    employee = getattr(request.user, "employee", None)
-    activity = get_object_or_404(Activity, pk=pk, employee=employee)
-    if activity.status not in {Activity.Status.DRAFT, Activity.Status.NEEDS_REVISION}:
-        raise PermissionDenied("این فعالیت قابل ویرایش نیست.")
-    form = ActivityForm(request.POST or None, request.FILES or None, instance=activity, employee=employee)
-    if request.method == "POST" and form.is_valid():
-        action = request.POST.get("action", "submit")
-        previous = activity.status
-        try:
-            with transaction.atomic():
-                Employee.objects.select_for_update().get(pk=employee.pk)
-                obj = form.save(commit=False)
-                kind = obj.activity_type
-                if action == "submit":
-                    validate_daily_limit(employee, kind, obj.activity_date, obj.pk)
-                obj.definition_score_snapshot = kind.score_value
-                obj.multiplier_snapshot = kind.multiplier
-                obj.update_duration()
-                obj.calculated_score = kind.calculate_score(obj.value)
-                obj.final_score = obj.calculated_score
-                obj.save()
-                audit(
-                    actor=request.user,
-                    action="activity.updated",
-                    instance=obj,
-                    new_values={
-                        "start_time": str(obj.start_time or ""),
-                        "end_time": str(obj.end_time or ""),
-                        "duration_minutes": obj.duration_minutes,
-                        "value": str(obj.value) if kind.requires_quantity else None,
-                        "score": str(obj.calculated_score),
-                    },
-                )
-                if action == "submit":
-                    transition_activity(
-                        obj,
-                        Activity.Status.PENDING if kind.requires_manager_approval else Activity.Status.APPROVED,
-                        request.user,
-                        audit_action="activity.resubmitted" if previous == Activity.Status.NEEDS_REVISION else "activity.submitted",
-                    )
-        except ValidationError as exc:
-            form.add_error(None, exc)
-        else:
-            messages.success(request, "فعالیت به‌روزرسانی شد.")
-            return redirect("activity_detail", pk=obj.pk)
-    return render(
-        request,
-        "activities/form.html",
-        {
-            "form": form,
-            "activity": activity,
-            "title": "اصلاح فعالیت",
-            "activity_type_data": activity_type_form_data(form),
-        },
-    )
-
-def activity_type_form_data(form):
-    return [
-        {
-            "id": item.pk,
-            "unit": item.unit,
-            "requires_evidence": item.requires_evidence,
-            "requires_time_tracking": item.requires_time_tracking,
-            "requires_quantity": item.requires_quantity,
-        }
-        for item in form.fields["activity_type"].queryset
-    ]
-
-def activity_type_snapshot(obj):
-    return {
-        "title": obj.title,
-        "code": obj.code,
-        "category": obj.category_id,
-        "scoring_method": obj.scoring_method,
-        "score_value": str(obj.score_value),
-        "multiplier": str(obj.multiplier),
-        "active": obj.active,
-    }
-
-@login_required
-@manager_required
-def management_activity_types(request):
-    qs = ActivityType.objects.select_related("category").prefetch_related("departments")
-    q = request.GET.get("q", "").strip()
-    category = request.GET.get("category", "")
-    department = request.GET.get("department", "")
-    active = request.GET.get("active", "")
-    if q:
-        qs = qs.filter(Q(title__icontains=q) | Q(code__icontains=q))
-    if category:
-        qs = qs.filter(category_id=category)
-    if department:
-        qs = qs.filter(Q(all_departments=True) | Q(departments__id=department)).distinct()
-    if active in {"1", "0"}:
-        qs = qs.filter(active=active == "1")
-    return render(
-        request,
-        "management/activity_type_list.html",
-        {
-            "activity_types": qs,
-            "categories": ActivityCategory.objects.filter(active=True),
-            "departments": Department.objects.filter(is_active=True),
-        },
-    )
-
-@login_required
-@manager_required
-def management_activity_type_create(request):
-    form = ActivityTypeForm(request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        obj = form.save()
-        audit(actor=request.user, action="activity_type.created", instance=obj, new_values=activity_type_snapshot(obj))
-        messages.success(request, "تعریف فعالیت ساخته شد.")
-        return redirect("management_activity_types")
-    return render(request, "management/activity_type_form.html", {"form": form, "title": "تعریف فعالیت جدید"})
-
-@login_required
-@manager_required
-def management_activity_type_edit(request, pk):
-    obj = get_object_or_404(ActivityType, pk=pk)
-    old = activity_type_snapshot(obj)
-    form = ActivityTypeForm(request.POST or None, instance=obj)
-    if request.method == "POST" and form.is_valid():
-        obj = form.save()
-        new = activity_type_snapshot(obj)
-        audit(actor=request.user, action="activity_type.updated", instance=obj, old_values=old, new_values=new)
-        if old["active"] != new["active"]:
-            audit(
-                actor=request.user,
-                action="activity_type.activated" if new["active"] else "activity_type.deactivated",
-                instance=obj,
-                old_values={"active": old["active"]},
-                new_values={"active": new["active"]},
-            )
-        messages.success(request, "تعریف فعالیت به‌روزرسانی شد.")
-        return redirect("management_activity_types")
-    return render(request, "management/activity_type_form.html", {"form": form, "title": "ویرایش تعریف فعالیت", "activity_type": obj})
-
-@login_required
-@manager_required
-def management_activity_reviews(request):
-    qs = Activity.objects.filter(status=Activity.Status.PENDING).select_related(
-        "employee", "activity_type__category", "employee__primary_department"
-    )
-    q = request.GET.get("q", "").strip()
-    employee = request.GET.get("employee", "")
-    department = request.GET.get("department", "")
-    kind = request.GET.get("type", "")
-    date_value = request.GET.get("date", "")
-    sort = request.GET.get("sort", "oldest")
-    if q:
-        qs = qs.filter(
-            Q(employee__first_name__icontains=q)
-            | Q(employee__last_name__icontains=q)
-            | Q(employee_note__icontains=q)
-        )
-    if employee:
-        qs = qs.filter(employee_id=employee)
-    if department:
-        qs = qs.filter(employee__primary_department_id=department)
-    if kind:
-        qs = qs.filter(activity_type_id=kind)
-    if date_value:
-        try:
-            qs = qs.filter(activity_date=JalaliDateField().clean(date_value))
-        except ValidationError:
-            pass
-    qs = qs.order_by("-submitted_at" if sort == "newest" else "submitted_at")
-    return render(
-        request,
-        "management/activity_review_list.html",
-        {
-            "activities": qs,
-            "employees": Employee.objects.filter(is_active=True),
-            "departments": Department.objects.filter(is_active=True),
-            "activity_types": ActivityType.objects.filter(active=True),
-        },
-    )
-
-@login_required
-@manager_required
-def management_activity_review_detail(request, pk):
-    activity = get_object_or_404(
-        Activity.objects.select_related("employee", "activity_type__category").prefetch_related("status_history__actor"),
-        pk=pk,
-    )
-    form = ReviewForm(request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        if activity.status != Activity.Status.PENDING:
-            raise PermissionDenied("این فعالیت دیگر در انتظار بررسی نیست.")
-        note = form.cleaned_data["manager_note"]
-        new_status = form.cleaned_data["action"]
-        activity.manager_note = note
-        activity.reviewed_by = request.user
-        activity.reviewed_at = timezone.now()
-        activity.save(update_fields=["manager_note", "reviewed_by", "reviewed_at", "updated_at"])
-        action_map = {
-            Activity.Status.APPROVED: "activity.approved",
-            Activity.Status.REJECTED: "activity.rejected",
-            Activity.Status.NEEDS_REVISION: "activity.needs_revision",
-        }
-        transition_activity(activity, new_status, request.user, note, audit_action=action_map[new_status])
-        messages.success(request, "نتیجه بررسی ثبت شد.")
-        return redirect("management_activity_reviews")
-    return render(request, "management/activity_review_detail.html", {"activity": activity, "form": form})
-
-# ==========================================
 # Shifts Management
 # ==========================================
 
@@ -1227,7 +884,7 @@ def management_employee_detail(request, pk):
         pk=pk,
     )
     tab = request.GET.get("tab", "summary")
-    allowed = {"summary", "performance", "activities", "shift_logs", "violations", "commission", "levels", "info"}
+    allowed = {"summary", "performance", "shift_logs", "violations", "commission", "levels", "info"}
     if tab not in allowed:
         tab = "summary"
     return render(
@@ -1236,7 +893,6 @@ def management_employee_detail(request, pk):
         {
             "employee": employee,
             "tab": tab,
-            "activities": employee.activities.select_related("activity_type")[:20],
             "shift_logs": employee.shift_logs.select_related("shift", "main_department").prefetch_related("support_departments")[:20],
             "violations": employee.violations.select_related("rule")[:20],
         },

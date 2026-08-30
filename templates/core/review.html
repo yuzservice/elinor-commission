@@ -1,2 +1,0 @@
-{% extends 'base.html' %}{% block content %}<div class="page-head"><div><p class="eyebrow">بررسی فعالیت</p><h1>{{ activity.activity_type.title }}</h1></div></div><article class="card form-card"><dl><dt>کارمند</dt><dd>{{ activity.employee.full_name }}</dd><dt>مقدار و امتیاز</dt><dd>{{ activity.quantity|floatformat:-2 }} · {{ activity.total_points|floatformat:0 }} امتیاز</dd><dt>توضیحات</dt><dd>{{ activity.description|default:'—' }}</dd></dl><form method="post">{% csrf_token %}{{ form.as_p }}<button class="primary">ثبت نتیجه</button></form></article>{% endblock %}
-

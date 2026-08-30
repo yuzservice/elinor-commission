@@ -10,10 +10,10 @@ Django + PostgreSQL + Docker Compose
 main
 
 ## Last Stable Commit Before Current Changes
-30605ca feat: complete activity workflow
+1dbd706 feat: add timed support-line intervals
 
 ## Current State
-Multi-interval support-line tracking completed on top of the Gemini shift UI.
+Multi-interval support-line tracking completed on top of the Gemini shift UI. The legacy Activities module has been fully removed from the application; Violations remain active.
 
 - `SupportLineInterval` stores destination line, start/end and server-calculated minutes.
 - `DailyShiftLog` summary hours are rebuilt server-side from intervals.
@@ -23,21 +23,11 @@ Multi-interval support-line tracking completed on top of the Gemini shift UI.
 - Migration: `0011_supportlineinterval`.
 - No new commission rule was added.
 
-Post-Batch-1 correction completed:
-- Employee does not enter score.
-- Activity raw inputs support start time/end time.
-- Duration is calculated server-side.
-- Quantity is definition-driven.
-- Unit comes from ActivityType.
-- Score remains server-side.
-- Manager review shows raw operational data.
-- Score tampering protection tested.
-
 ## Latest Migration
-0011_supportlineinterval
+0012_archive_remove_activities
 
 ## Validation
-62 PostgreSQL tests passing.
+PostgreSQL test suite passing.
 Migration consistency check passes.
 Health and related pages sanity-checked.
 
@@ -64,26 +54,10 @@ The entrypoint may automatically apply migrations during container startup.
 If makemigrations is executed inside the container, copy the generated migration back into the host repository before committing.
 
 ## Core Business Rule
-Employee activity entry is raw operational reporting:
-
-Activity Type
-+ Date
-+ Start Time
-+ End Time
-+ Quantity when required
-+ Employee Note when allowed
-+ Evidence when required
-
-Employee MUST NOT enter score, points, multiplier or final score.
-
-Scoring is server-side.
-Commission uses approved eligible scored activities only.
+Commission inputs come from structured shift logs and line sales. Violations remain a separate deduction source. The removed Activities module must not be reintroduced without a new product decision.
 
 ## Next Product Area
 Before major implementation, finalize:
 - violation logic
-- scoring rules based on raw activity data
 - employee levels
 - commission calculation and breakdown
-
-Do not assume all Activity Types use the same scoring formula.

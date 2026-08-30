@@ -77,13 +77,6 @@
             <small style="color: var(--muted);">ریز محاسبات به تفکیک شیفت‌ها</small>
         </div>
     </a>
-    <a href="{% url 'activity_create' %}" class="card" style="display: flex; align-items: center; gap: 12px; margin-bottom: 0; padding: 14px 18px; border-right: 4px solid #4a86e8; transition: transform 0.15s, box-shadow 0.15s;">
-        <span style="font-size: 24px;">➕</span>
-        <div>
-            <strong style="display: block; font-size: 14px; color: var(--ink);">ثبت فعالیت روزانه</strong>
-            <small style="color: var(--muted);">وظایف، چک‌لیست و امور اجرایی</small>
-        </div>
-    </a>
 </div>
 
 <!-- Target Progress -->
@@ -156,14 +149,4 @@
     </div>
 </article>
 
-<!-- Recent Activities -->
-{% if recent %}
-<article class="card">
-    <div class="card-head">
-        <h2>📑 آخرین فعالیت‌های متفرقه</h2>
-        <a href="{% url 'activities' %}">مشاهده همه فعالیت‌ها</a>
-    </div>
-    {% include 'core/activity_table.html' with activities=recent %}
-</article>
-{% endif %}
 {% endblock %}

@@ -4,10 +4,6 @@ from django.contrib.auth.models import User
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 from core.models import (
-    Activity,
-    ActivityCategory,
-    ActivityStatusHistory,
-    ActivityType,
     CommissionLevel,
     DailyShiftLog,
     Department,

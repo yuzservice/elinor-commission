@@ -1,10 +1,8 @@
 from decimal import Decimal
-from django.db.models import DecimalField, Sum
+from django.db.models import Sum
 from django.db.models.functions import Coalesce
 from django.db import transaction
 from .models import (
-    Activity,
-    ActivityStatusHistory,
     AuditLog,
     CommissionLevel,
     DailyShiftLog,
@@ -50,30 +48,6 @@ def change_employee_level(employee, new_level, actor, reason=""):
     return True
 
 @transaction.atomic
-def transition_activity(activity, new_status, actor, note="", audit_action=None):
-    previous = activity.status
-    activity.status = new_status
-    if new_status == Activity.Status.PENDING:
-        from django.utils import timezone
-        activity.submitted_at = timezone.now()
-    activity.save(
-        update_fields=["status", "submitted_at", "updated_at"]
-        if hasattr(activity, "updated_at")
-        else ["status", "submitted_at"]
-    )
-    ActivityStatusHistory.objects.create(
-        activity=activity, previous_status=previous, new_status=new_status, actor=actor, note=note
-    )
-    audit(
-        actor=actor,
-        action=audit_action or f"activity.{new_status.lower()}",
-        instance=activity,
-        description=note,
-        old_values={"status": previous},
-        new_values={"status": new_status},
-    )
-    return activity
-
 def get_line_rate(department, commission_level):
     """نرخ پورسانت به ازای هر کالا را بر اساس لاین و گرید کارمند برمی‌گرداند."""
     rate_obj = LineCommissionRate.objects.filter(
@@ -188,37 +162,26 @@ def employee_metrics(employee, start, end):
     total_sales_units_share = sum(d["total_units_share"] for d in shift_log_details)
     gross_sales_commission = sum(d["total_commission"] for d in shift_log_details)
 
-    # ۲. فعالیت‌های متفرقه در صورت وجود
-    approved = employee.activities.filter(
-        status=Activity.Status.APPROVED,
-        activity_date__range=(start, end),
-        activity_type__is_commission_eligible=True,
-    )
-    activity_score = approved.aggregate(v=Coalesce(Sum("final_score"), 0, output_field=DecimalField()))["v"]
-    activity_gross = int(activity_score * employee.level.performance_rate)
-
-    # ۳. تخلفات
+    # ۲. تخلفات
     violation_points = employee.violations.filter(violation_date__range=(start, end)).aggregate(
         v=Coalesce(Sum("points_snapshot"), 0)
     )["v"]
     deduction = int(violation_points * employee.level.violation_rate)
 
-    # ۴. تارگت‌ها
-    total_effective_score = float(total_sales_units_share) + float(activity_score)
+    # ۳. تارگت‌ها بر اساس سهم فروش
+    total_effective_score = float(total_sales_units_share)
     reached = Target.objects.filter(is_active=True, points__lte=total_effective_score).order_by("-points").first()
     reward = reached.reward if reached else 0
     targets = list(Target.objects.filter(is_active=True))
     next_target = next((t for t in targets if t.points > total_effective_score), None)
 
-    total_gross = gross_sales_commission + activity_gross
+    total_gross = gross_sales_commission
     net_commission = max(0, total_gross - deduction + reward)
 
     return {
         "score": round(Decimal(str(total_effective_score)), 2),
         "total_sales_units_share": round(total_sales_units_share, 2),
         "gross_sales_commission": gross_sales_commission,
-        "activity_score": activity_score,
-        "activity_gross": activity_gross,
         "gross": total_gross,
         "violation_points": violation_points,
         "deduction": deduction,
@@ -228,5 +191,4 @@ def employee_metrics(employee, start, end):
         "target_progress": min(100, int(total_effective_score * 100 / next_target.points)) if next_target else 100,
         "shift_logs_count": len(shift_logs),
         "shift_log_details": shift_log_details,
-        "approved_count": approved.count(),
     }

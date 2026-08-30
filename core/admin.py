@@ -1,9 +1,5 @@
 from django.contrib import admin
 from .models import (
-    Activity,
-    ActivityCategory,
-    ActivityStatusHistory,
-    ActivityType,
     AuditLog,
     CommissionLevel,
     DailyShiftLog,
@@ -73,19 +69,6 @@ class EmployeeAdmin(admin.ModelAdmin):
             if old.is_active != obj.is_active:
                 audit(actor=request.user,action="employee.activated" if obj.is_active else "employee.deactivated",instance=obj,old_values={"is_active":old.is_active},new_values={"is_active":obj.is_active})
 
-@admin.register(Activity)
-class ActivityAdmin(admin.ModelAdmin):
-    list_display=("employee","activity_type","activity_date","value","final_score","status")
-    list_filter=("status","activity_date","activity_type")
-    readonly_fields=("definition_score_snapshot","multiplier_snapshot","calculated_score","final_score","created_at","updated_at","submitted_at","reviewed_at")
-
-@admin.register(ActivityStatusHistory)
-class ActivityStatusHistoryAdmin(admin.ModelAdmin):
-    list_display=("activity","previous_status","new_status","actor","created_at")
-    readonly_fields=("activity","previous_status","new_status","actor","note","created_at")
-    def has_add_permission(self, request): return False
-    def has_change_permission(self, request, obj=None): return False
-
 @admin.register(Violation)
 class ViolationAdmin(admin.ModelAdmin):
     list_display=("employee","rule","violation_date","occurrence","points_snapshot")
@@ -108,4 +91,4 @@ class AuditLogAdmin(admin.ModelAdmin):
     def has_add_permission(self, request): return False
     def has_change_permission(self, request, obj=None): return False
 
-admin.site.register([Department, CommissionLevel, ActivityCategory, ActivityType, ViolationRule, Target, SystemSettings])
+admin.site.register([Department, CommissionLevel, ViolationRule, Target, SystemSettings])
