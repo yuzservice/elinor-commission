@@ -1,50 +1,254 @@
-from datetime import timedelta
+from datetime import time, timedelta
+from decimal import Decimal
 from django.contrib.auth.models import User
 from django.core.management.base import BaseCommand
 from django.utils import timezone
-from core.models import *
+from core.models import (
+    Activity,
+    ActivityCategory,
+    ActivityStatusHistory,
+    ActivityType,
+    CommissionLevel,
+    DailyShiftLog,
+    Department,
+    Employee,
+    LineCommissionRate,
+    LineShiftPerformance,
+    Shift,
+    SystemSettings,
+    Target,
+    ViolationRule,
+)
 
 class Command(BaseCommand):
-    help = "ایجاد داده‌های اولیه و کاربران نمونه (قابل اجرای مجدد)"
+    help = "ایجاد داده‌های جامع تستی و پرسنل نمونه برای بررسی رابط کاربری و عملکرد"
+
     def handle(self, *args, **opts):
-        levels={c:CommissionLevel.objects.update_or_create(code=c,defaults={"performance_rate":p,"violation_rate":v})[0] for c,p,v in [("A",1400,6000),("B",1000,4000),("C",650,4000),("D",500,4000)]}
-        depts={name:Department.objects.get_or_create(name=name)[0] for name in ["لاین وسط","شلوار","اکسسوری","شال","صندوق","انبار","پرو"]}
-        dept=depts["لاین وسط"]
-        users=[("manager","مدیر","سیستم","MANAGER","A","E000","09110000000"),("supervisor","سرپرست","لاین وسط","MANAGER","A","E010","09110000010"),("fatemeh","فاطمه","ظاهری","EMPLOYEE","A","E001","09110000001"),("mahsa","مهسا","غفوری","EMPLOYEE","A","E002","09110000002"),("maryam","مریم","قلی نژاد","EMPLOYEE","C","E003","09110000003")]
-        employees={}
-        for username,first,last,role,level,code,mobile in users:
-            user,created=User.objects.get_or_create(username=username,defaults={"first_name":first,"last_name":last,"is_staff":role=="MANAGER","is_active":True})
-            if created:
-                user.set_password("Elinor123!"); user.save()
-            emp,emp_created=Employee.objects.get_or_create(user=user,defaults={"employee_code":code,"first_name":first,"last_name":last,"mobile":mobile,"role":role,"commission_level":levels[level],"primary_department":dept,"is_active":True})
-            if emp_created: emp.departments.add(dept)
-            user.is_staff=emp.role==Employee.Role.MANAGER; user.is_active=emp.is_active; user.save(update_fields=["is_staff","is_active"])
-            employees[username]=emp
-        category_specs=[("MAIN_PERFORMANCE","عملکرد اصلی",10),("OPERATIONAL_TASK","وظیفه عملیاتی",20),("DAILY_CHECKLIST","چک‌لیست روزانه",30),("OCCASIONAL_TASK","فعالیت موردی",40),("KPI_ONLY","شاخص بدون اثر مستقیم روی پورسانت",50)]
-        categories={code:ActivityCategory.objects.get_or_create(code=code,defaults={"title":title,"sort_order":order})[0] for code,title,order in category_specs}
-        types=[
-            ("M01","فروش فردی","MAIN_PERFORMANCE",ActivityType.ScoringMethod.DIRECT_VALUE,1,1,"تعداد",True),
-            ("M02","شلوار","KPI_ONLY",ActivityType.ScoringMethod.DIRECT_VALUE,1,1,"تعداد",False),
-            ("M03","اکسسوری","KPI_ONLY",ActivityType.ScoringMethod.DIRECT_VALUE,1,1,"تعداد",False),
-            ("M04","انبارگردانی","OPERATIONAL_TASK",ActivityType.ScoringMethod.FIXED,10,1,"مرتبه",True),
-            ("M05","ثبت اکسل","OPERATIONAL_TASK",ActivityType.ScoringMethod.FIXED,10,1,"مرتبه",True),
-            ("M06","نظافت و مرتب‌سازی","DAILY_CHECKLIST",ActivityType.ScoringMethod.FIXED,5,1,"بدون واحد",True),
-            ("M07","کمک به انبار","OCCASIONAL_TASK",ActivityType.ScoringMethod.QUANTITY_MULTIPLIER,1,2,"تعداد",True),
+        self.stdout.write("در حال ایجاد داده‌های پایه و پرسنل...")
+
+        # ۱. گریدها و سطوح
+        level_data = [
+            ("A", 1500, 6000, Decimal("1.0")),
+            ("B", 1200, 4000, Decimal("1.0")),
+            ("C", 900, 4000, Decimal("1.0")),
+            ("D", 600, 4000, Decimal("1.0")),
         ]
-        activity_types=[]
-        for code,title,cat,method,score,multiplier,unit,commission in types:
-            item,created=ActivityType.objects.get_or_create(code=code,defaults={"title":title,"category":categories[cat],"scoring_method":method,"score_value":score,"multiplier":multiplier,"unit":unit,"is_commission_eligible":commission,"requires_manager_approval":True,"recurrence_type":ActivityType.RecurrenceType.OCCASIONAL,"active":True})
-            if created or not item.all_departments: item.departments.add(dept)
-            activity_types.append(item)
-        rules=[("V01","استفاده از تلفن همراه در محیط کار",5,10,20),("V02","رفتار نامناسب با مشتری",5,10,20),("V03","صحبت با همکاران در حضور مشتری",3,6,12),("V04","رعایت نکردن پوشش سازمانی",2,4,8),("V05","ایجاد حاشیه با همکاران",2,4,8),("V06","توقف بیش از حد در بخش دیگر",2,4,8),("V07","تأخیر یا تعجیل بدون اطلاع",3,6,12),("V08","نظافت و مرتب‌سازی بخش",2,4,8)]
-        for code,title,a,b,c in rules: ViolationRule.objects.update_or_create(code=code,defaults={"title":title,"first_points":a,"second_points":b,"third_points":c})
-        for title,points,reward in [("تارگت ۱",1200,200000),("تارگت ۲",1450,350000),("تارگت ۳",1850,500000)]: Target.objects.update_or_create(title=title,defaults={"points":points,"reward":reward})
+        levels = {}
+        for code, perf, viol, morning in level_data:
+            lvl, _ = CommissionLevel.objects.update_or_create(
+                code=code,
+                defaults={"performance_rate": perf, "violation_rate": viol, "morning_rate": morning}
+            )
+            levels[code] = lvl
+
+        # ۲. لاین‌ها / بخش‌ها
+        dept_names = ["شلوار", "پیراهن", "اکسسوری", "شال و روسری", "تیشرت", "کفش"]
+        depts = {}
+        for name in dept_names:
+            d, _ = Department.objects.get_or_create(name=name, defaults={"is_active": True})
+            depts[name] = d
+
+        # ۳. شیفت‌ها
+        shift_data = [
+            ("MORNING", "شیفت صبح (۱۰ تا ۱۶)", time(10, 0), time(16, 0), Decimal("6.0"), 1),
+            ("EVENING", "شیفت عصر (۱۶ تا ۲۲)", time(16, 0), time(22, 0), Decimal("6.0"), 2),
+        ]
+        shifts = {}
+        for code, title, start, end, hours, sort in shift_data:
+            s, _ = Shift.objects.update_or_create(
+                code=code,
+                defaults={
+                    "title": title,
+                    "start_time": start,
+                    "end_time": end,
+                    "standard_hours": hours,
+                    "sort_order": sort,
+                    "is_active": True,
+                }
+            )
+            shifts[code] = s
+
+        # ۴. ماتریس ضرایب لاین و گرید
+        rate_matrix = {
+            "شلوار": {"A": 1500, "B": 1200, "C": 900, "D": 600},
+            "پیراهن": {"A": 1400, "B": 1100, "C": 800, "D": 500},
+            "اکسسوری": {"A": 1200, "B": 950, "C": 700, "D": 450},
+            "شال و روسری": {"A": 1100, "B": 850, "C": 650, "D": 400},
+            "تیشرت": {"A": 1300, "B": 1000, "C": 750, "D": 500},
+            "کفش": {"A": 1800, "B": 1400, "C": 1000, "D": 700},
+        }
+        for d_name, d_obj in depts.items():
+            for l_code, l_obj in levels.items():
+                rate_val = rate_matrix.get(d_name, {}).get(l_code, l_obj.performance_rate)
+                LineCommissionRate.objects.update_or_create(
+                    department=d_obj,
+                    commission_level=l_obj,
+                    defaults={"rate_per_unit": rate_val, "is_active": True}
+                )
+
+        # ۵. کاربران و پرسنل
+        users_config = [
+            ("manager", "مدیر", "سیستم", "MANAGER", "A", "E000", "09110000000", "شلوار", "MORNING"),
+            ("sara", "سارا", "راد", "EMPLOYEE", "A", "1002", "09121112233", "شلوار", "MORNING"),
+            ("ali", "علی", "حسینی", "EMPLOYEE", "B", "1003", "09122223344", "پیراهن", "MORNING"),
+            ("fatemeh", "فاطمه", "ظاهری", "EMPLOYEE", "A", "1004", "09123334455", "شلوار", "MORNING"),
+            ("maryam", "مریم", "قلی‌نژاد", "EMPLOYEE", "C", "1005", "09124445566", "اکسسوری", "EVENING"),
+        ]
+
+        employees = {}
+        for uname, fname, lname, role, lvl, code, mobile, main_dept, def_shift in users_config:
+            user, created = User.objects.get_or_create(
+                username=uname,
+                defaults={
+                    "first_name": fname,
+                    "last_name": lname,
+                    "is_staff": role == "MANAGER",
+                    "is_active": True,
+                }
+            )
+            if created:
+                user.set_password("Elinor123!")
+                user.save()
+
+            emp, emp_created = Employee.objects.get_or_create(
+                user=user,
+                defaults={
+                    "employee_code": code,
+                    "first_name": fname,
+                    "last_name": lname,
+                    "mobile": mobile,
+                    "role": role,
+                    "commission_level": levels[lvl],
+                    "primary_department": depts[main_dept],
+                    "default_shift": shifts[def_shift],
+                    "standard_daily_hours": Decimal("6.0"),
+                    "is_active": True,
+                }
+            )
+            if emp_created:
+                emp.departments.add(depts[main_dept], depts["اکسسوری"])
+            employees[uname] = emp
+
+        # ۶. قوانین تخلفات و تارگت‌ها
+        rules = [
+            ("V01", "استفاده از تلفن همراه در محیط کار", 5, 10, 20),
+            ("V02", "رفتار نامناسب با مشتری", 5, 10, 20),
+            ("V03", "صحبت با همکاران در حضور مشتری", 3, 6, 12),
+            ("V04", "رعایت نکردن پوشش سازمانی", 2, 4, 8),
+        ]
+        for code, title, a, b, c in rules:
+            ViolationRule.objects.update_or_create(
+                code=code,
+                defaults={"title": title, "first_points": a, "second_points": b, "third_points": c, "is_active": True}
+            )
+
+        for title, points, reward in [("تارگت نقره‌ای", 100, 500000), ("تارگت طلایی", 250, 1200000), ("تارگت الماس", 400, 2500000)]:
+            Target.objects.update_or_create(title=title, defaults={"points": points, "reward": reward, "is_active": True})
+
         SystemSettings.load()
-        today=timezone.localdate(); submitter=employees["supervisor"].user
-        if not Activity.objects.exists():
-            samples=[("fatemeh",0,30),("fatemeh",3,1),("mahsa",0,42),("mahsa",4,1),("maryam",0,55),("maryam",1,18)]
-            for uname,idx,qty in samples:
-                kind=activity_types[idx]; score=kind.calculate_score(qty)
-                item=Activity.objects.create(employee=employees[uname],activity_type=kind,activity_date=today-timedelta(days=idx),value=qty,definition_score_snapshot=kind.score_value,multiplier_snapshot=kind.multiplier,calculated_score=score,final_score=score,employee_note="داده نمونه اولیه",status=Activity.Status.APPROVED if idx%2==0 else Activity.Status.PENDING,submitted_by=submitter,submitted_at=timezone.now())
-                ActivityStatusHistory.objects.create(activity=item,previous_status="",new_status=item.status,actor=submitter,note="داده نمونه اولیه")
-        self.stdout.write(self.style.SUCCESS("Seed completed. Initial password for newly created development users: Elinor123! Existing passwords were not changed."))
+
+        # ۷. نمونه کارکردهای روزانه شیفت و آمار فروش برای امروز و دیروز
+        today = timezone.localdate()
+        yesterday = today - timedelta(days=1)
+        morning_shift = shifts["MORNING"]
+        evening_shift = shifts["EVENING"]
+        mgr_user = employees["manager"].user
+
+        # کارکردهای شیفت امروز
+        # سارا: ۶ ساعت در شلوار
+        sara_log, _ = DailyShiftLog.objects.update_or_create(
+            employee=employees["sara"],
+            date=today,
+            shift=morning_shift,
+            defaults={
+                "main_department": depts["شلوار"],
+                "main_hours": Decimal("6.0"),
+                "has_support_line": False,
+                "support_hours": Decimal("0.0"),
+                "total_hours": Decimal("6.0"),
+                "employee_note": "کارکرد منظم در لاین شلوار",
+            }
+        )
+        sara_log.support_departments.clear()
+
+        # فاطمه: ۴ ساعت در شلوار + ۲ ساعت کمکی در اکسسوری و پیراهن
+        fatemeh_log, _ = DailyShiftLog.objects.update_or_create(
+            employee=employees["fatemeh"],
+            date=today,
+            shift=morning_shift,
+            defaults={
+                "main_department": depts["شلوار"],
+                "main_hours": Decimal("4.0"),
+                "has_support_line": True,
+                "support_hours": Decimal("2.0"),
+                "total_hours": Decimal("6.0"),
+                "employee_note": "کمک به لاین‌های اکسسوری و پیراهن در ساعات شلوغی",
+            }
+        )
+        fatemeh_log.support_departments.set([depts["اکسسوری"], depts["پیراهن"]])
+
+        # علی: ۶ ساعت در پیراهن
+        ali_log, _ = DailyShiftLog.objects.update_or_create(
+            employee=employees["ali"],
+            date=today,
+            shift=morning_shift,
+            defaults={
+                "main_department": depts["پیراهن"],
+                "main_hours": Decimal("6.0"),
+                "has_support_line": False,
+                "support_hours": Decimal("0.0"),
+                "total_hours": Decimal("6.0"),
+                "employee_note": "فروش شیفت صبح پیراهن",
+            }
+        )
+        ali_log.support_departments.clear()
+
+        # آمار فروش ثبت شده توسط مدیر برای شیفت صبح امروز
+        LineShiftPerformance.objects.update_or_create(
+            date=today,
+            shift=morning_shift,
+            department=depts["شلوار"],
+            defaults={"sold_units": 50, "sales_amount": 250000000, "recorded_by": mgr_user, "description": "فروش عالی شلوار"}
+        )
+        LineShiftPerformance.objects.update_or_create(
+            date=today,
+            shift=morning_shift,
+            department=depts["پیراهن"],
+            defaults={"sold_units": 35, "sales_amount": 180000000, "recorded_by": mgr_user, "description": "فروش پیراهن"}
+        )
+        LineShiftPerformance.objects.update_or_create(
+            date=today,
+            shift=morning_shift,
+            department=depts["اکسسوری"],
+            defaults={"sold_units": 20, "sales_amount": 60000000, "recorded_by": mgr_user, "description": "فروش اکسسوری"}
+        )
+
+        # کارکردهای شیفت دیروز
+        sara_yesterday, _ = DailyShiftLog.objects.update_or_create(
+            employee=employees["sara"],
+            date=yesterday,
+            shift=morning_shift,
+            defaults={
+                "main_department": depts["شلوار"],
+                "main_hours": Decimal("6.0"),
+                "has_support_line": False,
+                "support_hours": Decimal("0.0"),
+                "total_hours": Decimal("6.0"),
+            }
+        )
+        sara_yesterday.support_departments.clear()
+        LineShiftPerformance.objects.update_or_create(
+            date=yesterday,
+            shift=morning_shift,
+            department=depts["شلوار"],
+            defaults={"sold_units": 40, "sales_amount": 200000000, "recorded_by": mgr_user}
+        )
+
+        self.stdout.write(self.style.SUCCESS("=" * 60))
+        self.stdout.write(self.style.SUCCESS("داده‌های اولیه و کاربران تستی با موفقیت ایجاد شدند:"))
+        self.stdout.write("  ۱. مدیر سیستم: نام کاربری `manager` | رمز: `Elinor123!`")
+        self.stdout.write("  ۲. کارمند نمونه ۱: نام کاربری `sara` (کد: 1002) | رمز: `Elinor123!` | گرید A")
+        self.stdout.write("  ۳. کارمند نمونه ۲: نام کاربری `ali` (کد: 1003) | رمز: `Elinor123!` | گرید B")
+        self.stdout.write("  ۴. کارمند نمونه ۳: نام کاربری `fatemeh` (کد: 1004) | رمز: `Elinor123!` | گرید A")
+        self.stdout.write("  ۵. کارمند نمونه ۴: نام کاربری `maryam` (کد: 1005) | رمز: `Elinor123!` | گرید C")
+        self.stdout.write(self.style.SUCCESS("=" * 60))

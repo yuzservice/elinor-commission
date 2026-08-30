@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% block title %}تعریف شیفت‌ها{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div>
+        <p class="eyebrow">تنظیمات شیفت و ساعات کاری</p>
+        <h1>تعریف شیفت‌ها</h1>
+        <p>مدیریت شیفت‌های کاری و زمان‌بندی پرسنل</p>
+    </div>
+    <a class="primary" href="{% url 'management_shift_create' %}">+ شیفت جدید</a>
+</div>
+
+<form class="card filter-card filters" method="get">
+    <input name="q" value="{{ request.GET.q }}" placeholder="عنوان یا کد شیفت">
+    <select name="active">
+        <option value="">همه وضعیت‌ها</option>
+        <option value="1" {% if request.GET.active == '1' %}selected{% endif %}>فعال</option>
+        <option value="0" {% if request.GET.active == '0' %}selected{% endif %}>غیرفعال</option>
+    </select>
+    <button class="primary">فیلتر</button>
+    <a class="secondary" href="{% url 'management_shifts' %}">پاک کردن</a>
+</form>
+
+<article class="card">
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>عنوان شیفت</th>
+                    <th>کد</th>
+                    <th>ساعت شروع</th>
+                    <th>ساعت پایان</th>
+                    <th>ساعت استاندارد</th>
+                    <th>وضعیت</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in shifts %}
+                <tr>
+                    <td><b>{{ item.title }}</b></td>
+                    <td><code>{{ item.code }}</code></td>
+                    <td>{{ item.start_time|time:"H:i" }}</td>
+                    <td>{{ item.end_time|time:"H:i" }}</td>
+                    <td>{{ item.duration_display }}</td>
+                    <td>
+                        <span class="status {% if item.is_active %}approved{% else %}rejected{% endif %}">
+                            {% if item.is_active %}فعال{% else %}غیرفعال{% endif %}
+                        </span>
+                    </td>
+                    <td>
+                        <a class="table-link" href="{% url 'management_shift_edit' item.pk %}">ویرایش</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="empty">شیفتی تعریف نشده است.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</article>
+{% endblock %}

@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% block title %}ماتریس ضرایب لاین‌ها و گریدها{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div>
+        <p class="eyebrow">قواعد و ضرایب پورسانت</p>
+        <h1>ماتریس ضرایب لاین‌ها و گریدها</h1>
+        <p>تعیین مبلغ پورسانت به ازای هر واحد کالای فروخته‌شده برای هر لاین و هر گرید (تومان/ریال)</p>
+    </div>
+</div>
+
+<article class="card">
+    <form method="post">
+        {% csrf_token %}
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 28%;">لاین / بخش</th>
+                        {% for lvl in levels %}
+                        <th style="text-align: center;">
+                            گرید {{ lvl.code }}
+                            <br><small style="font-weight: normal; color: #888;">(پیش‌فرض: {{ lvl.performance_rate }})</small>
+                        </th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in matrix %}
+                    <tr>
+                        <td>
+                            <strong style="font-size: 1.05rem;">{{ row.department.name }}</strong>
+                        </td>
+                        {% for col in row.rates %}
+                        <td style="text-align: center;">
+                            <input type="number" name="rate_{{ row.department.pk }}_{{ col.level.pk }}" value="{{ col.rate }}" min="0" step="50" style="width: 120px; text-align: center; font-weight: bold;" inputmode="numeric">
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="{{ levels.count|add:1 }}" class="empty">هنوز بخشی تعریف نشده است.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if matrix %}
+        <div style="margin-top: 20px; text-align: left;">
+            <button class="primary" type="submit" style="padding: 10px 24px; font-size: 1.05rem;">
+                💾 ذخیره تمام ضرایب
+            </button>
+        </div>
+        {% endif %}
+    </form>
+</article>
+{% endblock %}

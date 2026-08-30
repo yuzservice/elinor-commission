@@ -1,10 +1,163 @@
-{% extends 'base.html' %}{% load persian %}{% block title %}{{ employee.full_name }}{% endblock %}{% block content %}
-<div class="profile-hero card"><div class="profile-main">{% if employee.profile_photo %}<img class="profile-photo" src="{{ employee.profile_photo.url }}" alt="">{% else %}<div class="profile-photo fallback">{{ employee.first_name|slice:':1' }}</div>{% endif %}<div><p class="eyebrow">{{ employee.employee_code }}</p><h1>{{ employee.full_name }}</h1><p>{{ employee.primary_department|default:'بدون بخش' }} · Level {{ employee.commission_level.code }} · {% if employee.is_active %}فعال{% else %}غیرفعال{% endif %}</p></div></div><div class="profile-actions"><a class="secondary" href="{% url 'management_employee_password' employee.pk %}">تغییر رمز</a><a class="primary" href="{% url 'management_employee_edit' employee.pk %}">ویرایش</a></div></div>
-<nav class="tabs"><a class="{% if tab == 'summary' %}active{% endif %}" href="?tab=summary">خلاصه</a><a class="{% if tab == 'performance' %}active{% endif %}" href="?tab=performance">عملکرد</a><a class="{% if tab == 'activities' %}active{% endif %}" href="?tab=activities">فعالیت‌ها</a><a class="{% if tab == 'violations' %}active{% endif %}" href="?tab=violations">تخلفات</a><a class="{% if tab == 'commission' %}active{% endif %}" href="?tab=commission">پورسانت</a><a class="{% if tab == 'levels' %}active{% endif %}" href="?tab=levels">تاریخچه Level</a><a class="{% if tab == 'info' %}active{% endif %}" href="?tab=info">اطلاعات</a></nav>
-{% if tab == 'summary' %}<div class="stats"><article><span>Level فعلی</span><strong>{{ employee.commission_level.code }}</strong></article><article><span>وضعیت</span><strong>{% if employee.is_active %}فعال{% else %}غیرفعال{% endif %}</strong></article><article><span>شروع همکاری</span><strong>{{ employee.start_date|jalali }}</strong></article><article><span>بخش اصلی</span><strong>{{ employee.primary_department|default:'—' }}</strong></article></div><div class="stats"><article><span>امتیاز ماه جاری</span><strong>—</strong></article><article><span>پورسانت ماه جاری</span><strong>—</strong></article><article><span>تعداد فعالیت‌ها</span><strong>{{ employee.activities.count }}</strong></article><article><span>تعداد تخلفات</span><strong>{{ employee.violations.count }}</strong></article></div>
-{% elif tab == 'levels' %}<article class="card"><div class="card-head"><h2>تاریخچه تغییر Level</h2></div><div class="table-wrap"><table><thead><tr><th>از</th><th>به</th><th>تغییردهنده</th><th>تاریخ</th><th>دلیل</th></tr></thead><tbody>{% for h in employee.level_history.all %}<tr><td>{{ h.previous_level.code|default:'—' }}</td><td><b>{{ h.new_level.code }}</b></td><td>{{ h.changed_by.get_full_name|default:h.changed_by.username }}</td><td>{{ h.changed_at.date|jalali }}</td><td>{{ h.reason|default:'—' }}</td></tr>{% empty %}<tr><td colspan="5" class="empty">هنوز تغییری ثبت نشده است.</td></tr>{% endfor %}</tbody></table></div></article>
-{% elif tab == 'info' %}<article class="card info-grid"><div><span>نام</span><b>{{ employee.first_name }}</b></div><div><span>نام خانوادگی</span><b>{{ employee.last_name }}</b></div><div><span>موبایل</span><b dir="ltr">{{ employee.mobile }}</b></div><div><span>کد پرسنلی</span><b>{{ employee.employee_code }}</b></div><div><span>نقش</span><b>{{ employee.get_role_display }}</b></div><div><span>بخش اصلی</span><b>{{ employee.primary_department|default:'—' }}</b></div><div><span>همه بخش‌ها</span><b>{% for d in employee.departments.all %}{{ d.name }}{% if not forloop.last %}، {% endif %}{% empty %}—{% endfor %}</b></div><div><span>تاریخ شروع</span><b>{{ employee.start_date|jalali }}</b></div></article>
-{% elif tab == 'activities' %}<article class="card"><h2>فعالیت‌های اخیر</h2>{% include 'core/activity_table.html' with activities=activities %}</article>
-{% elif tab == 'violations' %}<article class="card"><h2>تخلفات اخیر</h2><div class="table-wrap"><table><thead><tr><th>عنوان</th><th>امتیاز</th><th>تاریخ</th></tr></thead><tbody>{% for v in violations %}<tr><td>{{ v.rule.title }}</td><td>{{ v.points_snapshot }}</td><td>{{ v.violation_date|jalali }}</td></tr>{% empty %}<tr><td colspan="3" class="empty">موردی ثبت نشده است.</td></tr>{% endfor %}</tbody></table></div></article>
-{% else %}<article class="card placeholder"><h2>{% if tab == 'performance' %}عملکرد{% else %}پورسانت{% endif %}</h2><p>این بخش در مرحله بعدی توسعه تکمیل می‌شود.</p></article>{% endif %}
+{% extends 'base.html' %}
+{% load persian %}
+{% block title %}{{ employee.full_name }}{% endblock %}
+{% block content %}
+<div class="profile-hero card">
+    <div class="profile-main">
+        {% if employee.profile_photo %}
+        <img class="profile-photo" src="{{ employee.profile_photo.url }}" alt="">
+        {% else %}
+        <div class="profile-photo fallback">{{ employee.first_name|slice:':1' }}</div>
+        {% endif %}
+        <div>
+            <p class="eyebrow">نام کاربری: <strong style="color: var(--green, #237554);">{{ employee.user.username }}</strong> · کد پرسنلی: {{ employee.employee_code }}</p>
+            <h1>{{ employee.full_name }}</h1>
+            <p>{{ employee.primary_department|default:'بدون بخش' }} · Level {{ employee.commission_level.code }} · {% if employee.is_active %}فعال{% else %}غیرفعال{% endif %}</p>
+        </div>
+    </div>
+    <div class="profile-actions">
+        <a class="secondary" href="{% url 'management_employee_password' employee.pk %}">تغییر رمز</a>
+        <a class="primary" href="{% url 'management_employee_edit' employee.pk %}">ویرایش</a>
+    </div>
+</div>
+
+<nav class="tabs">
+    <a class="{% if tab == 'summary' %}active{% endif %}" href="?tab=summary">خلاصه</a>
+    <a class="{% if tab == 'performance' %}active{% endif %}" href="?tab=performance">عملکرد</a>
+    <a class="{% if tab == 'activities' %}active{% endif %}" href="?tab=activities">فعالیت‌ها</a>
+    <a class="{% if tab == 'violations' %}active{% endif %}" href="?tab=violations">تخلفات</a>
+    <a class="{% if tab == 'commission' %}active{% endif %}" href="?tab=commission">پورسانت</a>
+    <a class="{% if tab == 'levels' %}active{% endif %}" href="?tab=levels">تاریخچه Level</a>
+    <a class="{% if tab == 'info' %}active{% endif %}" href="?tab=info">اطلاعات پرونده</a>
+</nav>
+
+{% if tab == 'summary' %}
+<div class="stats">
+    <article>
+        <span>Level فعلی</span>
+        <strong>{{ employee.commission_level.code }}</strong>
+    </article>
+    <article>
+        <span>وضعیت</span>
+        <strong>{% if employee.is_active %}فعال{% else %}غیرفعال{% endif %}</strong>
+    </article>
+    <article>
+        <span>شیفت کاری</span>
+        <strong>{{ employee.default_shift.title|default:'—' }} ({{ employee.standard_daily_hours }} ساعت)</strong>
+    </article>
+    <article>
+        <span>بخش اصلی</span>
+        <strong>{{ employee.primary_department|default:'—' }}</strong>
+    </article>
+</div>
+<div class="stats">
+    <article>
+        <span>نام کاربری سیستم</span>
+        <strong style="color: var(--green, #237554); font-size: 1.3rem;">{{ employee.user.username }}</strong>
+    </article>
+    <article>
+        <span>کد پرسنلی</span>
+        <strong>{{ employee.employee_code }}</strong>
+    </article>
+    <article>
+        <span>تعداد فعالیت‌ها</span>
+        <strong>{{ employee.activities.count }}</strong>
+    </article>
+    <article>
+        <span>تعداد تخلفات</span>
+        <strong>{{ employee.violations.count }}</strong>
+    </article>
+</div>
+
+{% elif tab == 'levels' %}
+<article class="card">
+    <div class="card-head">
+        <h2>تاریخچه تغییر Level</h2>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>از</th>
+                    <th>به</th>
+                    <th>تغییردهنده</th>
+                    <th>تاریخ</th>
+                    <th>دلیل</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for h in employee.level_history.all %}
+                <tr>
+                    <td>{{ h.previous_level.code|default:'—' }}</td>
+                    <td><b>{{ h.new_level.code }}</b></td>
+                    <td>{{ h.changed_by.get_full_name|default:h.changed_by.username }}</td>
+                    <td>{{ h.changed_at.date|jalali }}</td>
+                    <td>{{ h.reason|default:'—' }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="empty">هنوز تغییری ثبت نشده است.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</article>
+
+{% elif tab == 'info' %}
+<article class="card info-grid">
+    <div><span>نام کاربری (جهت ورود به سامانه)</span><b style="color: var(--green, #237554);">{{ employee.user.username }}</b></div>
+    <div><span>کد پرسنلی</span><b>{{ employee.employee_code }}</b></div>
+    <div><span>نام</span><b>{{ employee.first_name }}</b></div>
+    <div><span>نام خانوادگی</span><b>{{ employee.last_name }}</b></div>
+    <div><span>شماره موبایل</span><b dir="ltr">{{ employee.mobile }}</b></div>
+    <div><span>نقش کاربری</span><b>{{ employee.get_role_display }}</b></div>
+    <div><span>شیفت پیش‌فرض</span><b>{{ employee.default_shift.title|default:'—' }}</b></div>
+    <div><span>ساعت کاری استاندارد</span><b>{{ employee.standard_daily_hours }} ساعت</b></div>
+    <div><span>بخش اصلی</span><b>{{ employee.primary_department|default:'—' }}</b></div>
+    <div><span>همه بخش‌های مجاز</span><b>{% for d in employee.departments.all %}{{ d.name }}{% if not forloop.last %}، {% endif %}{% empty %}—{% endfor %}</b></div>
+    <div><span>تاریخ شروع همکاری</span><b>{{ employee.start_date|jalali }}</b></div>
+</article>
+
+{% elif tab == 'activities' %}
+<article class="card">
+    <h2>فعالیت‌های اخیر</h2>
+    {% include 'core/activity_table.html' with activities=activities %}
+</article>
+
+{% elif tab == 'violations' %}
+<article class="card">
+    <h2>تخلفات اخیر</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>عنوان</th>
+                    <th>امتیاز</th>
+                    <th>تاریخ</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for v in violations %}
+                <tr>
+                    <td>{{ v.rule.title }}</td>
+                    <td>{{ v.points_snapshot }}</td>
+                    <td>{{ v.violation_date|jalali }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="3" class="empty">موردی ثبت نشده است.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</article>
+
+{% else %}
+<article class="card placeholder">
+    <h2>{% if tab == 'performance' %}عملکرد{% else %}پورسانت{% endif %}</h2>
+    <p>این بخش در مرحله بعدی توسعه تکمیل می‌شود.</p>
+</article>
+{% endif %}
 {% endblock %}

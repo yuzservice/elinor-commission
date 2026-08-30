@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+{% load persian %}
+{% block title %}گزارش کارکرد پرسنل{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div>
+        <p class="eyebrow">مدیریت شیفت و حضور</p>
+        <h1>گزارش کارکرد پرسنل</h1>
+        <p>فهرست ساعات حضور و تسهیم لاین‌های اصلی و کمکی پرسنل</p>
+    </div>
+</div>
+
+<article class="card filter-card">
+    <form method="get" class="filters">
+        <input name="q" value="{{ filters.q }}" placeholder="جستجو نام کارمند، کد پرسنلی یا یادداشت">
+        <input name="date" value="{{ filters.date }}" placeholder="تاریخ (۱۴۰۵/۰۶/۰۷)" class="jalali-date">
+        <select name="shift">
+            <option value="">همه شیفت‌ها</option>
+            {% for s in shifts %}
+            <option value="{{ s.pk }}" {% if filters.shift == s.pk|stringformat:'s' %}selected{% endif %}>{{ s.title }}</option>
+            {% endfor %}
+        </select>
+        <select name="department">
+            <option value="">همه لاین‌ها</option>
+            {% for d in departments %}
+            <option value="{{ d.pk }}" {% if filters.department == d.pk|stringformat:'s' %}selected{% endif %}>{{ d.name }}</option>
+            {% endfor %}
+        </select>
+        <select name="employee">
+            <option value="">همه کارکنان</option>
+            {% for emp in employees %}
+            <option value="{{ emp.pk }}" {% if filters.employee == emp.pk|stringformat:'s' %}selected{% endif %}>{{ emp.full_name }}</option>
+            {% endfor %}
+        </select>
+        <button class="primary">فیلتر</button>
+        <a class="secondary" href="{% url 'management_shift_logs' %}">پاک‌کردن</a>
+    </form>
+</article>
+
+<article class="card">
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>تاریخ</th>
+                    <th>کارمند</th>
+                    <th>شیفت</th>
+                    <th>لاین اصلی</th>
+                    <th>ساعت اصلی</th>
+                    <th>لاین(های) کمکی</th>
+                    <th>مجموع ساعت کمکی</th>
+                    <th>مجموع کارکرد</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in page %}
+                <tr>
+                    <td><b>{{ item.date|jalali }}</b></td>
+                    <td>
+                        <div class="person-cell">
+                            {% if item.employee.profile_photo %}
+                            <img src="{{ item.employee.profile_photo.url }}" alt="">
+                            {% else %}
+                            <span class="avatar small">{{ item.employee.first_name|slice:':1' }}</span>
+                            {% endif %}
+                            <div>
+                                <b>{{ item.employee.full_name }}</b>
+                                <small>کد: {{ item.employee.employee_code }}</small>
+                            </div>
+                        </div>
+                    </td>
+                    <td>{{ item.shift.title }}</td>
+                    <td><b>{{ item.main_department.name }}</b></td>
+                    <td>{{ item.main_hours }} ساعت</td>
+                    <td>
+                        {% if item.has_support_line %}
+                        <span style="color: var(--green, #237554); font-weight: bold;">{{ item.support_departments_display }}</span>
+                        {% else %}
+                        <span style="color: #888;">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if item.has_support_line %}
+                        {{ item.support_hours }} ساعت
+                        {% else %}
+                        <span style="color: #888;">—</span>
+                        {% endif %}
+                    </td>
+                    <td><strong>{{ item.total_hours }} ساعت</strong></td>
+                    <td>
+                        <a class="table-link" href="{% url 'shift_log_detail' item.pk %}">مشاهده</a>
+                        <a class="table-link" href="{% url 'shift_log_edit' item.pk %}" style="margin-right: 8px;">ویرایش</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="empty">هیچ کارکردی با فیلترهای انتخابی یافت نشد.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if page.paginator.num_pages > 1 %}
+    <div class="pagination">
+        {% if page.has_previous %}
+        <a href="?page={{ page.previous_page_number }}">قبلی</a>
+        {% endif %}
+        <span>صفحه {{ page.number }} از {{ page.paginator.num_pages }}</span>
+        {% if page.has_next %}
+        <a href="?page={{ page.next_page_number }}">بعدی</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</article>
+{% endblock %}

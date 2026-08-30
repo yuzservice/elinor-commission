@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+{% load persian %}
+{% block title %}عملکرد فروش لاین‌ها{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div>
+        <p class="eyebrow">مدیریت فروش و عملکرد</p>
+        <h1>عملکرد فروش لاین‌ها</h1>
+        <p>ثبت و مشاهده آمار فروش روزانه لاین‌ها در هر شیفت</p>
+    </div>
+    <div>
+        <a class="primary" href="{% url 'management_line_performance_batch' %}">⚡ ثبت سریع فروش (جدولی)</a>
+        <a class="secondary" href="{% url 'management_line_performance_create' %}" style="margin-right: 8px;">+ ثبت تکی</a>
+    </div>
+</div>
+
+<article class="card filter-card">
+    <form method="get" class="filters">
+        <input name="date" value="{{ filters.date }}" placeholder="تاریخ (۱۴۰۵/۰۶/۰۷)" class="jalali-date">
+        <select name="shift">
+            <option value="">همه شیفت‌ها</option>
+            {% for s in shifts %}
+            <option value="{{ s.pk }}" {% if filters.shift == s.pk|stringformat:'s' %}selected{% endif %}>{{ s.title }}</option>
+            {% endfor %}
+        </select>
+        <select name="department">
+            <option value="">همه لاین‌ها</option>
+            {% for d in departments %}
+            <option value="{{ d.pk }}" {% if filters.department == d.pk|stringformat:'s' %}selected{% endif %}>{{ d.name }}</option>
+            {% endfor %}
+        </select>
+        <button class="primary">فیلتر</button>
+        <a class="secondary" href="{% url 'management_line_performances' %}">پاک‌کردن</a>
+    </form>
+</article>
+
+<article class="card">
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>تاریخ فروش</th>
+                    <th>شیفت</th>
+                    <th>لاین / بخش</th>
+                    <th>تعداد کالای فروخته‌شده</th>
+                    <th>ثبت‌کننده</th>
+                    <th>زمان ثبت</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in page %}
+                <tr>
+                    <td><b>{{ item.date|jalali }}</b></td>
+                    <td>{{ item.shift.title }}</td>
+                    <td><b>{{ item.department.name }}</b></td>
+                    <td><strong style="color: var(--green, #237554); font-size: 1.1rem;">{{ item.sold_units }}</strong> کالا</td>
+                    <td><small>{{ item.recorded_by.get_full_name|default:item.recorded_by.username }}</small></td>
+                    <td><small>{{ item.created_at|jalali }}</small></td>
+                    <td>
+                        <a class="table-link" href="{% url 'management_line_performance_edit' item.pk %}">ویرایش</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="empty">هنوز فروش لاینی برای این فیلترها ثبت نشده است.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page.paginator.num_pages > 1 %}
+    <div class="pagination">
+        {% if page.has_previous %}
+        <a href="?page={{ page.previous_page_number }}">قبلی</a>
+        {% endif %}
+        <span>صفحه {{ page.number }} از {{ page.paginator.num_pages }}</span>
+        {% if page.has_next %}
+        <a href="?page={{ page.next_page_number }}">بعدی</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</article>
+{% endblock %}

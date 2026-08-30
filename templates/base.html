@@ -1,5 +1,93 @@
-{% load static persian %}<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{% block title %}{{ system_settings.panel_name|default:'سامانه عملکرد' }}{% endblock %}</title>{% if system_settings.favicon %}<link rel="icon" href="{{ system_settings.favicon.url }}">{% endif %}<link rel="stylesheet" href="{% static 'app.css' %}"><style>:root{--green:{{ system_settings.primary_color|default:'#237554' }}}</style></head>
-<body><div class="layout">
-{% if user.is_authenticated %}<aside><a class="brand" href="{% url 'dashboard' %}">{% if system_settings.logo %}<img src="{{ system_settings.logo.url }}" alt="لوگو">{% else %}<span>{{ system_settings.organization_name|slice:':1'|default:'س' }}</span>{% endif %}<div>{{ system_settings.organization_name|default:'مجموعه' }}<small>{{ system_settings.panel_name|default:'سامانه عملکرد' }}</small></div></a><nav><a href="{% url 'dashboard' %}">خانه</a><a href="{% url 'profile' %}">پروفایل من</a><a href="{% url 'activity_create' %}">ثبت فعالیت</a><a href="{% url 'activities' %}">فعالیت‌ها</a><a href="{% url 'violations' %}">تخلفات</a>{% if user.employee.can_review %}<hr><a href="{% url 'management_activity_reviews' %}">صف بررسی فعالیت‌ها</a><a href="{% url 'management_activity_types' %}">تعریف فعالیت‌ها</a><a href="{% url 'violation_create' %}">ثبت تخلف</a><a href="{% url 'management_employees' %}">مدیریت کارکنان</a><a href="{% url 'branding_settings' %}">برندینگ</a>{% if user.is_staff %}<a href="/admin/">Django Admin</a>{% endif %}{% endif %}</nav><form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="logout">خروج</button></form></aside>{% endif %}
-<main class="{% if not user.is_authenticated %}auth-main{% endif %}">{% if user.is_authenticated %}<header><button class="menu" onclick="document.body.classList.toggle('nav-open')">☰</button><div><strong>{{ user.employee.full_name }}</strong><small>{{ user.employee.get_role_display }} · سطح {{ user.employee.level.code }}</small></div></header>{% endif %}
-<section class="content">{% for message in messages %}<div class="message {{ message.tags }}">{{ message }}</div>{% endfor %}{% block content %}{% endblock %}</section></main></div></body></html>
+{% load static persian %}<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>{% block title %}{{ system_settings.panel_name|default:'سامانه عملکرد' }}{% endblock %}</title>
+    {% if system_settings.favicon %}
+    <link rel="icon" href="{{ system_settings.favicon.url }}">
+    {% endif %}
+    <link rel="stylesheet" href="{% static 'app.css' %}">
+    <style>
+        :root {
+            --green: {{ system_settings.primary_color|default:'#237554' }};
+        }
+    </style>
+</head>
+<body>
+<div class="layout">
+{% if user.is_authenticated %}
+<aside>
+    <a class="brand" href="{% url 'dashboard' %}">
+        {% if system_settings.logo %}
+        <img src="{{ system_settings.logo.url }}" alt="لوگو">
+        {% else %}
+        <span>{{ system_settings.organization_name|slice:':1'|default:'س' }}</span>
+        {% endif %}
+        <div>
+            {{ system_settings.organization_name|default:'مجموعه' }}
+            <small>{{ system_settings.panel_name|default:'سامانه عملکرد' }}</small>
+        </div>
+    </a>
+    
+    <nav>
+        <div class="nav-group-title">میز کار</div>
+        <a href="{% url 'dashboard' %}">📊 داشبورد و خانه</a>
+        <a href="{% url 'profile' %}">👤 پروفایل من</a>
+        <a href="{% url 'my_commission_report' %}">💰 کارنامه پورسانت من</a>
+
+        <div class="nav-group-title">کارکرد و شیفت</div>
+        <a href="{% url 'shift_log_create' %}">⏱️ ثبت کارکرد روزانه</a>
+        <a href="{% url 'shift_logs' %}">📋 کارکردهای من</a>
+
+        <div class="nav-group-title">فعالیت و تخلفات</div>
+        <a href="{% url 'activity_create' %}">➕ ثبت فعالیت</a>
+        <a href="{% url 'activities' %}">📑 فهرست فعالیت‌ها</a>
+        <a href="{% url 'violations' %}">⚠️ تخلفات</a>
+
+        {% if user.employee.can_review %}
+        <div class="nav-group-title" style="margin-top: 16px; color: rgba(223, 244, 233, 0.7); border-top: 1px solid rgba(255,255,255,0.08); padding-top: 12px;">مدیریت فروش و تسویه</div>
+        <a href="{% url 'management_commission_report' %}">💵 تسویه و گزارش پورسانت</a>
+        <a href="{% url 'management_line_rates' %}">📐 ضرایب لاین و گرید</a>
+        <a href="{% url 'management_line_performances' %}">🛍️ فروش روزانه لاین‌ها</a>
+        <a href="{% url 'management_shift_logs' %}">👥 گزارش کارکرد پرسنل</a>
+
+        <div class="nav-group-title">تنظیمات و تعاریف</div>
+        <a href="{% url 'management_activity_reviews' %}">📥 صف بررسی فعالیت‌ها</a>
+        <a href="{% url 'management_shifts' %}">🕒 تعریف شیفت‌ها</a>
+        <a href="{% url 'management_activity_types' %}">📝 تعریف نوع فعالیت</a>
+        <a href="{% url 'management_employees' %}">👥 مدیریت کارکنان</a>
+        <a href="{% url 'violation_create' %}">⚠️ ثبت تخلف پرسنل</a>
+        <a href="{% url 'branding_settings' %}">🎨 تنظیمات برندینگ</a>
+        {% if user.is_staff %}<a href="/admin/">⚙️ Django Admin</a>{% endif %}
+        {% endif %}
+    </nav>
+    
+    <form method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <button class="logout">خروج از حساب</button>
+    </form>
+</aside>
+{% endif %}
+
+<main class="{% if not user.is_authenticated %}auth-main{% endif %}">
+    {% if user.is_authenticated %}
+    <header>
+        <button class="menu" onclick="document.body.classList.toggle('nav-open')">☰</button>
+        <div>
+            <strong>{{ user.employee.full_name }}</strong>
+            <small>{{ user.employee.get_role_display }} · سطح {{ user.employee.level.code }}</small>
+        </div>
+    </header>
+    {% endif %}
+    
+    <section class="content">
+        {% for message in messages %}
+        <div class="message {{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+        {% block content %}{% endblock %}
+    </section>
+</main>
+</div>
+</body>
+</html>

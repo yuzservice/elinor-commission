@@ -1,5 +1,111 @@
-{% extends 'base.html' %}{% load persian %}{% block title %}مدیریت کارکنان{% endblock %}{% block content %}
-<div class="page-head"><div><p class="eyebrow">مدیریت منابع انسانی</p><h1>کارکنان</h1><p>{{ page.paginator.count }} پرونده فعال و غیرفعال</p></div><a class="primary" href="{% url 'management_employee_create' %}">+ کارمند جدید</a></div>
-<article class="card filter-card"><form method="get" class="filters"><input name="q" value="{{ filters.q }}" placeholder="جستجو نام، موبایل یا کد پرسنلی"><select name="status"><option value="">همه وضعیت‌ها</option><option value="active" {% if filters.status == 'active' %}selected{% endif %}>فعال</option><option value="inactive" {% if filters.status == 'inactive' %}selected{% endif %}>غیرفعال</option></select><select name="level"><option value="">همه Levelها</option>{% for item in levels %}<option value="{{ item.pk }}" {% if filters.level == item.pk|stringformat:'s' %}selected{% endif %}>Level {{ item.code }}</option>{% endfor %}</select><select name="department"><option value="">همه بخش‌ها</option>{% for item in departments %}<option value="{{ item.pk }}" {% if filters.department == item.pk|stringformat:'s' %}selected{% endif %}>{{ item.name }}</option>{% endfor %}</select><select name="sort"><option value="name">نام</option><option value="-name" {% if sort == '-name' %}selected{% endif %}>نام، نزولی</option><option value="code" {% if sort == 'code' %}selected{% endif %}>کد پرسنلی</option><option value="start_date" {% if sort == 'start_date' %}selected{% endif %}>قدیمی‌ترین شروع</option><option value="-start_date" {% if sort == '-start_date' %}selected{% endif %}>جدیدترین شروع</option></select><button class="primary">اعمال</button><a class="secondary" href="{% url 'management_employees' %}">پاک‌کردن</a></form></article>
-<article class="card"><div class="table-wrap"><table><thead><tr><th>کارمند</th><th>کد</th><th>موبایل</th><th>بخش اصلی</th><th>Level</th><th>شروع همکاری</th><th>وضعیت</th><th></th></tr></thead><tbody>{% for e in page %}<tr><td><div class="person-cell">{% if e.profile_photo %}<img src="{{ e.profile_photo.url }}" alt="">{% else %}<span class="avatar small">{{ e.first_name|slice:':1' }}</span>{% endif %}<b>{{ e.full_name }}</b></div></td><td>{{ e.employee_code }}</td><td dir="ltr">{{ e.mobile }}</td><td>{{ e.primary_department|default:'—' }}</td><td><span class="level">{{ e.commission_level.code }}</span></td><td>{{ e.start_date|jalali }}</td><td><span class="status {% if e.is_active %}approved{% else %}rejected{% endif %}">{% if e.is_active %}فعال{% else %}غیرفعال{% endif %}</span></td><td><a class="table-link" href="{% url 'management_employee_detail' e.pk %}">مشاهده</a></td></tr>{% empty %}<tr><td colspan="8" class="empty">کارمندی با این فیلتر پیدا نشد.</td></tr>{% endfor %}</tbody></table></div>{% if page.paginator.num_pages > 1 %}<div class="pagination">{% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">قبلی</a>{% endif %}<span>صفحه {{ page.number }} از {{ page.paginator.num_pages }}</span>{% if page.has_next %}<a href="?page={{ page.next_page_number }}">بعدی</a>{% endif %}</div>{% endif %}</article>
+{% extends 'base.html' %}
+{% load persian %}
+{% block title %}مدیریت کارکنان{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div>
+        <p class="eyebrow">مدیریت منابع انسانی</p>
+        <h1>کارکنان</h1>
+        <p>{{ page.paginator.count }} پرونده فعال و غیرفعال</p>
+    </div>
+    <a class="primary" href="{% url 'management_employee_create' %}">+ کارمند جدید</a>
+</div>
+
+<article class="card filter-card">
+    <form method="get" class="filters">
+        <input name="q" value="{{ filters.q }}" placeholder="جستجو نام، نام کاربری، موبایل یا کد پرسنلی">
+        <select name="status">
+            <option value="">همه وضعیت‌ها</option>
+            <option value="active" {% if filters.status == 'active' %}selected{% endif %}>فعال</option>
+            <option value="inactive" {% if filters.status == 'inactive' %}selected{% endif %}>غیرفعال</option>
+        </select>
+        <select name="level">
+            <option value="">همه Levelها</option>
+            {% for item in levels %}
+            <option value="{{ item.pk }}" {% if filters.level == item.pk|stringformat:'s' %}selected{% endif %}>Level {{ item.code }}</option>
+            {% endfor %}
+        </select>
+        <select name="department">
+            <option value="">همه بخش‌ها</option>
+            {% for item in departments %}
+            <option value="{{ item.pk }}" {% if filters.department == item.pk|stringformat:'s' %}selected{% endif %}>{{ item.name }}</option>
+            {% endfor %}
+        </select>
+        <select name="sort">
+            <option value="name">نام</option>
+            <option value="-name" {% if sort == '-name' %}selected{% endif %}>نام، نزولی</option>
+            <option value="code" {% if sort == 'code' %}selected{% endif %}>کد پرسنلی</option>
+            <option value="start_date" {% if sort == 'start_date' %}selected{% endif %}>قدیمی‌ترین شروع</option>
+            <option value="-start_date" {% if sort == '-start_date' %}selected{% endif %}>جدیدترین شروع</option>
+        </select>
+        <button class="primary">اعمال</button>
+        <a class="secondary" href="{% url 'management_employees' %}\">پاک‌کردن</a>
+    </form>
+</article>
+
+<article class="card">
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>کارمند</th>
+                    <th>نام کاربری / کد</th>
+                    <th>موبایل</th>
+                    <th>بخش اصلی</th>
+                    <th>شیفت</th>
+                    <th>Level</th>
+                    <th>شروع همکاری</th>
+                    <th>وضعیت</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for e in page %}
+                <tr>
+                    <td>
+                        <div class="person-cell">
+                            {% if e.profile_photo %}
+                            <img src="{{ e.profile_photo.url }}" alt="">
+                            {% else %}
+                            <span class="avatar small">{{ e.first_name|slice:':1' }}</span>
+                            {% endif %}
+                            <b>{{ e.full_name }}</b>
+                        </div>
+                    </td>
+                    <td>
+                        <b style="color: var(--green, #237554);">{{ e.user.username }}</b>
+                        <small style="color: var(--muted);">کد: {{ e.employee_code }}</small>
+                    </td>
+                    <td dir="ltr">{{ e.mobile }}</td>
+                    <td>{{ e.primary_department|default:'—' }}</td>
+                    <td>{{ e.default_shift.title|default:'—' }}</td>
+                    <td><span class="level">{{ e.commission_level.code }}</span></td>
+                    <td>{{ e.start_date|jalali }}</td>
+                    <td>
+                        <span class="status {% if e.is_active %}approved{% else %}rejected{% endif %}">
+                            {% if e.is_active %}فعال{% else %}غیرفعال{% endif %}
+                        </span>
+                    </td>
+                    <td><a class="table-link" href="{% url 'management_employee_detail' e.pk %}">مشاهده</a></td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="empty">کارمندی با این فیلتر پیدا نشد.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if page.paginator.num_pages > 1 %}
+    <div class="pagination">
+        {% if page.has_previous %}
+        <a href="?page={{ page.previous_page_number }}">قبلی</a>
+        {% endif %}
+        <span>صفحه {{ page.number }} از {{ page.paginator.num_pages }}</span>
+        {% if page.has_next %}
+        <a href="?page={{ page.next_page_number }}">بعدی</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</article>
 {% endblock %}

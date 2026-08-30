@@ -1,5 +1,169 @@
-{% extends 'base.html' %}{% block title %}داشبورد من{% endblock %}{% block content %}<div class="page-head"><div><p class="eyebrow">ماه جاری</p><h1>سلام {{ employee.full_name }} 👋</h1><p>تصویر شفاف عملکرد و پورسانت شما تا امروز</p></div><a class="primary" href="{% url 'activity_create' %}">+ ثبت فعالیت</a></div>
-<div class="hero"><div><span>پورسانت فعلی</span><strong>{{ metrics.commission|floatformat:0 }}</strong><small>تومان</small></div><div class="hero-meta"><p>امتیاز عملکرد <b>{{ metrics.score|floatformat:0 }}</b></p><p>سطح و ضریب <b>{{ employee.level.code }} · {{ employee.level.performance_rate }}</b></p></div></div>
-<div class="stats"><article><span>فعالیت تأییدشده</span><strong>{{ metrics.approved_count }}</strong></article><article><span>مبلغ عملکرد</span><strong>{{ metrics.gross|floatformat:0 }}</strong></article><article class="danger"><span>کسورات</span><strong>{{ metrics.deduction|floatformat:0 }}</strong></article><article><span>پاداش تارگت</span><strong>{{ metrics.reward|floatformat:0 }}</strong></article></div>
-<article class="card target"><div><div><h3>{% if metrics.next_target %}مسیر تا {{ metrics.next_target.title }}{% else %}همه تارگت‌ها تکمیل شد{% endif %}</h3>{% if metrics.next_target %}<p>هدف: {{ metrics.next_target.points }} امتیاز</p>{% endif %}</div><b>{{ metrics.target_progress }}٪</b></div><div class="progress"><i style="width:{{ metrics.target_progress }}%"></i></div></article>
-<article class="card"><div class="card-head"><h2>آخرین فعالیت‌ها</h2><a href="{% url 'activities' %}">مشاهده همه</a></div>{% include 'core/activity_table.html' with activities=recent %}</article>{% endblock %}
+{% extends 'base.html' %}
+{% load persian %}
+{% block title %}داشبورد من | {{ system_settings.panel_name|default:'سامانه عملکرد' }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div>
+        <p class="eyebrow">ماه جاری ({{ start|jalali }})</p>
+        <h1>سلام {{ employee.full_name }} 👋</h1>
+        <p>خلاصه عملکرد کاری، کارکرد شیفت‌ها و پورسانت محاسبه‌شده شما تا امروز</p>
+    </div>
+    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <a class="primary" href="{% url 'shift_log_create' %}">⏱️ ثبت کارکرد شیفت</a>
+        <a class="secondary" href="{% url 'my_commission_report' %}">💰 کارنامه پورسانت</a>
+    </div>
+</div>
+
+<!-- Hero Card -->
+<div class="hero">
+    <div>
+        <span>پورسانت خالص قابل دریافت</span>
+        <strong>{{ metrics.commission|persian_int }}</strong>
+        <small>ریال</small>
+    </div>
+    <div class="hero-meta">
+        <div>
+            <p>سهم کالا در ماه</p>
+            <b>{{ metrics.total_sales_units_share }} عدد</b>
+        </div>
+        <div>
+            <p>تعداد شیفت‌ها</p>
+            <b>{{ metrics.shift_logs_count }} شیفت</b>
+        </div>
+        <div>
+            <p>سطح و لاین اصلی</p>
+            <b>گرید {{ employee.commission_level.code }} · {{ employee.primary_department.name|default:'لاین اصلی' }}</b>
+        </div>
+    </div>
+</div>
+
+<!-- Stats Grid -->
+<div class="stats">
+    <article>
+        <span>🛍️ سهم از فروش کل لاین‌ها</span>
+        <strong style="color: var(--green, #237554);">{{ metrics.total_sales_units_share }}</strong>
+        <small>واحد کالا (تسهیم ساعتی)</small>
+    </article>
+    <article>
+        <span>💵 پورسانت ناخالص فروش</span>
+        <strong>{{ metrics.gross_sales_commission|persian_int }} ریال</strong>
+        <small>حاصل‌ضرب سهم در ضریب گرید</small>
+    </article>
+    <article class="{% if metrics.deduction > 0 %}danger{% endif %}">
+        <span>⚠️ کسورات تخلفات</span>
+        <strong>{{ metrics.deduction|persian_int }} ریال</strong>
+        <small>{{ metrics.violation_points }} امتیاز تخلف ثبت‌شده</small>
+    </article>
+    <article>
+        <span>🎯 پاداش تکمیل تارگت</span>
+        <strong>{{ metrics.reward|persian_int }} ریال</strong>
+        <small>{% if metrics.next_target %}تارگت بعدی: {{ metrics.next_target.points }} امتیاز{% else %}تکمیل تمام تارگت‌ها{% endif %}</small>
+    </article>
+</div>
+
+<!-- Quick Actions Banner -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 18px;">
+    <a href="{% url 'shift_log_create' %}" class="card" style="display: flex; align-items: center; gap: 12px; margin-bottom: 0; padding: 14px 18px; border-right: 4px solid var(--green, #237554); transition: transform 0.15s, box-shadow 0.15s;">
+        <span style="font-size: 24px;">⏱️</span>
+        <div>
+            <strong style="display: block; font-size: 14px; color: var(--ink);">ثبت کارکرد امروز</strong>
+            <small style="color: var(--muted);">ثبت ساعات حضور در لاین‌ها</small>
+        </div>
+    </a>
+    <a href="{% url 'my_commission_report' %}" class="card" style="display: flex; align-items: center; gap: 12px; margin-bottom: 0; padding: 14px 18px; border-right: 4px solid #b59a62; transition: transform 0.15s, box-shadow 0.15s;">
+        <span style="font-size: 24px;">📊</span>
+        <div>
+            <strong style="display: block; font-size: 14px; color: var(--ink);">کارنامه تفصیلی پورسانت</strong>
+            <small style="color: var(--muted);">ریز محاسبات به تفکیک شیفت‌ها</small>
+        </div>
+    </a>
+    <a href="{% url 'activity_create' %}" class="card" style="display: flex; align-items: center; gap: 12px; margin-bottom: 0; padding: 14px 18px; border-right: 4px solid #4a86e8; transition: transform 0.15s, box-shadow 0.15s;">
+        <span style="font-size: 24px;">➕</span>
+        <div>
+            <strong style="display: block; font-size: 14px; color: var(--ink);">ثبت فعالیت روزانه</strong>
+            <small style="color: var(--muted);">وظایف، چک‌لیست و امور اجرایی</small>
+        </div>
+    </a>
+</div>
+
+<!-- Target Progress -->
+<article class="card target">
+    <div>
+        <div>
+            <h3>{% if metrics.next_target %}مسیر تا {{ metrics.next_target.title }}{% else %}تمام تارگت‌های ماه تکمیل شده است 🏆{% endif %}</h3>
+            {% if metrics.next_target %}<p>امتیاز هدف: {{ metrics.next_target.points }} امتیاز · پاداش: {{ metrics.next_target.reward|persian_int }} ریال</p>{% endif %}
+        </div>
+        <b>{{ metrics.target_progress }}٪</b>
+    </div>
+    <div class="progress"><i style="width:{{ metrics.target_progress }}%"></i></div>
+</article>
+
+<!-- Recent Shift Logs -->
+<article class="card">
+    <div class="card-head">
+        <h2>⏱️ آخرین کارکردهای شیفت من</h2>
+        <a href="{% url 'shift_logs' %}">مشاهده همه کارکردها</a>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>تاریخ</th>
+                    <th>شیفت</th>
+                    <th>لاین اصلی</th>
+                    <th>لاین کمکی</th>
+                    <th>مجموع ساعات</th>
+                    <th>سهم کالا</th>
+                    <th>پورسانت شیفت</th>
+                    <th>عملیات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in metrics.shift_log_details|slice:":5" %}
+                <tr>
+                    <td><b>{{ d.shift_log.date|jalali }}</b></td>
+                    <td>{{ d.shift_log.shift.title }}</td>
+                    <td>
+                        <b>{{ d.shift_log.main_department.name }}</b>
+                        <small>{{ d.shift_log.main_hours }} ساعت</small>
+                    </td>
+                    <td>
+                        {% if d.shift_log.has_support_line %}
+                        <span>{{ d.shift_log.support_departments_display }}</span>
+                        <small>{{ d.shift_log.support_hours }} ساعت</small>
+                        {% else %}
+                        <span style="color: var(--muted);">—</span>
+                        {% endif %}
+                    </td>
+                    <td><strong>{{ d.shift_log.total_hours }} ساعت</strong></td>
+                    <td>
+                        <span class="badge" style="background: var(--green2); color: var(--green);">
+                            {{ d.total_units_share }} کالا
+                        </span>
+                    </td>
+                    <td><strong style="color: var(--green);">{{ d.total_commission|persian_int }} ریال</strong></td>
+                    <td>
+                        <a href="{% url 'shift_log_detail' d.shift_log.pk %}" class="table-link">مشاهده</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="empty">هنوز کارکردی در این ماه ثبت نکرده‌اید. با زدن دکمه «ثبت کارکرد شیفت» شروع کنید.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</article>
+
+<!-- Recent Activities -->
+{% if recent %}
+<article class="card">
+    <div class="card-head">
+        <h2>📑 آخرین فعالیت‌های متفرقه</h2>
+        <a href="{% url 'activities' %}">مشاهده همه فعالیت‌ها</a>
+    </div>
+    {% include 'core/activity_table.html' with activities=recent %}
+</article>
+{% endif %}
+{% endblock %}

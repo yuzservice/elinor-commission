@@ -1,7 +1,7 @@
 # Elinor Commission System — Handoff
 
 ## Repository
-/Users/rezasoltani/.codex/.chatgpt-projects/g-p-6a85d865f5208191b61ace967836cb1b
+/Users/rezasoltani/Documents/elinor-commission
 
 ## Architecture
 Django + PostgreSQL + Docker Compose
@@ -13,7 +13,15 @@ main
 30605ca feat: complete activity workflow
 
 ## Current State
-Batch 1 activity workflow completed.
+Multi-interval support-line tracking completed on top of the Gemini shift UI.
+
+- `SupportLineInterval` stores destination line, start/end and server-calculated minutes.
+- `DailyShiftLog` summary hours are rebuilt server-side from intervals.
+- Repeatable RTL interval UI is available on create/edit.
+- Manager detail shows exact intervals for camera review.
+- Interval create/update/delete events are audited.
+- Migration: `0011_supportlineinterval`.
+- No new commission rule was added.
 
 Post-Batch-1 correction completed:
 - Employee does not enter score.
@@ -26,11 +34,12 @@ Post-Batch-1 correction completed:
 - Score tampering protection tested.
 
 ## Latest Migration
-0004_activity_duration_minutes_activity_end_time_and_more
+0011_supportlineinterval
 
 ## Validation
-36 PostgreSQL tests passing.
-Health endpoint healthy.
+62 PostgreSQL tests passing.
+Migration consistency check passes.
+Health and related pages sanity-checked.
 
 ## Run
 docker compose build web

@@ -23,3 +23,20 @@ def jalali_datetime(value):
         return result.translate(PERSIAN_DIGITS)
     except (TypeError, ValueError):
         return value
+
+@register.filter
+def persian_digits(value):
+    if value is None or value == "":
+        return ""
+    return str(value).translate(PERSIAN_DIGITS)
+
+@register.filter
+def persian_int(value):
+    if value is None or value == "":
+        return "۰"
+    try:
+        num = int(round(float(value)))
+        formatted = f"{num:,}"
+        return formatted.translate(PERSIAN_DIGITS)
+    except (ValueError, TypeError):
+        return str(value).translate(PERSIAN_DIGITS)

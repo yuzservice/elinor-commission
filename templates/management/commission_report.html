@@ -1,0 +1,105 @@
+{% extends 'base.html' %}
+{% load persian %}
+{% block title %}گزارش جامع تسویه پورسانت پرسنل{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div>
+        <p class="eyebrow">گزارش مالی و تسویه</p>
+        <h1>گزارش جامع تسویه پورسانت پرسنل</h1>
+        <p>دوره: از {{ start|jalali }} تا {{ end|jalali }}</p>
+    </div>
+    <form method="get" class="filters" style="margin-bottom: 0;">
+        <input name="date" value="{{ filters.date }}" placeholder="انتخاب تاریخ ماه (۱۴۰۵/۰۶/۰۱)" class="jalali-date">
+        <button class="primary">فیلتر دوره</button>
+        <a class="secondary" href="{% url 'management_line_rates' %}">⚙️ تنظیم ضرایب لاین و گرید</a>
+    </form>
+</div>
+
+<div class="stats">
+    <article>
+        <span>مجموع کل سهم کالاها</span>
+        <strong style="color: var(--green, #237554); font-size: 1.6rem;">{{ total_sales_units }}</strong>
+        <small>واحد کالا بین پرسنل</small>
+    </article>
+    <article>
+        <span>مجموع ناخالص پورسانت</span>
+        <strong>{{ total_gross_payout|persian_int }} ریال</strong>
+        <small>قبل از کسورات</small>
+    </article>
+    <article>
+        <span>مجموع کسورات تخلفات</span>
+        <strong style="color: #c53030;">{{ total_deductions|persian_int }} ریال</strong>
+        <small>کل جریمه‌های دوره</small>
+    </article>
+    <article>
+        <span>مجموع خالص پرداختی</span>
+        <strong style="color: var(--green, #237554); font-size: 1.6rem;">{{ total_net_payout|persian_int }} ریال</strong>
+        <small>خالص نهایی تسویه</small>
+    </article>
+</div>
+
+<article class="card">
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>کارمند</th>
+                    <th>گرید</th>
+                    <th>بخش اصلی</th>
+                    <th>تعداد شیفت</th>
+                    <th>سهم فروش کالا</th>
+                    <th>پورسانت ناخالص</th>
+                    <th>کسورات تخلف</th>
+                    <th>پاداش تارگت</th>
+                    <th>پورسانت خالص نهایی</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    <td>
+                        <div class="person-cell">
+                            {% if row.employee.profile_photo %}
+                            <img src="{{ row.employee.profile_photo.url }}" alt="">
+                            {% else %}
+                            <span class="avatar small">{{ row.employee.first_name|slice:':1' }}</span>
+                            {% endif %}
+                            <b>{{ row.employee.full_name }}</b>
+                            <small>{{ row.employee.employee_code }}</small>
+                        </div>
+                    </td>
+                    <td><span class="badge">سطح {{ row.employee.commission_level.code }}</span></td>
+                    <td>{{ row.employee.primary_department.name|default:'—' }}</td>
+                    <td>{{ row.metrics.shift_logs_count }} شیفت</td>
+                    <td><strong style="color: var(--green, #237554);">{{ row.metrics.total_sales_units_share }}</strong></td>
+                    <td>{{ row.metrics.gross_sales_commission|persian_int }} ریال</td>
+                    <td>
+                        {% if row.metrics.deduction > 0 %}
+                        <span style="color: #c53030;">{{ row.metrics.deduction|persian_int }} ریال</span>
+                        {% else %}
+                        ۰
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if row.metrics.reward > 0 %}
+                        <span style="color: var(--green, #237554);">+{{ row.metrics.reward|persian_int }}</span>
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td><strong style="color: var(--green, #237554); font-size: 1.1rem;">{{ row.metrics.commission|persian_int }} ریال</strong></td>
+                    <td>
+                        <a class="table-link" href="{% url 'management_employee_detail' row.employee.pk %}?tab=summary">جزئیات کارمند</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10" class="empty">کارمندی یافت نشد.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</article>
+{% endblock %}

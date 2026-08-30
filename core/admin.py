@@ -1,14 +1,63 @@
 from django.contrib import admin
-from .models import Activity, ActivityCategory, ActivityStatusHistory, ActivityType, AuditLog, CommissionLevel, Department, Employee, EmployeeLevelHistory, SystemSettings, Target, Violation, ViolationRule
+from .models import (
+    Activity,
+    ActivityCategory,
+    ActivityStatusHistory,
+    ActivityType,
+    AuditLog,
+    CommissionLevel,
+    DailyShiftLog,
+    Department,
+    Employee,
+    EmployeeLevelHistory,
+    LineCommissionRate,
+    LineShiftPerformance,
+    Shift,
+    SupportLineInterval,
+    SystemSettings,
+    Target,
+    Violation,
+    ViolationRule,
+)
 from .services import audit
 
 admin.site.site_header = "مدیریت سامانه"
 admin.site.site_title = "مدیریت"
 
+@admin.register(Shift)
+class ShiftAdmin(admin.ModelAdmin):
+    list_display = ("title", "code", "start_time", "end_time", "standard_hours", "is_active", "sort_order")
+    list_filter = ("is_active",)
+    search_fields = ("title", "code")
+
+@admin.register(DailyShiftLog)
+class DailyShiftLogAdmin(admin.ModelAdmin):
+    list_display = ("employee", "date", "shift", "main_department", "main_hours", "has_support_line", "support_departments_display", "support_hours", "total_hours")
+    list_filter = ("date", "shift", "main_department", "has_support_line")
+    search_fields = ("employee__first_name", "employee__last_name", "employee__employee_code")
+    filter_horizontal = ("support_departments",)
+
+@admin.register(SupportLineInterval)
+class SupportLineIntervalAdmin(admin.ModelAdmin):
+    list_display = ("shift_log", "department", "start_time", "end_time", "duration_minutes")
+    list_filter = ("department", "shift_log__date")
+    readonly_fields = ("duration_minutes", "created_at", "updated_at")
+
+@admin.register(LineShiftPerformance)
+class LineShiftPerformanceAdmin(admin.ModelAdmin):
+    list_display = ("date", "shift", "department", "sold_units", "sales_amount", "recorded_by", "created_at")
+    list_filter = ("date", "shift", "department")
+    search_fields = ("department__name", "description")
+
+@admin.register(LineCommissionRate)
+class LineCommissionRateAdmin(admin.ModelAdmin):
+    list_display = ("department", "commission_level", "rate_per_unit", "is_active", "updated_at")
+    list_filter = ("department", "commission_level", "is_active")
+
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
-    list_display=("employee_code","full_name","mobile","role","commission_level","is_active")
-    list_filter=("role","commission_level","is_active","departments")
+    list_display=("employee_code","full_name","mobile","role","default_shift","commission_level","is_active")
+    list_filter=("role","default_shift","commission_level","is_active","departments")
     search_fields=("employee_code","first_name","last_name","mobile","user__username")
     filter_horizontal=("departments",)
     def has_delete_permission(self, request, obj=None): return False

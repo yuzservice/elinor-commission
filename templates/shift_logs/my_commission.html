@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% load persian %}
+{% block title %}کارنامه و جزئیات پورسانت من{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div>
+        <p class="eyebrow">گزارش مالی و عملکرد</p>
+        <h1>کارنامه پورسانت من</h1>
+        <p>دوره: از {{ start|jalali }} تا {{ end|jalali }} · گرید فعلی: <strong>سطح {{ employee.commission_level.code }}</strong></p>
+    </div>
+    <form method="get" class="filters" style="margin-bottom: 0;">
+        <input name="date" value="{{ filters.date }}" placeholder="انتخاب تاریخ ماه (۱۴۰۵/۰۶/۰۱)" class="jalali-date">
+        <button class="primary">مشاهده دوره</button>
+    </form>
+</div>
+
+<div class="stats">
+    <article>
+        <span>سهم از کالاهای فروخته‌شده</span>
+        <strong style="color: var(--green, #237554); font-size: 1.6rem;">{{ metrics.total_sales_units_share }}</strong>
+        <small>واحد کالا در این دوره</small>
+    </article>
+    <article>
+        <span>پورسانت ناخالص فروش</span>
+        <strong>{{ metrics.gross_sales_commission|persian_int }} ریال</strong>
+        <small>بر اساس ضرایب لاین و گرید</small>
+    </article>
+    <article>
+        <span>کسورات تخلفات</span>
+        <strong style="color: #c53030;">{{ metrics.deduction|persian_int }} ریال</strong>
+        <small>{{ metrics.violation_points }} امتیاز تخلف</small>
+    </article>
+    <article>
+        <span>پورسانت خالص نهایی</span>
+        <strong style="color: var(--green, #237554); font-size: 1.6rem;">{{ metrics.commission|persian_int }} ریال</strong>
+        <small>مبلغ قابل پرداخت</small>
+    </article>
+</div>
+
+<article class="card">
+    <div class="card-head">
+        <h2>ریز محاسبات روزانه و شیفت‌ها</h2>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>تاریخ</th>
+                    <th>شیفت</th>
+                    <th>لاین اصلی (ساعت / فروش کل / سهم شما / نرخ / مبلغ)</th>
+                    <th>لاین(های) کمکی (ساعت / فروش کل / سهم شما / نرخ / مبلغ)</th>
+                    <th>مجموع سهم کالا</th>
+                    <th>پورسانت شیفت</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in metrics.shift_log_details %}
+                <tr>
+                    <td><b>{{ d.shift_log.date|jalali }}</b></td>
+                    <td>{{ d.shift_log.shift.title }}</td>
+                    <td>
+                        {% if d.main_info %}
+                        <div>
+                            <b>{{ d.main_info.department.name }}</b>:
+                            {{ d.main_info.hours }}h از {{ d.main_info.total_dept_hours }}h
+                            · فروش کل: <strong>{{ d.main_info.total_sold_units }}</strong>
+                            · سهم شما: <strong style="color: var(--green, #237554);">{{ d.main_info.share_units }}</strong>
+                            · نرخ: {{ d.main_info.rate_per_unit|persian_int }}
+                            → <strong>{{ d.main_info.commission|persian_int }} ریال</strong>
+                        </div>
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if d.support_infos %}
+                            {% for s in d.support_infos %}
+                            <div style="margin-bottom: 4px; padding-bottom: 4px; {% if not forloop.last %}border-bottom: 1px dashed #eef1ef;{% endif %}">
+                                <b>{{ s.department.name }}</b>:
+                                {{ s.hours }}h از {{ s.total_dept_hours }}h
+                                · فروش کل: <strong>{{ s.total_sold_units }}</strong>
+                                · سهم شما: <strong style="color: var(--green, #237554);">{{ s.share_units }}</strong>
+                                · نرخ: {{ s.rate_per_unit|persian_int }}
+                                → <strong>{{ s.commission|persian_int }} ریال</strong>
+                            </div>
+                            {% endfor %}
+                        {% elif d.support_info %}
+                            <div>
+                                <b>{{ d.support_info.department.name }}</b>:
+                                {{ d.support_info.hours }}h از {{ d.support_info.total_dept_hours }}h
+                                · فروش کل: <strong>{{ d.support_info.total_sold_units }}</strong>
+                                · سهم شما: <strong style="color: var(--green, #237554);">{{ d.support_info.share_units }}</strong>
+                                · نرخ: {{ d.support_info.rate_per_unit|persian_int }}
+                                → <strong>{{ d.support_info.commission|persian_int }} ریال</strong>
+                            </div>
+                        {% else %}
+                            <span style="color: #888;">—</span>
+                        {% endif %}
+                    </td>
+                    <td><strong style="color: var(--green, #237554);">{{ d.total_units_share }}</strong></td>
+                    <td><strong>{{ d.total_commission|persian_int }} ریال</strong></td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="empty">در این دوره کارکردی ثبت نشده است.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</article>
+{% endblock %}

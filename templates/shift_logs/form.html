@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+{% load persian %}
+{% block title %}{{ title }} | {{ system_settings.panel_name|default:'سامانه عملکرد' }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">⏱️ ثبت کارکرد روزانه</p>
+    <h1>{{ title }}</h1>
+    <p>سلام {{ employee.first_name }} جان! بازه‌های حضورت در لاین‌های کمکی را دقیق ثبت کن.</p>
+  </div>
+  <a class="secondary" href="{% if log %}{% url 'shift_log_detail' log.pk %}{% else %}{% url 'shift_logs' %}{% endif %}">بازگشت</a>
+</div>
+
+<article class="card form-card wide" style="background:#fff;border-radius:18px;box-shadow:0 4px 20px rgba(0,0,0,.04);padding:26px">
+<form method="post" id="shift-log-form">
+  {% csrf_token %}
+  {{ formset.management_form }}
+
+  <section class="shift-section">
+    <label class="section-title">📅 ۱. تاریخ و شیفت کاری</label>
+    <div id="date-pills-wrap" class="date-pills">
+      <button type="button" class="date-pill" data-date="{{ date_pills.today.jalali }}">✨ امروز <small>{{ date_pills.today.display }}</small></button>
+      <button type="button" class="date-pill" data-date="{{ date_pills.yesterday.jalali }}">⏳ دیروز <small>{{ date_pills.yesterday.display }}</small></button>
+      <button type="button" class="date-pill" data-date="{{ date_pills.two_days_ago.jalali }}">📅 پریروز <small>{{ date_pills.two_days_ago.display }}</small></button>
+      <button type="button" id="toggle-custom-date" class="date-pill">✏️ تاریخ دیگر…</button>
+    </div>
+    <div id="custom-date-container" style="display:none;max-width:320px">{{ form.date }}</div>
+    {% for error in form.date.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+    <div class="form-grid compact-grid">
+      <div class="field"><label>شیفت کاری<em>*</em></label>{{ form.shift }}{% for error in form.shift.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
+      <div class="field"><label>لاین اصلی<em>*</em></label>{{ form.main_department }}{% for error in form.main_department.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
+    </div>
+  </section>
+
+  <section class="shift-section">
+    <label class="section-title">🤝 ۲. بازه‌های کمکی</label>
+    <small class="help-text">برای هر جابه‌جایی، لاین مقصد و ساعت دقیق شروع و پایان را جدا ثبت کن.</small>
+    <div style="display:none">{{ form.has_support_line }}</div>
+    <div id="interval-list">
+      {% for interval_form in formset %}
+      <div class="interval-card" data-form-index="{{ forloop.counter0 }}">
+        {{ interval_form.id }}
+        <div class="form-grid interval-grid">
+          <div class="field"><label>لاین مقصد</label>{{ interval_form.department }}</div>
+          <div class="field"><label>ساعت شروع</label>{{ interval_form.start_time }}</div>
+          <div class="field"><label>ساعت پایان</label>{{ interval_form.end_time }}</div>
+          <button type="button" class="remove-interval secondary">حذف</button>
+        </div>
+        <div style="display:none">{{ interval_form.DELETE }}</div>
+        {% for field in interval_form %}{% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}{% endfor %}
+        {% for error in interval_form.non_field_errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+    <button type="button" id="add-interval" class="secondary" style="margin-top:12px">+ افزودن بازه کمکی</button>
+    {% for error in formset.non_form_errors %}<div class="message error">{{ error }}</div>{% endfor %}
+  </section>
+
+  <template id="empty-interval-template">
+    <div class="interval-card" data-form-index="__prefix__">
+      <div class="form-grid interval-grid">
+        <div class="field"><label>لاین مقصد</label>{{ formset.empty_form.department }}</div>
+        <div class="field"><label>ساعت شروع</label>{{ formset.empty_form.start_time }}</div>
+        <div class="field"><label>ساعت پایان</label>{{ formset.empty_form.end_time }}</div>
+        <button type="button" class="remove-interval secondary">حذف</button>
+      </div>
+      <div style="display:none">{{ formset.empty_form.DELETE }}</div>
+    </div>
+  </template>
+
+  <section style="margin-bottom:24px">
+    <label class="section-title">📝 یادداشت برای مدیر <small>(اختیاری)</small></label>
+    {{ form.employee_note }}
+  </section>
+  {% for error in form.non_field_errors %}<div class="message error">{{ error }}</div>{% endfor %}
+
+  <div class="live-summary">
+    <div>
+      <span>خلاصه محاسبه خودکار</span>
+      <strong id="summary-total">کل شیفت: —</strong>
+      <small id="summary-breakdown">لاین اصلی: — · کمکی: ۰ ساعت</small>
+    </div>
+    <button class="primary" type="submit">{{ submit }}</button>
+  </div>
+</form>
+</article>
+
+<style>
+.shift-section{margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--line)}
+.section-title{font-size:14px;font-weight:700;color:var(--ink);display:block;margin-bottom:8px}.section-title small,.help-text{color:var(--muted);font-weight:400;font-size:12px}
+.date-pills{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:15px}.date-pill{padding:9px 14px;border-radius:10px;border:1px solid var(--line);background:#f8faf9;font:inherit;font-size:12px;cursor:pointer}.date-pill small{color:var(--muted)}.date-pill.active{background:var(--green,#237554);color:#fff;border-color:var(--green,#237554)}.date-pill.active small{color:#fff}
+.compact-grid{margin-top:16px;max-width:700px}.interval-card{padding:15px;margin-top:12px;background:#f8faf9;border:1px dashed var(--green,#237554);border-radius:12px}.interval-grid{grid-template-columns:2fr 1fr 1fr auto;align-items:end}.remove-interval{height:42px;color:#b53a3a}.live-summary{background:linear-gradient(120deg,#f0fdf4,#e6f4ea);border:1px solid #bbf7d0;border-radius:14px;padding:18px 22px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}.live-summary span,.live-summary small{display:block;color:var(--muted);font-size:12px}.live-summary strong{display:block;color:var(--green,#237554);font-size:19px}
+@media(max-width:760px){.interval-grid{grid-template-columns:1fr 1fr}.interval-grid .field:first-child{grid-column:span 2}}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+  const dateInput=document.getElementById('id_date'), custom=document.getElementById('custom-date-container');
+  document.querySelectorAll('.date-pill[data-date]').forEach(btn=>btn.addEventListener('click',()=>{dateInput.value=btn.dataset.date;custom.style.display='none';syncDates()}));
+  document.getElementById('toggle-custom-date').addEventListener('click',()=>{custom.style.display=custom.style.display==='none'?'block':'none';if(custom.style.display==='block')dateInput.focus()});
+  function syncDates(){document.querySelectorAll('.date-pill[data-date]').forEach(btn=>btn.classList.toggle('active',btn.dataset.date===dateInput.value))} syncDates();
+
+  const list=document.getElementById('interval-list'), totalForms=document.getElementById('id_support-TOTAL_FORMS');
+  function bindRemove(card){card.querySelector('.remove-interval').addEventListener('click',()=>{const del=card.querySelector('input[name$="-DELETE"]');if(del&&card.querySelector('input[name$="-id"]')?.value){del.checked=true;card.style.display='none'}else card.remove();updateSummary()});card.querySelectorAll('select,input[type="time"]').forEach(x=>x.addEventListener('change',updateSummary))}
+  document.querySelectorAll('.interval-card').forEach(bindRemove);
+  document.getElementById('add-interval').addEventListener('click',()=>{const index=Number(totalForms.value),html=document.getElementById('empty-interval-template').innerHTML.replaceAll('__prefix__',index);list.insertAdjacentHTML('beforeend',html);totalForms.value=index+1;bindRemove(list.lastElementChild);updateSummary()});
+  function minutes(v){if(!v)return null;const [h,m]=v.split(':').map(Number);return h*60+m}
+  function updateSummary(){const shift=document.getElementById('id_shift'), main=document.getElementById('id_main_department');let total=Number('{{ standard_hours|default:"6.0" }}'),support=0;const selected=shift.options[shift.selectedIndex];if(selected&&selected.textContent){const match=selected.textContent.match(/(\d{1,2}):?(\d{2})?\s*تا\s*(\d{1,2}):?(\d{2})?/);if(match){let a=Number(match[1])*60+Number(match[2]||0),b=Number(match[3])*60+Number(match[4]||0);if(b<=a)b+=1440;total=(b-a)/60}}
+    document.querySelectorAll('.interval-card').forEach(card=>{if(card.style.display==='none')return;const times=card.querySelectorAll('input[type="time"]'),a=minutes(times[0]?.value),b=minutes(times[1]?.value);if(a!==null&&b!==null&&b>a)support+=(b-a)/60});
+    const mainHours=Math.max(0,total-support),name=main.options[main.selectedIndex]?.text||'لاین اصلی';document.getElementById('summary-total').textContent=`کل شیفت: ${total.toFixed(1)} ساعت`;document.getElementById('summary-breakdown').textContent=`${name}: ${mainHours.toFixed(1)} ساعت · مجموع کمکی: ${support.toFixed(1)} ساعت`;document.getElementById('id_has_support_line').checked=support>0}
+  document.getElementById('id_shift').addEventListener('change',updateSummary);document.getElementById('id_main_department').addEventListener('change',updateSummary);updateSummary();
+});
+</script>
+{% endblock %}

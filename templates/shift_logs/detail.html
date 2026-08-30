@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% load persian %}
+{% block title %}جزئیات کارکرد {{ log.date|jalali }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div>
+        <p class="eyebrow">کارکرد روزانه شیفت</p>
+        <h1>{{ log.employee.full_name }} — {{ log.date|jalali }}</h1>
+        <p>{{ log.shift.title }} ({{ log.shift.start_time|time:"H:i" }} تا {{ log.shift.end_time|time:"H:i" }})</p>
+    </div>
+    <div>
+        {% if log.employee.user == request.user or user.employee.can_review %}
+        <a class="primary" href="{% url 'shift_log_edit' log.pk %}">ویرایش کارکرد</a>
+        {% endif %}
+        <a class="secondary" href="{% url 'shift_logs' %}">بازگشت به فهرست</a>
+    </div>
+</div>
+
+{% if log.support_intervals.exists %}
+<article class="card" style="margin-bottom:18px">
+    <h2 style="font-size:17px;margin-top:0">بازه‌های کمکی ثبت‌شده</h2>
+    <div class="table-wrap"><table><thead><tr><th>لاین مقصد</th><th>شروع</th><th>پایان</th><th>مدت</th></tr></thead><tbody>
+    {% for interval in log.support_intervals.all %}<tr><td><b>{{ interval.department.name }}</b></td><td>{{ interval.start_time|time:"H:i" }}</td><td>{{ interval.end_time|time:"H:i" }}</td><td>{{ interval.duration_display }}</td></tr>{% endfor %}
+    </tbody></table></div>
+    <p style="margin-bottom:0"><b>مجموع کمکی:</b> {{ log.support_hours }} ساعت &nbsp;·&nbsp; <b>سهم لاین اصلی:</b> {{ log.main_hours }} ساعت</p>
+</article>
+{% endif %}
+
+<div class="stats">
+    <article>
+        <span>مجموع ساعت کاری</span>
+        <strong style="color: var(--green, #237554);">{{ log.total_hours }} ساعت</strong>
+    </article>
+    <article>
+        <span>لاین اصلی</span>
+        <strong>{{ log.main_department.name }} ({{ log.main_hours }} ساعت)</strong>
+    </article>
+    <article>
+        <span>لاین(های) کمکی</span>
+        <strong>
+            {% if log.has_support_line %}
+            {{ log.support_departments_display }} ({{ log.support_hours }} ساعت)
+            {% else %}
+            ندارد
+            {% endif %}
+        </strong>
+    </article>
+    <article>
+        <span>شیفت کاری</span>
+        <strong>{{ log.shift.title }}</strong>
+    </article>
+</div>
+
+<article class="card info-grid">
+    <div><span>کارمند</span><b>{{ log.employee.full_name }} ({{ log.employee.employee_code }})</b></div>
+    <div><span>تاریخ ثبت</span><b>{{ log.date|jalali }}</b></div>
+    <div><span>شیفت</span><b>{{ log.shift.title }}</b></div>
+    <div><span>لاین اصلی</span><b>{{ log.main_department.name }}</b></div>
+    <div><span>ساعت در لاین اصلی</span><b>{{ log.main_hours }} ساعت</b></div>
+    <div><span>حضور در لاین کمکی</span><b>{% if log.has_support_line %}بله{% else %}خیر{% endif %}</b></div>
+    {% if log.has_support_line %}
+    <div><span>لاین(های) کمکی</span><b>{{ log.support_departments_display }}</b></div>
+    <div><span>مجموع ساعت در لاین‌های کمکی</span><b>{{ log.support_hours }} ساعت</b></div>
+    {% endif %}
+    <div><span>مجموع کل ساعات حضور</span><b>{{ log.total_hours }} ساعت</b></div>
+    <div><span>زمان ثبت اولیه</span><b>{{ log.created_at|jalali }}</b></div>
+    {% if log.employee_note %}
+    <div class="span-2" style="grid-column: span 2;">
+        <span>توضیحات کارمند</span>
+        <p style="margin-top: 5px; background: rgba(0,0,0,0.02); padding: 10px; border-radius: 6px;">{{ log.employee_note }}</p>
+    </div>
+    {% endif %}
+</article>
+{% endblock %}
