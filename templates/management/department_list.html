@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% block title %}لاین‌ها (بخش‌ها){% endblock %}
+{% block content %}
+<div class="admin-page-head"><div><span class="admin-kicker">مرکز تنظیمات و عملکرد</span><h1>لاین‌ها (بخش‌ها)</h1><p>خلاصه وضعیت هر لاین و دسترسی یکجا به ضرایب، تارگت‌ها و قوانین تخلف</p></div><a class="primary" href="{% url 'management_department_create' %}">+ تعریف لاین جدید</a></div>
+<form class="admin-toolbar" method="get"><label class="toolbar-search"><span>⌕</span><input name="q" value="{{ search }}" placeholder="جستجو در نام لاین‌ها"></label><select name="status" onchange="this.form.submit()"><option value="">همه وضعیت‌ها</option><option value="active" {% if status == 'active' %}selected{% endif %}>فعال</option><option value="inactive" {% if status == 'inactive' %}selected{% endif %}>غیرفعال</option></select><button class="secondary" type="submit">جستجو</button></form>
+<div class="line-card-grid">
+{% for card in cards %}<article class="line-card {% if not card.department.is_active %}is-inactive{% endif %}">
+  <div class="line-card-head"><div class="entity-icon">▦</div><span class="status {% if card.department.is_active %}approved{% else %}draft{% endif %}">{% if card.department.is_active %}فعال{% else %}غیرفعال{% endif %}</span></div><h2>{{ card.department.name }}</h2>
+  <div class="line-summary-row"><span>ضرایب پورسانت</span><b>{% if card.rates %}{{ card.rates|length }} گرید فعال{% else %}تنظیم نشده{% endif %}</b></div><div class="line-summary-row"><span>تارگت فعال</span><b>{% if card.target %}{{ card.target.bronze_units }} تا {{ card.target.gold_units }} کالا{% else %}ندارد{% endif %}</b></div>
+  <div class="line-progress-block"><div><span>عملکرد ماه جاری</span><b>{% if card.performance_units is not None %}{{ card.performance_units }} کالا{% else %}بدون داده{% endif %}</b></div><div class="progress-track"><i style="width:{% if card.target_result %}{{ card.target_result.progress_percent }}{% else %}0{% endif %}%"></i></div><small>{% if card.target_result %}{{ card.target_result.progress_percent }}٪ مسیر تارگت بعدی · {{ card.target_result.next_target_title }}{% elif card.performance_units is None %}هنوز عملکردی برای این ماه ثبت نشده است.{% else %}تارگت فعالی تعریف نشده است.{% endif %}</small></div>
+  <a class="line-card-action" href="{% url 'management_department_detail' card.department.pk %}">ورود به مرکز کنترل لاین ←</a>
+</article>{% empty %}<article class="card empty span-all">لاینی مطابق فیلتر پیدا نشد.</article>{% endfor %}
+</div>{% endblock %}

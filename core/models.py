@@ -8,6 +8,14 @@ from django.db import models
 class Department(models.Model):
     name = models.CharField("نام بخش", max_length=100, unique=True)
     is_active = models.BooleanField("فعال", default=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True, null=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "لاین / بخش"
+        verbose_name_plural = "لاین‌ها و بخش‌ها"
+
     def __str__(self): return self.name
 
 class CommissionLevel(models.Model):
@@ -138,11 +146,25 @@ class SystemSettings(models.Model):
     def __str__(self): return self.panel_name
 
 class ViolationRule(models.Model):
+    class RecurrenceWindow(models.TextChoices):
+        SAME_MONTH = "SAME_MONTH", "همان ماه"
+        ROLLING_30_DAYS = "ROLLING_30_DAYS", "۳۰ روز گذشته"
+        MANUAL_PERIOD = "MANUAL_PERIOD", "دوره قابل تنظیم"
+
     code = models.CharField("کد", max_length=20, unique=True)
     title = models.CharField("عنوان", max_length=180)
     first_points = models.PositiveIntegerField("مرتبه اول")
     second_points = models.PositiveIntegerField("مرتبه دوم")
     third_points = models.PositiveIntegerField("مرتبه سوم")
+    recurrence_window = models.CharField(
+        "بازه محاسبه تکرار",
+        max_length=20,
+        choices=RecurrenceWindow.choices,
+        default=RecurrenceWindow.SAME_MONTH,
+        help_text="این گزینه زیرساخت مدیریتی است؛ محاسبه خودکار تکرار تا نهایی‌شدن قانون کسب‌وکار فعال نمی‌شود.",
+    )
+    all_departments = models.BooleanField("قابل استفاده برای همه لاین‌ها", default=True)
+    departments = models.ManyToManyField(Department, blank=True, related_name="violation_rules")
     is_active = models.BooleanField("فعال", default=True)
     def __str__(self): return self.title
     def points_for(self, occurrence): return [self.first_points, self.second_points, self.third_points][occurrence - 1]
@@ -153,6 +175,7 @@ class Violation(models.Model):
     violation_date = models.DateField("تاریخ")
     occurrence = models.PositiveSmallIntegerField("مرتبه", validators=[MinValueValidator(1), MaxValueValidator(3)])
     points_snapshot = models.PositiveIntegerField("امتیاز تخلف")
+    rule_snapshot = models.JSONField("نسخه قانون هنگام ثبت", default=dict, blank=True)
     description = models.TextField("شرح")
     recorded_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="recorded_violations")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -167,6 +190,14 @@ class Target(models.Model):
     def __str__(self): return self.title
 
 class DailyShiftLog(models.Model):
+    class ReviewStatus(models.TextChoices):
+        PENDING = "PENDING", "در انتظار تأیید مدیر"
+        APPROVED = "APPROVED", "تأییدشده و واریز نهایی"
+        REJECTED = "REJECTED", "ردشده"
+
+    # Backward-compatible public name used throughout the shift-log workflow.
+    Status = ReviewStatus
+
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="shift_logs", verbose_name="کارمند")
     date = models.DateField("تاریخ کارکرد")
     shift = models.ForeignKey(Shift, on_delete=models.PROTECT, related_name="shift_logs", verbose_name="شیفت")
@@ -201,6 +232,39 @@ class DailyShiftLog(models.Model):
         default=Decimal("6.0")
     )
     employee_note = models.TextField("یادداشت کارمند", blank=True)
+    status = models.CharField(
+        "وضعیت تأیید",
+        max_length=20,
+        choices=ReviewStatus.choices,
+        default=ReviewStatus.PENDING,
+        db_index=True
+    )
+    reviewed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_shift_logs",
+        verbose_name="بررسی‌کننده"
+    )
+    reviewed_at = models.DateTimeField("زمان بررسی", null=True, blank=True)
+    manager_note = models.TextField("یادداشت / بازخورد مدیر", blank=True)
+    is_frozen = models.BooleanField("محاسبات فریز شده", default=False)
+    frozen_main_share_units = models.DecimalField(
+        "سهم فریز شده لاین اصلی (کالا)", max_digits=10, decimal_places=2, default=Decimal("0.0")
+    )
+    frozen_support_share_units = models.DecimalField(
+        "سهم فریز شده لاین‌های کمکی (کالا)", max_digits=10, decimal_places=2, default=Decimal("0.0")
+    )
+    frozen_total_units_share = models.DecimalField(
+        "مجموع سهم فریز شده کالا", max_digits=10, decimal_places=2, default=Decimal("0.0")
+    )
+    frozen_commission_amount = models.PositiveBigIntegerField(
+        "مبلغ پورسانت فریز شده (ریال)", default=0
+    )
+    frozen_snapshot_data = models.JSONField(
+        "جزئیات فریز شده محاسبات شیفت", default=dict, blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -230,7 +294,6 @@ class DailyShiftLog(models.Model):
         super().save(*args, **kwargs)
 
     def recalculate_allocations(self, *, save=True):
-        """Rebuild legacy summary fields exclusively from persisted intervals."""
         intervals = list(self.support_intervals.all())
         support_minutes = sum(item.duration_minutes for item in intervals)
         total_minutes = int((self.shift.standard_hours or Decimal("0")) * 60)
@@ -291,8 +354,7 @@ class SupportLineInterval(models.Model):
             raise ValidationError("بازه کمکی باید داخل ساعت شروع و پایان شیفت باشد.")
         if self.department_id == self.shift_log.main_department_id:
             raise ValidationError({"department": "لاین کمکی نمی‌تواند همان لاین اصلی باشد."})
-        overlaps = self.shift_log.support_intervals.exclude(pk=self.pk)
-        for other in overlaps:
+        for other in self.shift_log.support_intervals.exclude(pk=self.pk):
             other_start = self.minute_offset(other.start_time, shift)
             other_end = self.minute_offset(other.end_time, shift)
             if max(start, other_start) < min(end, other_end):
@@ -350,3 +412,222 @@ class LineCommissionRate(models.Model):
 
     def __str__(self):
         return f"{self.department.name} - گرید {self.commission_level.code}: {self.rate_per_unit}"
+
+class LineTarget(models.Model):
+    department = models.OneToOneField(
+        Department,
+        on_delete=models.CASCADE,
+        related_name="target_settings",
+        verbose_name="لاین / بخش"
+    )
+    bronze_units = models.PositiveIntegerField("تارگت برنزی (تعداد کالا)", default=500)
+    bronze_reward = models.PositiveBigIntegerField("پاداش تارگت برنزی (ریال)", default=5000000)
+    silver_units = models.PositiveIntegerField("تارگت نقره‌ای (تعداد کالا)", default=1000)
+    silver_reward = models.PositiveBigIntegerField("پاداش تارگت نقره‌ای (ریال)", default=12000000)
+    gold_units = models.PositiveIntegerField("تارگت طلایی (تعداد کالا)", default=3000)
+    gold_reward = models.PositiveBigIntegerField("پاداش تارگت طلایی (ریال)", default=30000000)
+    is_active = models.BooleanField("فعال", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["department__name"]
+        verbose_name = "تارگت لاین"
+        verbose_name_plural = "تارگت‌های لاین‌ها"
+
+    def __str__(self):
+        return f"تارگت‌های {self.department.name} (برنزی، نقره‌ای، طلایی)"
+
+    def evaluate_target(self, units_sold):
+        """بررسی سطح تارگت محقق‌شده و محاسبه پاداش بر اساس تعداد کالای فروخته‌شده."""
+        units = Decimal(str(units_sold or 0))
+        achieved_level = 0
+        achieved_title = "در مسیر تارگت برنزی 🥉"
+        reward_amount = 0
+        next_target_units = None
+        next_target_reward = None
+        next_target_title = None
+        progress_percent = 0
+
+        t_bronze_u = Decimal(str(self.bronze_units or 0))
+        t_silver_u = Decimal(str(self.silver_units or 0))
+        t_gold_u = Decimal(str(self.gold_units or 0))
+
+        if t_gold_u > 0 and units >= t_gold_u:
+            achieved_level = 3
+            achieved_title = "تکمیل تمام تارگت‌ها 🏆"
+            reward_amount = self.gold_reward
+            next_target_units = None
+            next_target_reward = None
+            next_target_title = "تکمیل تمام تارگت‌ها 🏆"
+            progress_percent = 100
+        elif t_silver_u > 0 and units >= t_silver_u:
+            achieved_level = 2
+            achieved_title = "تارگت نقره‌ای 🥈"
+            reward_amount = self.silver_reward
+            next_target_units = self.gold_units
+            next_target_reward = self.gold_reward
+            next_target_title = "تارگت طلایی 🥇"
+            if t_gold_u > t_silver_u:
+                progress_percent = min(100, int(((units - t_silver_u) / (t_gold_u - t_silver_u)) * 100))
+            else:
+                progress_percent = 100
+        elif t_bronze_u > 0 and units >= t_bronze_u:
+            achieved_level = 1
+            achieved_title = "تارگت برنزی 🥉"
+            reward_amount = self.bronze_reward
+            next_target_units = self.silver_units
+            next_target_reward = self.silver_reward
+            next_target_title = "تارگت نقره‌ای 🥈"
+            if t_silver_u > t_bronze_u:
+                progress_percent = min(100, int(((units - t_bronze_u) / (t_silver_u - t_bronze_u)) * 100))
+            else:
+                progress_percent = 100
+        else:
+            achieved_level = 0
+            achieved_title = "در مسیر تارگت برنزی 🥉"
+            reward_amount = 0
+            next_target_units = self.bronze_units
+            next_target_reward = self.bronze_reward
+            next_target_title = "تارگت برنزی 🥉"
+            if t_bronze_u > 0:
+                progress_percent = min(100, int((units / t_bronze_u) * 100))
+            else:
+                progress_percent = 0
+
+        return {
+            "has_target": True,
+            "achieved_level": achieved_level,
+            "achieved_title": achieved_title,
+            "reward_amount": reward_amount,
+            "next_target_units": next_target_units,
+            "next_target_reward": next_target_reward,
+            "next_target_title": next_target_title,
+            "progress_percent": progress_percent,
+            "bronze_units": self.bronze_units,
+            "bronze_reward": self.bronze_reward,
+            "silver_units": self.silver_units,
+            "silver_reward": self.silver_reward,
+            "gold_units": self.gold_units,
+            "gold_reward": self.gold_reward,
+            "units_sold": round(float(units), 2),
+        }
+
+class LineGradeTarget(models.Model):
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.CASCADE,
+        related_name="grade_targets",
+        verbose_name="لاین / بخش"
+    )
+    commission_level = models.ForeignKey(
+        CommissionLevel,
+        on_delete=models.CASCADE,
+        related_name="line_targets",
+        verbose_name="سطح / گرید"
+    )
+    target_1_units = models.PositiveIntegerField("تارگت ۱ (تعداد کالا)", default=500)
+    target_1_reward = models.PositiveBigIntegerField("پاداش تارگت ۱ (ریال)", default=5000000)
+    target_2_units = models.PositiveIntegerField("تارگت ۲ (تعداد کالا)", default=1000)
+    target_2_reward = models.PositiveBigIntegerField("پاداش تارگت ۲ (ریال)", default=12000000)
+    target_3_units = models.PositiveIntegerField("تارگت ۳ (تعداد کالا)", default=3000)
+    target_3_reward = models.PositiveBigIntegerField("پاداش تارگت ۳ (ریال)", default=30000000)
+    is_active = models.BooleanField("فعال", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["department__name", "commission_level__code"]
+        verbose_name = "تارگت لاین و گرید"
+        verbose_name_plural = "تارگت‌های لاین‌ها و گریدها"
+        unique_together = [("department", "commission_level")]
+
+    def __str__(self):
+        return f"تارگت‌های {self.department.name} - گرید {self.commission_level.code}"
+
+    def evaluate_target(self, units_sold):
+        units = Decimal(str(units_sold or 0))
+        t1_u = Decimal(str(self.target_1_units or 0))
+        t2_u = Decimal(str(self.target_2_units or 0))
+        t3_u = Decimal(str(self.target_3_units or 0))
+
+        if t3_u > 0 and units >= t3_u:
+            achieved_level = 3
+            achieved_title = "تارگت طلایی 🥇"
+            reward_amount = self.target_3_reward
+            next_target_units = None
+            next_target_reward = None
+            next_target_title = "تکمیل تمام تارگت‌ها 🏆"
+            progress_percent = 100
+        elif t2_u > 0 and units >= t2_u:
+            achieved_level = 2
+            achieved_title = "تارگت نقره‌ای 🥈"
+            reward_amount = self.target_2_reward
+            next_target_units = self.target_3_units
+            next_target_reward = self.target_3_reward
+            next_target_title = "تارگت طلایی 🥇"
+            progress_percent = min(100, int(((units - t2_u) / (t3_u - t2_u)) * 100)) if t3_u > t2_u else 100
+        elif t1_u > 0 and units >= t1_u:
+            achieved_level = 1
+            achieved_title = "تارگت برنزی 🥉"
+            reward_amount = self.target_1_reward
+            next_target_units = self.target_2_units
+            next_target_reward = self.target_2_reward
+            next_target_title = "تارگت نقره‌ای 🥈"
+            progress_percent = min(100, int(((units - t1_u) / (t2_u - t1_u)) * 100)) if t2_u > t1_u else 100
+        else:
+            achieved_level = 0
+            achieved_title = "در مسیر تارگت برنزی 🥉"
+            reward_amount = 0
+            next_target_units = self.target_1_units
+            next_target_reward = self.target_1_reward
+            next_target_title = "تارگت برنزی 🥉"
+            progress_percent = min(100, int((units / t1_u) * 100)) if t1_u > 0 else 0
+
+        return {
+            "has_target": True,
+            "achieved_level": achieved_level,
+            "achieved_title": achieved_title,
+            "reward_amount": reward_amount,
+            "next_target_units": next_target_units,
+            "next_target_reward": next_target_reward,
+            "next_target_title": next_target_title,
+            "progress_percent": progress_percent,
+        }
+
+class DepartmentMonthlyTarget(models.Model):
+    year_month = models.CharField(
+        "ماه و سال شمسی",
+        max_length=7,
+        db_index=True,
+        help_text="فرمت ۱۴۰۵/۰۶",
+        validators=[RegexValidator(r"^\d{4}/\d{2}$", "فرمت تاریخ باید به‌صورت ۱۴۰۵/۰۶ باشد.")]
+    )
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.PROTECT,
+        related_name="monthly_targets",
+        verbose_name="لاین / بخش"
+    )
+    target_units = models.PositiveIntegerField("تارگت تعداد فروش کالا", default=0)
+    target_sales_amount = models.PositiveBigIntegerField("تارگت مبلغ فروش لاین (ریال)", default=0, blank=True)
+    target_commission_points = models.PositiveBigIntegerField("تارگت پورسانت ناخالص لاین (ریال)", default=0, blank=True)
+    reward_amount = models.PositiveBigIntegerField("پاداش دستیابی به تارگت لاین (ریال)", default=0, blank=True)
+    description = models.TextField("توضیحات و اهداف شیفت/لاین برای پرسنل", blank=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="created_department_targets",
+        verbose_name="تعیین‌کننده"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-year_month", "department__name"]
+        verbose_name = "تارگت ماهانه لاین"
+        verbose_name_plural = "تارگت‌های ماهانه لاین‌ها"
+        unique_together = [("year_month", "department")]
+
+    def __str__(self):
+        return f"تارگت ماه {self.year_month} - {self.department.name}: {self.target_units} عدد"

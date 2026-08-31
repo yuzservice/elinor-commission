@@ -1,1 +1,41 @@
-{% extends 'base.html' %}{% block title %}{{ title }}{% endblock %}{% block content %}<div class="page-head"><div><p class="eyebrow">کارکنان</p><h1>{{ title }}</h1></div>{% if employee %}<a class="secondary" href="{% url 'management_employee_detail' employee.pk %}">بازگشت به پرونده</a>{% endif %}</div><article class="card form-card wide"><form method="post" enctype="multipart/form-data">{% csrf_token %}<div class="form-grid">{% for field in form %}<div class="field {% if field.name == 'departments' or field.name == 'level_reason' %}span-2{% endif %}"><label>{{ field.label }}{% if field.field.required %}<em>*</em>{% endif %}</label>{{ field }}{% if field.help_text %}<small class="help">{{ field.help_text|safe }}</small>{% endif %}{% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>{% endfor %}</div>{% for error in form.non_field_errors %}<div class="message error">{{ error }}</div>{% endfor %}<button class="primary">{{ submit }}</button></form></article>{% endblock %}
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="admin-page-head">
+    <div>
+        <span class="admin-kicker">مدیریت منابع انسانی</span>
+        <h1>{{ title }}</h1>
+        <p>مشخصات فردی، نام کاربری ورود، لاین اصلی، شیفت کاری و گرید پرسنل</p>
+    </div>
+    {% if employee %}
+    <a class="secondary" href="{% url 'management_employee_detail' employee.pk %}">بازگشت به پرونده</a>
+    {% else %}
+    <a class="secondary" href="{% url 'management_employees' %}">بازگشت به فهرست پرسنل</a>
+    {% endif %}
+</div>
+
+<article class="card form-card wide admin-form-card" style="max-width: 820px;">
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="form-grid">
+            {% for field in form %}
+            <div class="field {% if field.name == 'departments' or field.name == 'level_reason' %}span-2{% endif %}">
+                <label>{{ field.label }}{% if field.field.required %}<em>*</em>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<small class="help">{{ field.help_text|safe }}</small>{% endif %}
+                {% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+
+        {% for error in form.non_field_errors %}
+        <div class="message error">{{ error }}</div>
+        {% endfor %}
+
+        <div class="form-actions" style="margin-top: 24px;">
+            <button class="primary">{{ submit }}</button>
+            <a class="secondary" href="{% if employee %}{% url 'management_employee_detail' employee.pk %}{% else %}{% url 'management_employees' %}{% endif %}">انصراف</a>
+        </div>
+    </form>
+</article>
+{% endblock %}

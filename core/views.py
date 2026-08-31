@@ -7,7 +7,8 @@ from django.contrib.auth import update_session_auth_hash
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Count, Q, Sum
+from django.db.models.functions import Coalesce
 from django.views.decorators.http import require_POST
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -19,6 +20,7 @@ from .forms import (
     BrandingForm,
     DailyShiftLogForm,
     SupportLineIntervalFormSet,
+    DepartmentForm,
     EmployeeCreateForm,
     EmployeeEditForm,
     JalaliDateField,
@@ -26,7 +28,9 @@ from .forms import (
     ManagerPasswordResetForm,
     ProfilePhotoForm,
     ShiftForm,
+    ShiftLogReviewForm,
     ViolationForm,
+    ViolationRuleForm,
 )
 from .models import (
     AuditLog,
@@ -36,12 +40,21 @@ from .models import (
     Employee,
     LineCommissionRate,
     LineShiftPerformance,
+    LineTarget,
     Shift,
     SupportLineInterval,
     SystemSettings,
     Violation,
+    ViolationRule,
 )
-from .services import audit, change_employee_level, employee_metrics
+from .services import (
+    approve_shift_log,
+    audit,
+    calculate_single_shift_log,
+    change_employee_level,
+    employee_metrics,
+    reject_shift_log,
+)
 
 def health(request):
     return JsonResponse({"status": "ok"})
@@ -70,7 +83,7 @@ def employee_dashboard(request):
     emp = request.user.employee
     start, end = month_range()
     metrics = employee_metrics(emp, start, end)
-    recent_shift_logs = emp.shift_logs.select_related("shift", "main_department").prefetch_related("support_departments")[:5]
+    recent_shift_logs = emp.shift_logs.select_related("shift", "main_department").prefetch_related("support_departments")[:6]
     return render(
         request,
         "core/employee_dashboard.html",
@@ -86,21 +99,27 @@ def employee_dashboard(request):
 @reviewer_required
 def manager_dashboard(request):
     start, end = month_range()
-    employees = supervised_employees(request.user.employee).select_related("commission_level")
+    employees = supervised_employees(request.user.employee).select_related("commission_level", "primary_department")
     rows = [{"employee": e, **employee_metrics(e, start, end)} for e in employees]
+
+    pending_shift_logs = DailyShiftLog.objects.filter(status=DailyShiftLog.Status.PENDING).select_related("employee", "shift", "main_department")
     today_shift_logs = DailyShiftLog.objects.filter(date=timezone.localdate()).select_related("employee", "shift", "main_department")
     today_performances = LineShiftPerformance.objects.filter(date=timezone.localdate()).select_related("shift", "department")
+
     return render(
         request,
         "core/manager_dashboard.html",
         {
             "rows": rows,
+            "pending_shift_logs": pending_shift_logs[:6],
+            "pending_shift_logs_count": pending_shift_logs.count(),
             "today_shift_logs": today_shift_logs[:6],
             "today_shift_logs_count": today_shift_logs.count(),
             "today_performances": today_performances[:6],
             "today_performances_count": today_performances.count(),
-            "total_score": sum(r["score"] for r in rows),
-            "total_commission": sum(r["commission"] for r in rows),
+            "total_score": sum(r.get("score", 0) for r in rows),
+            "total_commission": sum(r.get("commission", 0) for r in rows),
+            "total_wallet_balance": sum(r.get("wallet_balance", 0) for r in rows),
         },
     )
 
@@ -120,6 +139,7 @@ def shift_log_snapshot(obj):
         "support_departments": supp_names,
         "support_hours": str(obj.support_hours),
         "total_hours": str(obj.total_hours),
+        "status": obj.status,
         "support_intervals": [
             {
                 "id": item.pk,
@@ -136,7 +156,7 @@ def shift_log_snapshot(obj):
 def save_support_intervals(*, request, log, formset, previous=None):
     previous = previous or {}
     old_by_id = {item["id"]: item for item in previous.get("support_intervals", [])}
-    instances = formset.save()
+    formset.save()
     log.recalculate_allocations()
     current = shift_log_snapshot(log)
     new_by_id = {item["id"]: item for item in current["support_intervals"]}
@@ -148,7 +168,6 @@ def save_support_intervals(*, request, log, formset, previous=None):
         action = "support_interval.created" if old is None else "support_interval.updated"
         if old != new:
             audit(actor=request.user, action=action, instance=log, old_values=old or {}, new_values=new)
-    return instances
 
 
 def support_formset_data(request):
@@ -167,13 +186,21 @@ def shift_log_create(request):
     employee = getattr(request.user, "employee", None)
     if not employee:
         raise PermissionDenied
+    # Managers review shift logs, they don't submit daily shift logs for themselves
+    if employee.can_review:
+        messages.info(request, "به‌عنوان مدیر می‌توانید کارکردهای پرسنل را در صفحه بررسی و تأیید کارکردها مشاهده و تأیید نمایید.")
+        return redirect("management_shift_log_reviews")
+
     form = DailyShiftLogForm(request.POST or None, employee=employee)
-    formset = SupportLineIntervalFormSet(support_formset_data(request), prefix="support", instance=DailyShiftLog())
+    formset = SupportLineIntervalFormSet(
+        support_formset_data(request), prefix="support", instance=DailyShiftLog()
+    )
     if request.method == "POST" and form.is_valid():
         try:
             with transaction.atomic():
                 log = form.save(commit=False)
                 log.employee = employee
+                log.status = DailyShiftLog.Status.PENDING
                 log.main_hours = log.shift.standard_hours
                 log.support_hours = Decimal("0")
                 log.total_hours = log.shift.standard_hours
@@ -190,18 +217,18 @@ def shift_log_create(request):
                     new_values=shift_log_snapshot(log),
                 )
         except IntegrityError:
-            form.add_error(None, "برای این تاریخ و شیفت قبلاً کارکرد ثبت کرده‌اید. می‌توانید از بخش کارکردهای من ویرایشش کنید.")
+            form.add_error(None, "برای این تاریخ و شیفت قبلاً کارکرد ثبت کرده‌ای. می‌تونی از بخش کارکردهای من ویرایشش کنی.")
         except ValidationError as exc:
             form.add_error(None, exc)
         else:
-            messages.success(request, "کارکرد شیفتت با موفقیت ثبت شد! خسته نباشی 👏")
+            messages.success(request, "کارکرد شیفتت ثبت شد و برای تأیید و واریز به مدیر ارسال گردید! 👏")
             return redirect("shift_log_detail", pk=log.pk)
 
     today = timezone.localdate()
     yesterday = today - timedelta(days=1)
     two_days_ago = today - timedelta(days=2)
     persian_weekdays = {0: "دوشنبه", 1: "سه‌شنبه", 2: "چهارشنبه", 3: "پنج‌شنبه", 4: "جمعه", 5: "شنبه", 6: "یکشنبه"}
-    
+
     def format_date_pill(d):
         j = jdatetime.date.fromgregorian(date=d)
         weekday = persian_weekdays[d.weekday()]
@@ -242,6 +269,8 @@ def shift_log_list(request):
     date_val = request.GET.get("date", "")
     shift_val = request.GET.get("shift", "")
     dept_val = request.GET.get("department", "")
+    status_val = request.GET.get("status", "")
+
     if date_val:
         try:
             qs = qs.filter(date=JalaliDateField().clean(date_val))
@@ -251,6 +280,8 @@ def shift_log_list(request):
         qs = qs.filter(shift_id=shift_val)
     if dept_val:
         qs = qs.filter(Q(main_department_id=dept_val) | Q(support_departments__id=dept_val)).distinct()
+    if status_val:
+        qs = qs.filter(status=status_val)
 
     return render(
         request,
@@ -260,6 +291,7 @@ def shift_log_list(request):
             "shifts": Shift.objects.filter(is_active=True),
             "departments": Department.objects.filter(is_active=True),
             "employee": employee,
+            "statuses": DailyShiftLog.Status.choices,
         },
     )
 
@@ -268,28 +300,38 @@ def shift_log_detail(request, pk):
     employee = getattr(request.user, "employee", None)
     if not employee:
         raise PermissionDenied
-    qs = DailyShiftLog.objects.select_related("employee", "shift", "main_department").prefetch_related("support_departments", "support_intervals__department")
+    qs = DailyShiftLog.objects.select_related("employee", "shift", "main_department", "reviewed_by").prefetch_related("support_departments", "support_intervals__department")
     if not employee.can_review:
         qs = qs.filter(employee=employee)
     log = get_object_or_404(qs, pk=pk)
-    return render(request, "shift_logs/detail.html", {"log": log, "employee": employee})
+    calc = calculate_single_shift_log(log)
+    return render(request, "shift_logs/detail.html", {"log": log, "calc": calc, "employee": employee})
 
 @login_required
 def shift_log_edit(request, pk):
     employee = getattr(request.user, "employee", None)
     if not employee:
         raise PermissionDenied
-    qs = DailyShiftLog.objects.select_related("employee", "shift", "main_department").prefetch_related("support_intervals__department")
-    if not employee.can_review:
-        qs = qs.filter(employee=employee)
-    log = get_object_or_404(qs, pk=pk)
+    log = get_object_or_404(
+        DailyShiftLog.objects.prefetch_related("support_intervals__department"), pk=pk, employee=employee
+    )
+    if log.status == DailyShiftLog.Status.APPROVED and not employee.can_review:
+        messages.error(request, "این کارکرد توسط مدیر تأیید و فریز شده و امکان ویرایش آن وجود ندارد.")
+        return redirect("shift_log_detail", pk=log.pk)
+
     old = shift_log_snapshot(log)
     form = DailyShiftLogForm(request.POST or None, instance=log, employee=employee)
-    formset = SupportLineIntervalFormSet(support_formset_data(request), prefix="support", instance=log)
+    formset = SupportLineIntervalFormSet(
+        support_formset_data(request), prefix="support", instance=log
+    )
     if request.method == "POST" and form.is_valid() and formset.is_valid():
         try:
             with transaction.atomic():
                 obj = form.save(commit=False)
+                # If edited by employee, it goes back to PENDING for manager review
+                if not employee.can_review:
+                    obj.status = DailyShiftLog.Status.PENDING
+                    obj.is_frozen = False
                 obj.main_hours = obj.shift.standard_hours
                 obj.support_hours = Decimal("0")
                 obj.total_hours = obj.shift.standard_hours
@@ -313,7 +355,7 @@ def shift_log_edit(request, pk):
     yesterday = today - timedelta(days=1)
     two_days_ago = today - timedelta(days=2)
     persian_weekdays = {0: "دوشنبه", 1: "سه‌شنبه", 2: "چهارشنبه", 3: "پنج‌شنبه", 4: "جمعه", 5: "شنبه", 6: "یکشنبه"}
-    
+
     def format_date_pill(d):
         j = jdatetime.date.fromgregorian(date=d)
         weekday = persian_weekdays[d.weekday()]
@@ -343,15 +385,27 @@ def shift_log_edit(request, pk):
         },
     )
 
+# ==========================================
+# Manager Shift Log Reviews & Approvals (بررسی و تأیید کارکرد پرسنل)
+# ==========================================
+
 @login_required
 @manager_required
-def management_shift_logs(request):
-    qs = DailyShiftLog.objects.select_related("employee", "shift", "main_department").prefetch_related("support_departments", "support_intervals__department")
-    q = request.GET.get("q", "").strip()
+def management_shift_log_reviews(request):
+    """صف مشاهده، بررسی و تأیید کارکردهای ثبت‌شده پرسنل توسط مدیر."""
+    status_filter = request.GET.get("status", "PENDING")
     date_val = request.GET.get("date", "")
     shift_val = request.GET.get("shift", "")
     dept_val = request.GET.get("department", "")
     emp_val = request.GET.get("employee", "")
+    q = request.GET.get("q", "").strip()
+
+    qs = DailyShiftLog.objects.select_related(
+        "employee", "shift", "main_department", "reviewed_by"
+    ).prefetch_related("support_departments", "support_intervals__department")
+
+    if status_filter in {"PENDING", "APPROVED", "REJECTED"}:
+        qs = qs.filter(status=status_filter)
 
     if q:
         qs = qs.filter(
@@ -372,18 +426,88 @@ def management_shift_logs(request):
     if emp_val:
         qs = qs.filter(employee_id=emp_val)
 
-    page = Paginator(qs, 25).get_page(request.GET.get("page"))
+    # Calculate pending count for badge
+    pending_count = DailyShiftLog.objects.filter(status=DailyShiftLog.Status.PENDING).count()
+    approved_count = DailyShiftLog.objects.filter(status=DailyShiftLog.Status.APPROVED).count()
+    rejected_count = DailyShiftLog.objects.filter(status=DailyShiftLog.Status.REJECTED).count()
+
+    paginator = Paginator(qs, 25)
+    page = paginator.get_page(request.GET.get("page"))
+
+    # Attach calculated metrics for each shift log in page
+    log_rows = []
+    for log in page:
+        calc = calculate_single_shift_log(log)
+        log_rows.append({
+            "log": log,
+            "calc": calc,
+        })
+
     return render(
         request,
-        "management/shift_log_list.html",
+        "management/shift_log_review_list.html",
         {
             "page": page,
+            "log_rows": log_rows,
+            "status_filter": status_filter,
+            "pending_count": pending_count,
+            "approved_count": approved_count,
+            "rejected_count": rejected_count,
             "shifts": Shift.objects.filter(is_active=True),
             "departments": Department.objects.filter(is_active=True),
             "employees": Employee.objects.filter(is_active=True),
             "filters": request.GET,
         },
     )
+
+@login_required
+@manager_required
+def management_shift_log_review_detail(request, pk):
+    """مشاهده ریز جزئیات کارکرد و انجام تأیید یا رد با یادداشت مدیر."""
+    log = get_object_or_404(
+        DailyShiftLog.objects.select_related("employee", "shift", "main_department", "reviewed_by").prefetch_related("support_departments", "support_intervals__department"),
+        pk=pk
+    )
+    calc = calculate_single_shift_log(log, force_dynamic=(log.status != DailyShiftLog.Status.APPROVED))
+
+    form = ShiftLogReviewForm(request.POST or None, initial={"action": "APPROVED" if log.status != DailyShiftLog.Status.REJECTED else "REJECTED", "manager_note": log.manager_note})
+    if request.method == "POST" and form.is_valid():
+        action = form.cleaned_data["action"]
+        note = form.cleaned_data.get("manager_note", "")
+        if action == "APPROVED":
+            approve_shift_log(log, request.user, note)
+            messages.success(request, f"کارکرد روز {log.date} کارمند {log.employee.full_name} با موفقیت تأیید شد و پورسانت به مبلغ {log.frozen_commission_amount:,} ریال قطعی و واریز گردید.")
+        else:
+            reject_shift_log(log, request.user, note)
+            messages.warning(request, f"کارکرد روز {log.date} کارمند {log.employee.full_name} رد شد.")
+        return redirect("management_shift_log_reviews")
+
+    return render(
+        request,
+        "management/shift_log_review_detail.html",
+        {
+            "log": log,
+            "calc": calc,
+            "form": form,
+        },
+    )
+
+@login_required
+@manager_required
+@require_POST
+def management_shift_log_quick_approve(request, pk):
+    """تأیید سریع تک‌کلیکه کارکرد پرسنل از لیست."""
+    log = get_object_or_404(DailyShiftLog, pk=pk)
+    approve_shift_log(log, request.user, "تأیید سریع توسط مدیر")
+    messages.success(request, f"کارکرد {log.employee.full_name} در تاریخ {log.date} تأیید و واریز شد.")
+    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("management_shift_log_reviews")
+    return redirect(next_url)
+
+@login_required
+@manager_required
+def management_shift_logs(request):
+    """هدایت گزارش کلی به صف بررسی کارکردها."""
+    return redirect("management_shift_log_reviews")
 
 # ==========================================
 # Line Shift Performance (عملکرد فروش لاین‌ها)
@@ -568,6 +692,9 @@ def management_line_performance_batch(request):
 @login_required
 @manager_required
 def management_line_rates(request):
+    if request.method == "GET":
+        messages.info(request, "ضرایب و تارگت‌ها اکنون از مرکز کنترل هر لاین مدیریت می‌شوند.")
+        return redirect("management_departments")
     departments = Department.objects.filter(is_active=True).order_by("name")
     levels = CommissionLevel.objects.all().order_by("code")
 
@@ -577,30 +704,52 @@ def management_line_rates(request):
     }
 
     if request.method == "POST":
-        with transaction.atomic():
-            for dept in departments:
-                for lvl in levels:
-                    field_name = f"rate_{dept.pk}_{lvl.pk}"
-                    val = request.POST.get(field_name, "").strip()
-                    if val != "":
-                        try:
-                            rate_val = max(0, int(val))
-                        except ValueError:
-                            rate_val = 1000
-                        LineCommissionRate.objects.update_or_create(
-                            department=dept,
-                            commission_level=lvl,
-                            defaults={"rate_per_unit": rate_val, "is_active": True},
-                        )
-            audit(
-                actor=request.user,
-                action="line_rates.updated",
-                instance=departments.first() if departments.exists() else SystemSettings.load(),
-                description="به‌روزرسانی ماتریس ضرایب لاین و گرید",
-            )
-        messages.success(request, "ماتریس ضرایب لاین‌ها و گریدها با موفقیت ذخیره شد.")
-        return redirect("management_line_rates")
+        try:
+            with transaction.atomic():
+                for dept in departments:
+                    for lvl in levels:
+                        field_name = f"rate_{dept.pk}_{lvl.pk}"
+                        val = request.POST.get(field_name)
+                        if val is not None and val.strip() != "":
+                            rate_val = int(val)
+                            if rate_val < 0:
+                                raise ValueError("ضرایب نمی‌توانند منفی باشند.")
+                            LineCommissionRate.objects.update_or_create(
+                                department=dept,
+                                commission_level=lvl,
+                                defaults={"rate_per_unit": rate_val, "is_active": True},
+                            )
 
+                    target, _ = LineTarget.objects.get_or_create(department=dept)
+                    values = {}
+                    for field in (
+                        "bronze_units", "bronze_reward", "silver_units",
+                        "silver_reward", "gold_units", "gold_reward",
+                    ):
+                        raw = request.POST.get(f"target_{dept.pk}_{field}")
+                        values[field] = getattr(target, field) if raw is None or raw.strip() == "" else int(raw)
+                        if values[field] < 0:
+                            raise ValueError("اعداد تارگت و پاداش نمی‌توانند منفی باشند.")
+                    if not (values["bronze_units"] < values["silver_units"] < values["gold_units"]):
+                        raise ValueError(f"ترتیب تارگت‌های لاین «{dept.name}» باید برنزی < نقره‌ای < طلایی باشد.")
+                    for field, value in values.items():
+                        setattr(target, field, value)
+                    target.is_active = True
+                    target.save()
+
+                audit(
+                    actor=request.user,
+                    action="line_rates_and_targets.updated",
+                    instance=departments.first() if departments.exists() else SystemSettings.load(),
+                    description="به‌روزرسانی یکپارچه ضرایب و تارگت‌های لاین‌ها",
+                )
+        except (TypeError, ValueError) as exc:
+            messages.error(request, str(exc) or "مقادیر واردشده معتبر نیستند.")
+        else:
+            messages.success(request, "تمام ضرایب و تارگت‌های لاین‌ها با موفقیت ذخیره شد.")
+            return redirect("management_line_rates")
+
+    targets = {target.department_id: target for target in LineTarget.objects.filter(department__in=departments)}
     matrix = []
     for dept in departments:
         row_rates = []
@@ -613,6 +762,7 @@ def management_line_rates(request):
         matrix.append({
             "department": dept,
             "rates": row_rates,
+            "target": targets.get(dept.pk) or LineTarget(department=dept),
         })
 
     return render(
@@ -669,20 +819,22 @@ def management_commission_report(request):
             pass
 
     employees = supervised_employees(request.user.employee).select_related("commission_level", "primary_department")
-    
+
     rows = []
     total_sales_units = Decimal("0.0")
     total_gross_payout = 0
     total_deductions = 0
     total_net_payout = 0
+    total_wallet_payout = 0
 
     for emp in employees:
         m = employee_metrics(emp, start, end)
         rows.append({"employee": emp, "metrics": m})
-        total_sales_units += Decimal(str(m["total_sales_units_share"]))
-        total_gross_payout += m["gross"]
-        total_deductions += m["deduction"]
-        total_net_payout += m["commission"]
+        total_sales_units += Decimal(str(m.get("total_sales_units_share", 0)))
+        total_gross_payout += m.get("gross", 0)
+        total_deductions += m.get("deduction", 0)
+        total_net_payout += m.get("commission", 0)
+        total_wallet_payout += m.get("wallet_balance", 0)
 
     return render(
         request,
@@ -695,102 +847,257 @@ def management_commission_report(request):
             "total_gross_payout": total_gross_payout,
             "total_deductions": total_deductions,
             "total_net_payout": total_net_payout,
+            "total_wallet_payout": total_wallet_payout,
             "filters": request.GET,
         },
     )
 
 # ==========================================
-# Shifts Management
+# Violations & Disciplines
 # ==========================================
 
-def shift_snapshot(obj):
-    return {
-        "title": obj.title,
-        "code": obj.code,
-        "start_time": str(obj.start_time),
-        "end_time": str(obj.end_time),
-        "standard_hours": str(obj.standard_hours),
-        "is_active": obj.is_active,
-    }
+@login_required
+def violation_list(request):
+    employee = getattr(request.user, "employee", None)
+    if not employee:
+        raise PermissionDenied
+    qs = Violation.objects.select_related("employee", "rule", "recorded_by")
+    if not employee.can_review:
+        qs = qs.filter(employee=employee)
+    return render(request, "core/violation_list.html", {"violations": qs[:100], "employee": employee})
+
+@login_required
+@reviewer_required
+def violation_create(request):
+    form = ViolationForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            obj = form.save(commit=False)
+            obj.recorded_by = request.user
+            obj.points_snapshot = obj.rule.points_for(obj.occurrence)
+            obj.rule_snapshot = {
+                "rule_id": obj.rule_id,
+                "code": obj.rule.code,
+                "title": obj.rule.title,
+                "occurrence": obj.occurrence,
+                "points": obj.points_snapshot,
+                "first_points": obj.rule.first_points,
+                "second_points": obj.rule.second_points,
+                "third_points": obj.rule.third_points,
+                "recurrence_window": obj.rule.recurrence_window,
+            }
+            obj.save()
+            audit(
+                actor=request.user,
+                action="violation.created",
+                instance=obj,
+                new_values={"employee": obj.employee.full_name, "rule": obj.rule.title, "points": obj.points_snapshot},
+            )
+        messages.success(request, "تخلف ثبت شد.")
+        return redirect("violations")
+    return render(request, "core/violation_form.html", {"form": form})
+
+
+@login_required
+@manager_required
+def management_violation_rules(request):
+    rules = ViolationRule.objects.prefetch_related("departments").order_by("title")
+    return render(request, "management/violation_rule_list.html", {"rules": rules})
+
+
+@login_required
+@manager_required
+def management_violation_rule_create(request):
+    form = ViolationRuleForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            rule = form.save()
+            audit(actor=request.user, action="violation_rule.created", instance=rule,
+                  new_values={"code": rule.code, "title": rule.title, "is_active": rule.is_active})
+        messages.success(request, f"قانون تخلف «{rule.title}» ایجاد شد.")
+        return redirect("management_violation_rules")
+    return render(request, "management/violation_rule_form.html", {"form": form, "title": "تعریف قانون تخلف"})
+
+
+@login_required
+@manager_required
+def management_violation_rule_edit(request, pk):
+    rule = get_object_or_404(ViolationRule, pk=pk)
+    form = ViolationRuleForm(request.POST or None, instance=rule)
+    if request.method == "POST" and form.is_valid():
+        old_values = {"code": rule.code, "title": rule.title, "is_active": rule.is_active}
+        with transaction.atomic():
+            rule = form.save()
+            audit(actor=request.user, action="violation_rule.updated", instance=rule,
+                  old_values=old_values,
+                  new_values={"code": rule.code, "title": rule.title, "is_active": rule.is_active})
+        messages.success(request, f"قانون تخلف «{rule.title}» به‌روزرسانی شد؛ سوابق قبلی بدون تغییر ماندند.")
+        return redirect("management_violation_rules")
+    return render(request, "management/violation_rule_form.html", {"form": form, "rule": rule, "title": "ویرایش قانون تخلف"})
+
+# ==========================================
+# Shifts Management
+# ==========================================
 
 @login_required
 @manager_required
 def management_shifts(request):
-    qs = Shift.objects.all()
-    q = request.GET.get("q", "").strip()
-    active = request.GET.get("active", "")
-    if q:
-        qs = qs.filter(Q(title__icontains=q) | Q(code__icontains=q))
-    if active in {"1", "0"}:
-        qs = qs.filter(is_active=active == "1")
-    return render(request, "management/shift_list.html", {"shifts": qs})
+    shifts = Shift.objects.all().order_by("sort_order", "start_time")
+    return render(request, "management/shift_list.html", {"shifts": shifts})
 
 @login_required
 @manager_required
 def management_shift_create(request):
     form = ShiftForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        obj = form.save()
-        audit(actor=request.user, action="shift.created", instance=obj, new_values=shift_snapshot(obj))
-        messages.success(request, "شیفت با موفقیت ایجاد شد.")
+        with transaction.atomic():
+            shift = form.save()
+            audit(actor=request.user, action="shift.created", instance=shift, new_values={"title": shift.title, "code": shift.code})
+        messages.success(request, f"شیفت «{shift.title}» با موفقیت تعریف شد.")
         return redirect("management_shifts")
-    return render(request, "management/shift_form.html", {"form": form, "title": "تعریف شیفت جدید", "submit": "ایجاد شیفت"})
+    return render(request, "management/shift_form.html", {"form": form, "title": "تعریف شیفت کاری جدید", "submit": "تعریف شیفت"})
 
 @login_required
 @manager_required
 def management_shift_edit(request, pk):
-    obj = get_object_or_404(Shift, pk=pk)
-    old = shift_snapshot(obj)
-    form = ShiftForm(request.POST or None, instance=obj)
+    shift = get_object_or_404(Shift, pk=pk)
+    form = ShiftForm(request.POST or None, instance=shift)
     if request.method == "POST" and form.is_valid():
-        obj = form.save()
-        new = shift_snapshot(obj)
-        audit(actor=request.user, action="shift.updated", instance=obj, old_values=old, new_values=new)
-        if old["is_active"] != new["is_active"]:
-            audit(
-                actor=request.user,
-                action="shift.activated" if new["is_active"] else "shift.deactivated",
-                instance=obj,
-                old_values={"is_active": old["is_active"]},
-                new_values={"is_active": new["is_active"]},
-            )
-        messages.success(request, "شیفت به‌روزرسانی شد.")
+        with transaction.atomic():
+            shift = form.save()
+            audit(actor=request.user, action="shift.updated", instance=shift, new_values={"title": shift.title, "code": shift.code})
+        messages.success(request, f"شیفت «{shift.title}» با موفقیت ویرایش شد.")
         return redirect("management_shifts")
-    return render(request, "management/shift_form.html", {"form": form, "title": "ویرایش شیفت", "shift": obj, "submit": "ذخیره تغییرات"})
+    return render(request, "management/shift_form.html", {"form": form, "shift": shift, "title": "ویرایش شیفت کاری", "submit": "ذخیره تغییرات"})
 
 # ==========================================
-# Violations
+# Departments Management (غیرقابل حذف)
 # ==========================================
 
 @login_required
-@reviewer_required
-def violation_create(request):
-    form = ViolationForm(request.POST or None)
-    form.fields["employee"].queryset = supervised_employees(request.user.employee)
+@manager_required
+def management_departments(request):
+    start, end = month_range()
+    search = request.GET.get("q", "").strip()
+    status = request.GET.get("status", "")
+    departments = Department.objects.prefetch_related("commission_rates__commission_level").select_related("target_settings")
+    if search:
+        departments = departments.filter(name__icontains=search)
+    if status == "active":
+        departments = departments.filter(is_active=True)
+    elif status == "inactive":
+        departments = departments.filter(is_active=False)
+    performance = dict(
+        LineShiftPerformance.objects.filter(date__range=(start, end))
+        .values_list("department_id").annotate(total=Coalesce(Sum("sold_units"), 0))
+    )
+    cards = []
+    for department in departments.order_by("name"):
+        target = getattr(department, "target_settings", None)
+        units = performance.get(department.pk)
+        target_result = target.evaluate_target(units or 0) if target and target.is_active else None
+        cards.append({
+            "department": department,
+            "rates": [rate for rate in department.commission_rates.all() if rate.is_active],
+            "target": target if target and target.is_active else None,
+            "performance_units": units,
+            "target_result": target_result,
+        })
+    return render(request, "management/department_list.html", {
+        "cards": cards, "search": search, "status": status, "start": start, "end": end,
+    })
+
+
+@login_required
+@manager_required
+def management_department_detail(request, pk):
+    department = get_object_or_404(Department, pk=pk)
+    levels = CommissionLevel.objects.order_by("code")
+    target, _ = LineTarget.objects.get_or_create(department=department)
+
+    if request.method == "POST":
+        section = request.POST.get("section")
+        try:
+            with transaction.atomic():
+                if section == "rates":
+                    for level in levels:
+                        raw = request.POST.get(f"rate_{level.pk}", "").strip()
+                        if raw:
+                            value = int(raw)
+                            if value < 0:
+                                raise ValueError("ضریب پورسانت نمی‌تواند منفی باشد.")
+                            LineCommissionRate.objects.update_or_create(
+                                department=department, commission_level=level,
+                                defaults={"rate_per_unit": value, "is_active": True},
+                            )
+                    action = "department.rates_updated"
+                elif section == "target":
+                    values = {}
+                    for field in ("bronze_units", "bronze_reward", "silver_units", "silver_reward", "gold_units", "gold_reward"):
+                        values[field] = int(request.POST.get(field, getattr(target, field)))
+                        if values[field] < 0:
+                            raise ValueError("مقادیر تارگت و پاداش نمی‌توانند منفی باشند.")
+                    if not values["bronze_units"] < values["silver_units"] < values["gold_units"]:
+                        raise ValueError("ترتیب تارگت‌ها باید برنزی < نقره‌ای < طلایی باشد.")
+                    for field, value in values.items():
+                        setattr(target, field, value)
+                    target.is_active = request.POST.get("is_active") == "on"
+                    target.save()
+                    action = "department.target_updated"
+                else:
+                    raise ValueError("بخش تنظیمات مشخص نیست.")
+                audit(actor=request.user, action=action, instance=department,
+                      description="به‌روزرسانی از مرکز کنترل لاین")
+        except (TypeError, ValueError) as exc:
+            messages.error(request, str(exc) or "مقادیر واردشده معتبر نیستند.")
+        else:
+            messages.success(request, "تنظیمات لاین ذخیره شد.")
+            return redirect("management_department_detail", pk=department.pk)
+
+    start, end = month_range()
+    units = LineShiftPerformance.objects.filter(department=department, date__range=(start, end)).aggregate(
+        total=Coalesce(Sum("sold_units"), 0)
+    )["total"]
+    rates_by_level = {rate.commission_level_id: rate for rate in department.commission_rates.all()}
+    rate_rows = [{"level": level, "rate": rates_by_level.get(level.pk)} for level in levels]
+    rules = ViolationRule.objects.filter(Q(all_departments=True) | Q(departments=department)).distinct().order_by("title")
+    history = AuditLog.objects.filter(entity_type="Department", entity_id=str(department.pk))[:20]
+    recent_performances = department.shift_performances.select_related("shift")[:10]
+    return render(request, "management/department_detail.html", {
+        "department": department, "rate_rows": rate_rows, "target": target,
+        "performance_units": units, "target_result": target.evaluate_target(units) if target.is_active else None,
+        "rules": rules, "history": history, "recent_performances": recent_performances,
+        "start": start, "end": end,
+    })
+
+@login_required
+@manager_required
+def management_department_create(request):
+    form = DepartmentForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        obj = form.save(commit=False)
-        obj.recorded_by = request.user
-        obj.points_snapshot = obj.rule.points_for(obj.occurrence)
-        obj.save()
-        messages.success(request, "تخلف ثبت شد.")
-        return redirect("violations")
-    return render(request, "core/form.html", {"form": form, "title": "ثبت تخلف", "submit": "ثبت تخلف"})
+        with transaction.atomic():
+            dept = form.save()
+            audit(actor=request.user, action="department.created", instance=dept, new_values={"name": dept.name})
+        messages.success(request, f"لاین «{dept.name}» با موفقیت ایجاد شد.")
+        return redirect("management_departments")
+    return render(request, "management/department_form.html", {"form": form, "title": "تعریف لاین جدید", "submit": "تعریف لاین"})
 
 @login_required
-def violation_list(request):
-    qs = Violation.objects.select_related("employee", "rule", "recorded_by")
-    if not request.user.employee.can_review:
-        qs = qs.filter(employee=request.user.employee)
-    return render(request, "core/violation_list.html", {"violations": qs[:100]})
+@manager_required
+def management_department_edit(request, pk):
+    dept = get_object_or_404(Department, pk=pk)
+    form = DepartmentForm(request.POST or None, instance=dept)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            dept = form.save()
+            audit(actor=request.user, action="department.updated", instance=dept, new_values={"name": dept.name, "is_active": dept.is_active})
+        messages.success(request, f"لاین «{dept.name}» به‌روزرسانی شد.")
+        return redirect("management_departments")
+    return render(request, "management/department_form.html", {"form": form, "department": dept, "title": "ویرایش لاین", "submit": "ذخیره تغییرات"})
 
 # ==========================================
-# Employees
+# Employees Management
 # ==========================================
-
-@login_required
-@reviewer_required
-def employee_list(request):
-    return redirect("management_employees")
 
 def employee_snapshot(employee):
     return {
@@ -809,25 +1116,34 @@ def employee_snapshot(employee):
 
 @login_required
 @manager_required
+def employee_list(request):
+    return redirect("management_employees")
+
+@login_required
+@manager_required
 def management_employees(request):
-    qs = Employee.objects.select_related("commission_level", "primary_department", "default_shift").prefetch_related("departments")
-    search = request.GET.get("q", "").strip()
-    if search:
-        qs = qs.filter(
-            Q(first_name__icontains=search)
-            | Q(last_name__icontains=search)
-            | Q(mobile__icontains=search)
-            | Q(employee_code__icontains=search)
-        )
+    qs = Employee.objects.select_related("commission_level", "primary_department", "default_shift", "user").prefetch_related("departments")
+    q = request.GET.get("q", "").strip()
     status = request.GET.get("status", "")
-    if status in {"active", "inactive"}:
-        qs = qs.filter(is_active=status == "active")
     level = request.GET.get("level", "")
+    dept = request.GET.get("department", "")
+    if q:
+        qs = qs.filter(
+            Q(first_name__icontains=q)
+            | Q(last_name__icontains=q)
+            | Q(mobile__icontains=q)
+            | Q(employee_code__icontains=q)
+            | Q(user__username__icontains=q)
+        )
+    if status == "active":
+        qs = qs.filter(is_active=True)
+    elif status == "inactive":
+        qs = qs.filter(is_active=False)
     if level:
         qs = qs.filter(commission_level_id=level)
-    department = request.GET.get("department", "")
-    if department:
-        qs = qs.filter(Q(primary_department_id=department) | Q(departments__id=department)).distinct()
+    if dept:
+        qs = qs.filter(Q(primary_department_id=dept) | Q(departments__id=dept)).distinct()
+
     sort_map = {
         "name": "last_name",
         "-name": "-last_name",
@@ -913,7 +1229,7 @@ def management_employee_edit(request, pk):
             obj.commission_level = old_level
             obj.save()
             form.save_m2m()
-            
+
             user_updated_fields = ["first_name", "last_name"]
             obj.user.first_name = obj.first_name
             obj.user.last_name = obj.last_name

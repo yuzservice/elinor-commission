@@ -1,5 +1,31 @@
-{% extends 'base.html' %}{% block title %}داشبورد مدیریت{% endblock %}{% block content %}
-<div class="page-head"><div><p class="eyebrow">نمای مدیریتی</p><h1>وضعیت لاین وسط - ساری</h1><p>خلاصه زنده عملکرد کارکنان در ماه جاری</p></div></div>
-<div class="stats"><article><span>سهم فروش کل</span><strong>{{ total_score|floatformat:0 }}</strong></article><article><span>پورسانت ایجادشده</span><strong>{{ total_commission|floatformat:0 }}</strong><small>تومان</small></article><article><span>کارکرد امروز</span><strong>{{ today_shift_logs_count }}</strong></article><article><span>فروش‌های ثبت‌شده امروز</span><strong>{{ today_performances_count }}</strong></article></div>
-<article class="card"><div class="card-head"><h2>عملکرد کارکنان</h2><a href="{% url 'employees' %}">فهرست کارکنان</a></div><div class="table-wrap"><table><thead><tr><th>کارمند</th><th>سطح</th><th>سهم فروش</th><th>تخلف</th><th>کسورات</th><th>پورسانت</th></tr></thead><tbody>{% for row in rows %}<tr><td><b>{{ row.employee.full_name }}</b><small>{{ row.employee.employee_code }}</small></td><td><span class="level">{{ row.employee.level.code }}</span></td><td>{{ row.score|floatformat:0 }}</td><td>{{ row.violation_points }}</td><td>{{ row.deduction|floatformat:0 }}</td><td><b>{{ row.commission|floatformat:0 }}</b></td></tr>{% empty %}<tr><td colspan="6">هنوز کارمندی تعریف نشده است.</td></tr>{% endfor %}</tbody></table></div></article>
+{% extends 'base.html' %}{% load persian %}
+{% block title %}داشبورد مدیریت{% endblock %}
+{% block content %}
+<div class="admin-page-head dashboard-head">
+  <div><span class="admin-kicker">مرکز مدیریت</span><h1>سلام، {{ user.employee.first_name }} 👋</h1><p>نمای کلی عملکرد مجموعه در ماه جاری</p></div>
+  <div class="head-actions"><a class="secondary" href="{% url 'management_shift_logs' %}">گزارش کارکرد</a><a class="primary" href="{% url 'management_line_performance_batch' %}">+ ثبت فروش امروز</a></div>
+</div>
+
+<div class="admin-stat-grid">
+  <article><span class="stat-icon green">◫</span><div><small>کارکردهای امروز</small><strong>{{ today_shift_logs_count }}</strong><a href="{% url 'management_shift_logs' %}">مشاهده گزارش</a></div></article>
+  <article><span class="stat-icon blue">◇</span><div><small>فروش‌های امروز</small><strong>{{ today_performances_count }}</strong><a href="{% url 'management_line_performances' %}">مشاهده فروش</a></div></article>
+  <article><span class="stat-icon gold">﷼</span><div><small>پورسانت ماه</small><strong>{{ total_commission|persian_int }}</strong><a href="{% url 'management_commission_report' %}">گزارش تسویه</a></div></article>
+  <article><span class="stat-icon rose">◎</span><div><small>سهم فروش کل</small><strong>{{ total_score|floatformat:0 }}</strong><span>واحد کالا</span></div></article>
+</div>
+
+<section class="quick-panel">
+  <div class="section-heading"><div><h2>دسترسی سریع</h2><p>کارهای پرتکرار مدیریت</p></div></div>
+  <div class="quick-grid">
+    <a href="{% url 'management_employees' %}"><span>👥</span><b>کارکنان</b><small>پرونده و دسترسی‌ها</small></a>
+    <a href="{% url 'management_departments' %}"><span>🏷️</span><b>لاین‌ها</b><small>تعریف و ویرایش لاین</small></a>
+    <a href="{% url 'management_shifts' %}"><span>🕒</span><b>شیفت‌ها</b><small>ساعات کاری</small></a>
+    <a href="{% url 'management_line_rates' %}"><span>📐</span><b>ضرایب</b><small>لاین و گرید</small></a>
+    <a href="{% url 'violation_create' %}"><span>⚠️</span><b>ثبت تخلف</b><small>کسورات پرسنل</small></a>
+  </div>
+</section>
+
+<article class="card admin-table-card">
+  <div class="section-heading"><div><h2>عملکرد کارکنان</h2><p>خلاصه ماه جاری بر اساس کارکرد و فروش</p></div><a class="text-action" href="{% url 'management_employees' %}">همه کارکنان ←</a></div>
+  <div class="table-wrap"><table><thead><tr><th>کارمند</th><th>سطح</th><th>سهم فروش</th><th>تخلف</th><th>کسورات</th><th>پورسانت</th></tr></thead><tbody>{% for row in rows %}<tr><td><b>{{ row.employee.full_name }}</b><small>{{ row.employee.employee_code }}</small></td><td><span class="level">{{ row.employee.level.code }}</span></td><td>{{ row.score|floatformat:1 }}</td><td>{{ row.violation_points }}</td><td>{{ row.deduction|persian_int }}</td><td><strong class="money-positive">{{ row.commission|persian_int }} ریال</strong></td></tr>{% empty %}<tr><td colspan="6" class="empty">هنوز کارمندی تعریف نشده است.</td></tr>{% endfor %}</tbody></table></div>
+</article>
 {% endblock %}

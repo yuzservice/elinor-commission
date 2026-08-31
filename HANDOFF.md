@@ -22,6 +22,8 @@ Multi-interval support-line tracking completed on top of the Gemini shift UI. Th
 - Interval create/update/delete events are audited.
 - Migration: `0011_supportlineinterval`.
 - No new commission rule was added.
+- Manager-facing Department CRUD is available under `/management/departments/`.
+- Manager dashboard and sidebar navigation use the new compact admin design system.
 
 ## Latest Migration
 0012_archive_remove_activities

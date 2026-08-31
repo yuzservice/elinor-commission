@@ -6,68 +6,24 @@
 ## وضعیت فعلی
 
 - ورود و نقش‌های Manager/Employee: تکمیل
-- مدیریت کارکنان، بخش‌ها، Level و تاریخچه Level + نام کاربری اختصاصی: تکمیل
-- تعریف شیفت‌ها و ساعت کاری (Shift & Working Hours): تکمیل در گام ۱
-- ثبت کارکرد روزانه شیفت، لاین اصلی و چند لاین کمکی (DailyShiftLog with Multi-Support Lines): تکمیل در گام ۲ و ارتقا یافته
-- ثبت چند بازه زمانی دقیق برای لاین‌های کمکی با محاسبه server-side: تکمیل
-- ثبت عملکرد فروش روزانه لاین‌ها در شیفت (LineShiftPerformance): تکمیل در گام ۳
-- ماتریس ضرایب لاین و گرید + موتور تسهیم ساعتی و محاسبه پورسانت (LineCommissionRate & Engine): تکمیل در گام ۴
-- کارنامه پورسانت کارمند با ریز محاسبات هر شیفت و هر لاین کمکی: تکمیل در گام ۴
-- گزارش جامع تسویه پورسانت پرسنل برای مدیر: تکمیل در گام ۴
-- رابط کاربری مدرن، صمیمی و سریع ثبت کارکرد با Date Pills و Live Summary: تکمیل
-- برندینگ و پروفایل: تکمیل
-- ماژول قدیمی فعالیت‌ها (ثبت، فهرست، تعریف نوع و صف بررسی): در 2026-08-30 کامل از برنامه حذف شد
-- تخلف، تارگت و محاسبات قبلی: حفظ شده
-
-## حفظ داده و Migration
-
-Migration `0012_archive_remove_activities` مدل‌های فعالیت را از state برنامه حذف می‌کند؛ جداول قدیمی فقط برای بازیابی احتمالی داده تاریخی در دیتابیس آرشیو می‌مانند.
-Migration `0010_dailyshiftlog_support_departments` فیلد تکی `support_department` را به فیلد `support_departments` (ManyToManyField) تبدیل و داده‌های قبلی را به آن منتقل کرده و فیلد تکی قدیمی را حذف می‌کند.
-Migration `0011_supportlineinterval` مدل فرزند و غیرمخرب `SupportLineInterval` را برای نگهداری لاین مقصد، شروع، پایان و مدت هر بازه اضافه می‌کند و دقت فیلدهای خلاصه ساعت را به دو رقم اعشار افزایش می‌دهد.
+- مدیریت کارکنان، بخش‌ها، Level و تاریخچه Level: تکمیل
+- تعریف شیفت‌ها و ساعت کاری (Shift & Working Hours): تکمیل
+- ثبت کارکرد روزانه شیفت و لاین اصلی/کمکی (DailyShiftLog) با پشتیبانی از چندین لاین کمکی: تکمیل
+- ثبت عملکرد فروش روزانه لاین‌ها در شیفت (LineShiftPerformance): تکمیل
+- ماتریس ضرایب لاین و گرید + موتور تسهیم ساعتی و محاسبه پورسانت: تکمیل
+- حفاظت از عدم حذف لاین‌ها (Department Deletion Protection): تکمیل
+- صف بررسی و تأیید کارکرد پرسنل توسط مدیر (`/management/shift-log-reviews/`): تکمیل
+- موتور فریز مالی پورسانت (Financial Freeze on Approval): تکمیل
+- کیف پول درآمد قطعی روزانه (Daily Confirmed Earnings Wallet): تکمیل
+- هدف‌گذاری ماهانه لاین‌ها بر اساس ماه شمسی (`DepartmentMonthlyTarget`): تکمیل
+- کارنامه پورسانت کارمند با ریز محاسبات هر شیفت و وضعیت واریز: تکمیل
+- گزارش جامع تسویه پورسانت پرسنل برای مدیر: تکمیل
+- برندینگ و تنظیمات ظاهری: تکمیل
 
 ## امنیت و دسترسی
 
-- کارمند نمی‌تواند کارمند دیگری را برای ثبت انتخاب کند.
-- دسترسی جزئیات کارکرد روزانه کارمند به مالک رکورد محدود است.
-- کارنامه پورسانت کارمند تنها پورسانت و کارکرد خود کارمند را نمایش می‌دهد.
-- مدیر به گزارش تجمیعی و تسویه تمام پرسنل دسترسی دارد.
-- امتیاز، سهم کالاها و مبالغ پورسانت در سرور محاسبه می‌شود و ورودی امتیاز/مبلغ از کارمند وجود ندارد.
-- نوع واقعی فایل با امضای PDF یا decode تصویر کنترل می‌شود.
-- رد و درخواست اصلاح بدون یادداشت مدیر پذیرفته نمی‌شود.
-- تغییر وضعیت، شیفت، کارکرد روزانه، فروش لاین‌ها و ماتریس ضرایب Audit می‌شود.
-- ایجاد، ویرایش و حذف هر بازه کمکی به‌صورت مستقل در `AuditLog` ثبت می‌شود.
-
-## Step 5: Timed Support-Line Intervals — 2026-08-30
-- Added `SupportLineInterval` as a child of `DailyShiftLog`.
-- Added repeatable RTL form rows: destination line, start time, end time.
-- Server calculates every interval duration, total support hours, main-line hours and total shift hours; posted summary values are ignored.
-- Validates end-after-start, no overlap, within-shift bounds (including overnight shifts), and support line different from main line.
-- Existing summary fields and `support_departments` remain synchronized for compatibility with current reports.
-- Employee and manager detail pages show exact intervals and calculated totals.
-- No new commission rule was introduced; intervals are structured input for later Rule Engine work.
-- Test suite: 62 tests.
-
-## Step 1: Shifts & Working Hours — 2026-08-29
-- Added `Shift` model.
-- Added `default_shift` and `standard_daily_hours` to `Employee`.
-- Shift management CRUD for manager.
-
-## Step 2: Main & Multiple Support Lines Daily Shift Log — 2026-08-29
-- Redesigned `DailyShiftLog` model with `support_departments` (ManyToManyField).
-- Complete removal of legacy single `support_department` field.
-- Server-side calculation of `total_hours = main_hours + support_hours`.
-- Multi-support line distribution engine: support hours are divided equally among selected support departments.
-- Quick date pills (امروز، دیروز، پریروز، تقویم).
-- Conversational, friendly Persian UI.
-- Live calculation summary preview.
-- Migration: `0010_dailyshiftlog_support_departments`.
-
-## Step 3: Line Shift Performance (Daily Line Sales) — 2026-08-29
-- Added `LineShiftPerformance` model.
-- Batch sales entry interface for managers.
-
-## Step 4: Line & Grade Matrix & Proportional Engine — 2026-08-29
-- Added `LineCommissionRate` model and manager editable rates matrix.
-- Proportional sharing calculation engine in `core/services.py`.
-- Employee Commission Report page (`/my-commission/`) showing breakdown per shift and per support line.
-- Manager Commission Settlement Report (`/management/commissions/`).
+- کارمند تنها به ثبت و مشاهده کارکردهای خود دسترسی دارد.
+- کارمند نمی‌تواند کارکرد تأیید و فریز شده توسط مدیر را تغییر دهد.
+- مدیر صف اختصاصی بررسی و تأیید کارکردها را دارد و کارکرد روزانه برای خود ثبت نمی‌کند.
+- لاین‌ها و بخش‌ها غیرقابل حذف فیزیکی هستند تا تاریخچه محاسبات مالی همیشه حفظ شود.
+- با تأیید مدیر، پورسانت روزانه کارمند به صورت قطعی فریز شده و هرگونه تغییر در ضرایب یا قوانین آینده، تاریخچه پورسانت‌های قبلی را تغییر نمی‌دهد.

@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div>
+        <p class="eyebrow">مدیریت لاین‌ها</p>
+        <h1>{{ title }}</h1>
+        <p>تعریف یا ویرایش لاین کاری فروشگاه</p>
+    </div>
+    <a class="secondary" href="{% url 'management_departments' %}">بازگشت به فهرست لاین‌ها</a>
+</div>
+
+<article class="card form-card">
+    <form method="post">
+        {% csrf_token %}
+        <div class="field">
+            <label>{{ form.name.label }}<em>*</em></label>
+            {{ form.name }}
+            {% for error in form.name.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </div>
+
+        <div class="field checkbox-field" style="margin-top: 15px; margin-bottom: 20px;">
+            <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600;">
+                {{ form.is_active }}
+                <span>{{ form.is_active.label }}</span>
+            </label>
+            {% for error in form.is_active.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </div>
+
+        {% for error in form.non_field_errors %}
+        <div class="message error">{{ error }}</div>
+        {% endfor %}
+
+        <button class="primary" type="submit">{{ submit }}</button>
+    </form>
+</article>
+{% endblock %}

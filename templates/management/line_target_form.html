@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div>
+        <p class="eyebrow">تارگت‌های ماهانه لاین‌ها</p>
+        <h1>{{ title }}</h1>
+        <p>هدف‌گذاری تعداد فروش و پاداش‌های انگیزشی برای لاین در ماه مشخص</p>
+    </div>
+    <a class="secondary" href="{% url 'management_line_targets' %}">بازگشت به فهرست تارگت‌ها</a>
+</div>
+
+<article class="card form-card wide">
+    <form method="post">
+        {% csrf_token %}
+        <div class="form-grid">
+            <div class="field">
+                <label>{{ form.year_month.label }}<em>*</em></label>
+                {{ form.year_month }}
+                <small class="help">فرمت: سال/ماه (مثال: ۱۴۰۵/۰۶)</small>
+                {% for error in form.year_month.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+
+            <div class="field">
+                <label>{{ form.department.label }}<em>*</em></label>
+                {{ form.department }}
+                {% for error in form.department.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+
+            <div class="field">
+                <label>{{ form.target_units.label }} (عدد)<em>*</em></label>
+                {{ form.target_units }}
+                <small class="help">تعداد کالای هدف برای کل لاین در طول این ماه</small>
+                {% for error in form.target_units.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+
+            <div class="field">
+                <label>{{ form.reward_amount.label }} (ریال)</label>
+                {{ form.reward_amount }}
+                <small class="help">پاداش نقدی در صورت تکمیل و رد کردن تارگت ماه</small>
+                {% for error in form.reward_amount.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+
+            <div class="field">
+                <label>{{ form.target_sales_amount.label }}</label>
+                {{ form.target_sales_amount }}
+                {% for error in form.target_sales_amount.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+
+            <div class="field">
+                <label>{{ form.target_commission_points.label }}</label>
+                {{ form.target_commission_points }}
+                {% for error in form.target_commission_points.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+
+            <div class="field span-2">
+                <label>{{ form.description.label }}</label>
+                {{ form.description }}
+                {% for error in form.description.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+        </div>
+
+        {% for error in form.non_field_errors %}
+        <div class="message error">{{ error }}</div>
+        {% endfor %}
+
+        <button class="primary" type="submit">{{ submit }}</button>
+    </form>
+</article>
+{% endblock %}

@@ -9,7 +9,6 @@ from .models import (
     LineCommissionRate,
     LineShiftPerformance,
     Shift,
-    SupportLineInterval,
     SystemSettings,
     Target,
     Violation,
@@ -32,12 +31,6 @@ class DailyShiftLogAdmin(admin.ModelAdmin):
     list_filter = ("date", "shift", "main_department", "has_support_line")
     search_fields = ("employee__first_name", "employee__last_name", "employee__employee_code")
     filter_horizontal = ("support_departments",)
-
-@admin.register(SupportLineInterval)
-class SupportLineIntervalAdmin(admin.ModelAdmin):
-    list_display = ("shift_log", "department", "start_time", "end_time", "duration_minutes")
-    list_filter = ("department", "shift_log__date")
-    readonly_fields = ("duration_minutes", "created_at", "updated_at")
 
 @admin.register(LineShiftPerformance)
 class LineShiftPerformanceAdmin(admin.ModelAdmin):

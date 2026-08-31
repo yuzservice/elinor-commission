@@ -1,11 +1,11 @@
 {% extends 'base.html' %}
-{% block title %}ماتریس ضرایب لاین‌ها و گریدها{% endblock %}
+{% block title %}ضرایب پورسانت و تارگت‌های هر لاین{% endblock %}
 {% block content %}
-<div class="page-head">
+<div class="admin-page-head">
     <div>
-        <p class="eyebrow">قواعد و ضرایب پورسانت</p>
-        <h1>ماتریس ضرایب لاین‌ها و گریدها</h1>
-        <p>تعیین مبلغ پورسانت به ازای هر واحد کالای فروخته‌شده برای هر لاین و هر گرید (تومان/ریال)</p>
+        <span class="admin-kicker">قواعد و ضرایب پورسانت</span>
+        <h1>ضرایب پورسانت و تارگت‌های هر لاین</h1>
+        <p>مدیریت یکپارچه نرخ هر کالا برای گریدها و سطوح برنزی، نقره‌ای و طلایی هر لاین</p>
     </div>
 </div>
 
@@ -46,10 +46,37 @@
             </table>
         </div>
 
+        <div class="card-head" style="margin-top:28px"><h2>🎯 تارگت‌ها و پاداش‌های هر لاین</h2></div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>لاین / بخش</th>
+                        <th>🥉 عملکرد برنزی</th><th>پاداش برنزی (ریال)</th>
+                        <th>🥈 عملکرد نقره‌ای</th><th>پاداش نقره‌ای (ریال)</th>
+                        <th>🥇 عملکرد طلایی</th><th>پاداش طلایی (ریال)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in matrix %}
+                    <tr>
+                        <td><strong>{{ row.department.name }}</strong></td>
+                        <td><input type="number" name="target_{{ row.department.pk }}_bronze_units" value="{{ row.target.bronze_units }}" min="1" inputmode="numeric"></td>
+                        <td><input type="number" name="target_{{ row.department.pk }}_bronze_reward" value="{{ row.target.bronze_reward }}" min="0" inputmode="numeric"></td>
+                        <td><input type="number" name="target_{{ row.department.pk }}_silver_units" value="{{ row.target.silver_units }}" min="1" inputmode="numeric"></td>
+                        <td><input type="number" name="target_{{ row.department.pk }}_silver_reward" value="{{ row.target.silver_reward }}" min="0" inputmode="numeric"></td>
+                        <td><input type="number" name="target_{{ row.department.pk }}_gold_units" value="{{ row.target.gold_units }}" min="1" inputmode="numeric"></td>
+                        <td><input type="number" name="target_{{ row.department.pk }}_gold_reward" value="{{ row.target.gold_reward }}" min="0" inputmode="numeric"></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
         {% if matrix %}
         <div style="margin-top: 20px; text-align: left;">
             <button class="primary" type="submit" style="padding: 10px 24px; font-size: 1.05rem;">
-                💾 ذخیره تمام ضرایب
+                💾 ذخیره تمام ضرایب و تارگت‌ها
             </button>
         </div>
         {% endif %}

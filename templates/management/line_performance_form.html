@@ -1,31 +1,64 @@
 {% extends 'base.html' %}
 {% block title %}{{ title }}{% endblock %}
 {% block content %}
-<div class="page-head">
+<div class="admin-page-head">
     <div>
-        <p class="eyebrow">مدیریت فروش لاین‌ها</p>
+        <span class="admin-kicker">مدیریت فروش و عملکرد</span>
         <h1>{{ title }}</h1>
+        <p>ثبت تکی تعداد کالای فروخته‌شده در یک لاین برای شیفت و تاریخ مشخص</p>
     </div>
-    <a class="secondary" href="{% url 'management_line_performances' %}">بازگشت به لیست فروش لاین‌ها</a>
+    <a class="secondary" href="{% url 'management_line_performances' %}">بازگشت به فهرست فروش</a>
 </div>
 
-<article class="card form-card">
+<article class="card form-card admin-form-card">
     <form method="post">
         {% csrf_token %}
         <div class="form-grid">
-            {% for field in form %}
             <div class="field">
-                <label>{{ field.label }}{% if field.field.required %}<em>*</em>{% endif %}</label>
-                {{ field }}
-                {% if field.help_text %}<small class="help">{{ field.help_text|safe }}</small>{% endif %}
-                {% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                <label>{{ form.date.label }}<em>*</em></label>
+                {{ form.date }}
+                {% for error in form.date.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
             </div>
-            {% endfor %}
+
+            <div class="field">
+                <label>{{ form.shift.label }}<em>*</em></label>
+                {{ form.shift }}
+                {% for error in form.shift.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+
+            <div class="field">
+                <label>{{ form.department.label }}<em>*</em></label>
+                {{ form.department }}
+                {% for error in form.department.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+
+            <div class="field">
+                <label>{{ form.sold_units.label }}<em>*</em></label>
+                {{ form.sold_units }}
+                {% for error in form.sold_units.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+
+            <div class="field span-2">
+                <label>{{ form.sales_amount.label }}</label>
+                {{ form.sales_amount }}
+                {% for error in form.sales_amount.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+
+            <div class="field span-2">
+                <label>{{ form.description.label }}</label>
+                {{ form.description }}
+                {% for error in form.description.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
         </div>
+
         {% for error in form.non_field_errors %}
         <div class="message error">{{ error }}</div>
         {% endfor %}
-        <button class="primary" type="submit">{{ submit }}</button>
+
+        <div class="form-actions">
+            <button class="primary" type="submit">{{ submit }}</button>
+            <a class="secondary" href="{% url 'management_line_performances' %}">انصراف</a>
+        </div>
     </form>
 </article>
 {% endblock %}

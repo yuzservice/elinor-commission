@@ -1,31 +1,74 @@
 {% extends 'base.html' %}
 {% block title %}{{ title }}{% endblock %}
 {% block content %}
-<div class="page-head">
+<div class="admin-page-head">
     <div>
-        <p class="eyebrow">مدیریت شیفت‌ها</p>
+        <span class="admin-kicker">تنظیمات شیفت و ساعات کاری</span>
         <h1>{{ title }}</h1>
+        <p>تعریف ساعات شروع، پایان و ساعت کار استاندارد پرسنل در این شیفت</p>
     </div>
-    <a class="secondary" href="{% url 'management_shifts' %}">بازگشت به لیست شیفت‌ها</a>
+    <a class="secondary" href="{% url 'management_shifts' %}">بازگشت به شیفت‌ها</a>
 </div>
 
-<article class="card form-card">
+<article class="card form-card admin-form-card">
     <form method="post">
         {% csrf_token %}
         <div class="form-grid">
-            {% for field in form %}
             <div class="field">
-                <label>{{ field.label }}{% if field.field.required %}<em>*</em>{% endif %}</label>
-                {{ field }}
-                {% if field.help_text %}<small class="help">{{ field.help_text|safe }}</small>{% endif %}
-                {% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                <label>عنوان شیفت<em>*</em></label>
+                {{ form.title }}
+                {% for error in form.title.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
             </div>
-            {% endfor %}
+
+            <div class="field">
+                <label>کد شیفت (انگلیسی)<em>*</em></label>
+                {{ form.code }}
+                {% for error in form.code.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+
+            <div class="field">
+                <label>ساعت شروع<em>*</em></label>
+                {{ form.start_time }}
+                {% for error in form.start_time.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+
+            <div class="field">
+                <label>ساعت پایان<em>*</em></label>
+                {{ form.end_time }}
+                {% for error in form.end_time.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+
+            <div class="field">
+                <label>ساعت کاری استاندارد<em>*</em></label>
+                {{ form.standard_hours }}
+                {% for error in form.standard_hours.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+
+            <div class="field">
+                <label>ترتیب نمایش</label>
+                {{ form.sort_order }}
+                {% for error in form.sort_order.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+
+            <div class="span-2">
+                <label class="toggle-row">
+                    {{ form.is_active }}
+                    <span>
+                        <b>شیفت فعال باشد</b>
+                        <small>شیفت غیرفعال در فرم ثبت کارکرد روزانه پرسنل نمایش داده نمی‌شود.</small>
+                    </span>
+                </label>
+            </div>
         </div>
+
         {% for error in form.non_field_errors %}
         <div class="message error">{{ error }}</div>
         {% endfor %}
-        <button class="primary">{{ submit }}</button>
+
+        <div class="form-actions">
+            <button class="primary">{{ submit }}</button>
+            <a class="secondary" href="{% url 'management_shifts' %}">انصراف</a>
+        </div>
     </form>
 </article>
 {% endblock %}

@@ -10,17 +10,19 @@ from core.models import (
     Employee,
     LineCommissionRate,
     LineShiftPerformance,
+    LineTarget,
     Shift,
     SystemSettings,
     Target,
     ViolationRule,
 )
+from core.services import approve_shift_log
 
 class Command(BaseCommand):
-    help = "ایجاد داده‌های جامع تستی و پرسنل نمونه برای بررسی رابط کاربری و عملکرد"
+    help = "ایجاد داده‌های جامع تستی، تارگت‌های ماهانه و کارکردهای تستی جهت بررسی تأیید و فریز پورسانت"
 
     def handle(self, *args, **opts):
-        self.stdout.write("در حال ایجاد داده‌های پایه و پرسنل...")
+        self.stdout.write("در حال ایجاد داده‌های پایه، لاین‌ها، تارگت‌ها و پرسنل...")
 
         # ۱. گریدها و سطوح
         level_data = [
@@ -122,10 +124,25 @@ class Command(BaseCommand):
                 }
             )
             if emp_created:
-                emp.departments.add(depts[main_dept], depts["اکسسوری"])
+                emp.departments.add(depts[main_dept], depts["اکسسوری"], depts["پیراهن"])
             employees[uname] = emp
 
-        # ۶. قوانین تخلفات و تارگت‌ها
+        # ۶. تارگت‌های برنزی، نقره‌ای و طلایی هر لاین
+        for dept in depts.values():
+            LineTarget.objects.update_or_create(
+                department=dept,
+                defaults={
+                    "bronze_units": 500,
+                    "bronze_reward": 5000000,
+                    "silver_units": 1000,
+                    "silver_reward": 12000000,
+                    "gold_units": 3000,
+                    "gold_reward": 30000000,
+                    "is_active": True,
+                },
+            )
+
+        # ۷. قوانین تخلفات و تارگت‌های عمومی
         rules = [
             ("V01", "استفاده از تلفن همراه در محیط کار", 5, 10, 20),
             ("V02", "رفتار نامناسب با مشتری", 5, 10, 20),
@@ -143,63 +160,18 @@ class Command(BaseCommand):
 
         SystemSettings.load()
 
-        # ۷. نمونه کارکردهای روزانه شیفت و آمار فروش برای امروز و دیروز
+        # ۸. نمونه کارکردهای روزانه شیفت و آمار فروش برای امروز و دیروز
         today = timezone.localdate()
         yesterday = today - timedelta(days=1)
         morning_shift = shifts["MORNING"]
-        evening_shift = shifts["EVENING"]
-        mgr_user = employees["manager"].user
 
-        # کارکردهای شیفت امروز
-        # سارا: ۶ ساعت در شلوار
-        sara_log, _ = DailyShiftLog.objects.update_or_create(
-            employee=employees["sara"],
-            date=today,
+        # آمار فروش ثبت شده توسط مدیر برای دیروز و امروز
+        LineShiftPerformance.objects.update_or_create(
+            date=yesterday,
             shift=morning_shift,
-            defaults={
-                "main_department": depts["شلوار"],
-                "main_hours": Decimal("6.0"),
-                "has_support_line": False,
-                "support_hours": Decimal("0.0"),
-                "total_hours": Decimal("6.0"),
-                "employee_note": "کارکرد منظم در لاین شلوار",
-            }
+            department=depts["شلوار"],
+            defaults={"sold_units": 40, "sales_amount": 200000000, "recorded_by": mgr_user}
         )
-        sara_log.support_departments.clear()
-
-        # فاطمه: ۴ ساعت در شلوار + ۲ ساعت کمکی در اکسسوری و پیراهن
-        fatemeh_log, _ = DailyShiftLog.objects.update_or_create(
-            employee=employees["fatemeh"],
-            date=today,
-            shift=morning_shift,
-            defaults={
-                "main_department": depts["شلوار"],
-                "main_hours": Decimal("4.0"),
-                "has_support_line": True,
-                "support_hours": Decimal("2.0"),
-                "total_hours": Decimal("6.0"),
-                "employee_note": "کمک به لاین‌های اکسسوری و پیراهن در ساعات شلوغی",
-            }
-        )
-        fatemeh_log.support_departments.set([depts["اکسسوری"], depts["پیراهن"]])
-
-        # علی: ۶ ساعت در پیراهن
-        ali_log, _ = DailyShiftLog.objects.update_or_create(
-            employee=employees["ali"],
-            date=today,
-            shift=morning_shift,
-            defaults={
-                "main_department": depts["پیراهن"],
-                "main_hours": Decimal("6.0"),
-                "has_support_line": False,
-                "support_hours": Decimal("0.0"),
-                "total_hours": Decimal("6.0"),
-                "employee_note": "فروش شیفت صبح پیراهن",
-            }
-        )
-        ali_log.support_departments.clear()
-
-        # آمار فروش ثبت شده توسط مدیر برای شیفت صبح امروز
         LineShiftPerformance.objects.update_or_create(
             date=today,
             shift=morning_shift,
@@ -219,8 +191,8 @@ class Command(BaseCommand):
             defaults={"sold_units": 20, "sales_amount": 60000000, "recorded_by": mgr_user, "description": "فروش اکسسوری"}
         )
 
-        # کارکردهای شیفت دیروز
-        sara_yesterday, _ = DailyShiftLog.objects.update_or_create(
+        # کارکرد دیروز سارا (تأییدشده و فریز شده توسط مدیر)
+        sara_log_yesterday, _ = DailyShiftLog.objects.update_or_create(
             employee=employees["sara"],
             date=yesterday,
             shift=morning_shift,
@@ -230,18 +202,62 @@ class Command(BaseCommand):
                 "has_support_line": False,
                 "support_hours": Decimal("0.0"),
                 "total_hours": Decimal("6.0"),
+                "status": DailyShiftLog.Status.PENDING,
             }
         )
-        sara_yesterday.support_departments.clear()
-        LineShiftPerformance.objects.update_or_create(
-            date=yesterday,
+        approve_shift_log(sara_log_yesterday, mgr_user, "تأیید و واریز شد.")
+
+        # کارکرد امروز سارا (در انتظار بررسی مدیر)
+        sara_log_today, _ = DailyShiftLog.objects.update_or_create(
+            employee=employees["sara"],
+            date=today,
             shift=morning_shift,
-            department=depts["شلوار"],
-            defaults={"sold_units": 40, "sales_amount": 200000000, "recorded_by": mgr_user}
+            defaults={
+                "main_department": depts["شلوار"],
+                "main_hours": Decimal("6.0"),
+                "has_support_line": False,
+                "support_hours": Decimal("0.0"),
+                "total_hours": Decimal("6.0"),
+                "status": DailyShiftLog.Status.PENDING,
+                "employee_note": "حضور در شیفت صبح لاین شلوار",
+            }
+        )
+
+        # کارکرد امروز فاطمه (با دو لاین کمکی پیراهن و اکسسوری - در انتظار بررسی مدیر)
+        fatemeh_log, _ = DailyShiftLog.objects.update_or_create(
+            employee=employees["fatemeh"],
+            date=today,
+            shift=morning_shift,
+            defaults={
+                "main_department": depts["شلوار"],
+                "main_hours": Decimal("4.0"),
+                "has_support_line": True,
+                "support_hours": Decimal("2.0"),
+                "total_hours": Decimal("6.0"),
+                "status": DailyShiftLog.Status.PENDING,
+                "employee_note": "کمک به لاین‌های اکسسوری و پیراهن در تایم شلوغی",
+            }
+        )
+        fatemeh_log.support_departments.set([depts["اکسسوری"], depts["پیراهن"]])
+
+        # کارکرد امروز علی (در انتظار بررسی مدیر)
+        ali_log, _ = DailyShiftLog.objects.update_or_create(
+            employee=employees["ali"],
+            date=today,
+            shift=morning_shift,
+            defaults={
+                "main_department": depts["پیراهن"],
+                "main_hours": Decimal("6.0"),
+                "has_support_line": False,
+                "support_hours": Decimal("0.0"),
+                "total_hours": Decimal("6.0"),
+                "status": DailyShiftLog.Status.PENDING,
+                "employee_note": "فروش شیفت صبح پیراهن",
+            }
         )
 
         self.stdout.write(self.style.SUCCESS("=" * 60))
-        self.stdout.write(self.style.SUCCESS("داده‌های اولیه و کاربران تستی با موفقیت ایجاد شدند:"))
+        self.stdout.write(self.style.SUCCESS("داده‌های اولیه، تارگت‌های ماهانه و پرسنل با موفقیت ایجاد شدند:"))
         self.stdout.write("  ۱. مدیر سیستم: نام کاربری `manager` | رمز: `Elinor123!`")
         self.stdout.write("  ۲. کارمند نمونه ۱: نام کاربری `sara` (کد: 1002) | رمز: `Elinor123!` | گرید A")
         self.stdout.write("  ۳. کارمند نمونه ۲: نام کاربری `ali` (کد: 1003) | رمز: `Elinor123!` | گرید B")

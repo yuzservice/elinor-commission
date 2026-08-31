@@ -1,0 +1,170 @@
+{% extends 'base.html' %}
+{% load persian %}
+{% block title %}بررسی و تأیید کارکرد پرسنل{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div>
+        <p class="eyebrow">مدیریت و تأیید عملیات شیفت</p>
+        <h1>بررسی و تأیید کارکرد پرسنل</h1>
+        <p>بررسی کارکردهای ثبت‌شده، تسهیم ساعتی فروش لاین‌ها و واریز قطعی پورسانت روزانه</p>
+    </div>
+</div>
+
+<!-- Tabs for Approval Status -->
+<div class="tabs" style="margin-bottom: 16px;">
+    <a class="{% if status_filter == 'PENDING' %}active{% endif %}" href="?status=PENDING">
+        ⏳ در انتظار بررسی و تأیید
+        <span class="badge" style="background: rgba(0,0,0,0.15); margin-right: 4px;">{{ pending_count }}</span>
+    </a>
+    <a class="{% if status_filter == 'APPROVED' %}active{% endif %}" href="?status=APPROVED">
+        ✅ تأییدشده و واریز نهایی
+        <span class="badge" style="background: rgba(0,0,0,0.15); margin-right: 4px;">{{ approved_count }}</span>
+    </a>
+    <a class="{% if status_filter == 'REJECTED' %}active{% endif %}" href="?status=REJECTED">
+        ❌ ردشده
+        <span class="badge" style="background: rgba(0,0,0,0.15); margin-right: 4px;">{{ rejected_count }}</span>
+    </a>
+    <a class="{% if not status_filter %}active{% endif %}" href="?status=">
+        📋 همه موارد
+    </a>
+</div>
+
+<!-- Filters -->
+<article class="card filter-card">
+    <form method="get" class="filters">
+        <input type="hidden" name="status" value="{{ status_filter }}">
+        <input name="q" value="{{ filters.q }}" placeholder="جستجو نام کارمند یا کد پرسنلی">
+        <input name="date" value="{{ filters.date }}" placeholder="تاریخ (۱۴۰۵/۰۶/۰۸)" class="jalali-date">
+        <select name="shift">
+            <option value="">همه شیفت‌ها</option>
+            {% for s in shifts %}
+            <option value="{{ s.pk }}" {% if filters.shift == s.pk|stringformat:'s' %}selected{% endif %}>{{ s.title }}</option>
+            {% endfor %}
+        </select>
+        <select name="department">
+            <option value="">همه لاین‌ها</option>
+            {% for d in departments %}
+            <option value="{{ d.pk }}" {% if filters.department == d.pk|stringformat:'s' %}selected{% endif %}>{{ d.name }}</option>
+            {% endfor %}
+        </select>
+        <select name="employee">
+            <option value="">همه کارکنان</option>
+            {% for emp in employees %}
+            <option value="{{ emp.pk }}" {% if filters.employee == emp.pk|stringformat:'s' %}selected{% endif %}>{{ emp.full_name }}</option>
+            {% endfor %}
+        </select>
+        <button class="primary">فیلتر</button>
+        <a class="secondary" href="{% url 'management_shift_log_reviews' %}?status={{ status_filter }}">پاک‌کردن</a>
+    </form>
+</article>
+
+<!-- Shift Logs Review Table -->
+<article class="card">
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>تاریخ و شیفت</th>
+                    <th>کارمند</th>
+                    <th>لاین اصلی (ساعت)</th>
+                    <th>لاین‌های کمکی (ساعت)</th>
+                    <th>کل کارکرد</th>
+                    <th>سهم کالا</th>
+                    <th>پورسانت روز</th>
+                    <th>وضعیت</th>
+                    <th>عملیات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in log_rows %}
+                <tr>
+                    <td>
+                        <b>{{ row.log.date|jalali }}</b>
+                        <small style="color: var(--muted);">{{ row.log.shift.title }}</small>
+                    </td>
+                    <td>
+                        <div class="person-cell">
+                            {% if row.log.employee.profile_photo %}
+                            <img src="{{ row.log.employee.profile_photo.url }}" alt="">
+                            {% else %}
+                            <span class="avatar small">{{ row.log.employee.first_name|slice:':1' }}</span>
+                            {% endif %}
+                            <div>
+                                <b>{{ row.log.employee.full_name }}</b>
+                                <small>گرید {{ row.log.employee.commission_level.code }} · کد: {{ row.log.employee.employee_code }}</small>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <b>{{ row.log.main_department.name }}</b>
+                        <small>{{ row.log.main_hours }} ساعت</small>
+                    </td>
+                    <td>
+                        {% if row.log.has_support_line %}
+                        <span style="color: var(--green, #237554); font-weight: 600;">{{ row.log.support_departments_display }}</span>
+                        <small>{{ row.log.support_hours }} ساعت مجموعاً</small>
+                        {% else %}
+                        <span style="color: var(--muted);">—</span>
+                        {% endif %}
+                    </td>
+                    <td><strong>{{ row.log.total_hours }} ساعت</strong></td>
+                    <td>
+                        <span class="badge" style="background: var(--green2); color: var(--green); font-size: 12px;">
+                            {{ row.calc.total_units_share }} کالا
+                        </span>
+                    </td>
+                    <td>
+                        <strong style="color: var(--green, #237554); font-size: 13.5px;">
+                            {{ row.calc.total_commission|persian_int }} ریال
+                        </strong>
+                        {% if row.log.is_frozen %}
+                        <small style="color: #059669;">🔒 فریز شده</small>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if row.log.status == 'APPROVED' %}
+                        <span class="status approved">✅ تأیید و واریز شد</span>
+                        {% elif row.log.status == 'REJECTED' %}
+                        <span class="status rejected">❌ رد شد</span>
+                        {% else %}
+                        <span class="status pending">⏳ در انتظار تأیید</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <a class="table-link" href="{% url 'management_shift_log_review_detail' row.log.pk %}" style="padding: 4px 8px; border-radius: 6px; background: #f0fdf4;">
+                                بررسی دقیق
+                            </a>
+                            {% if row.log.status == 'PENDING' %}
+                            <form method="post" action="{% url 'management_shift_log_quick_approve' row.log.pk %}" style="display: inline; margin: 0;">
+                                {% csrf_token %}
+                                <button class="primary" style="padding: 4px 10px; font-size: 11.5px; border-radius: 6px;" title="تأیید فوری و واریز قطعی">
+                                    تأیید فوری
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="empty">موردی با فیلترهای انتخابی یافت نشد.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page.paginator.num_pages > 1 %}
+    <div class="pagination">
+        {% if page.has_previous %}
+        <a href="?page={{ page.previous_page_number }}&status={{ status_filter }}">قبلی</a>
+        {% endif %}
+        <span>صفحه {{ page.number }} از {{ page.paginator.num_pages }}</span>
+        {% if page.has_next %}
+        <a href="?page={{ page.next_page_number }}&status={{ status_filter }}">بعدی</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</article>
+{% endblock %}

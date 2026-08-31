@@ -4,17 +4,21 @@ from django.utils import timezone
 from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from django.core.validators import FileExtensionValidator
 from django.db.models import Q
 import jdatetime
+from PIL import Image, UnidentifiedImageError
 from .models import (
     DailyShiftLog,
     Department,
+    DepartmentMonthlyTarget,
     Employee,
     LineShiftPerformance,
     Shift,
     SupportLineInterval,
     SystemSettings,
     Violation,
+    ViolationRule,
 )
 
 PERSIAN_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789")
@@ -39,6 +43,33 @@ class JalaliDateField(forms.CharField):
             return jdatetime.date(year, month, day).togregorian()
         except (ValueError, TypeError):
             raise forms.ValidationError(self.error_messages["invalid"], code="invalid")
+
+class ReviewForm(forms.Form):
+    action = forms.ChoiceField(label="تصمیم مدیر", choices=[("APPROVED","تأیید"),("REJECTED","رد"),("NEEDS_REVISION","نیازمند اصلاح")])
+    manager_note = forms.CharField(label="یادداشت مدیر", required=False, widget=forms.Textarea(attrs={"rows":3}))
+    def clean(self):
+        data = super().clean()
+        if data.get("action") in {"REJECTED","NEEDS_REVISION"} and not data.get("manager_note", "").strip():
+            self.add_error("manager_note", "برای رد یا درخواست اصلاح، درج توضیح الزامی است.")
+        return data
+
+class ShiftLogReviewForm(forms.Form):
+    action = forms.ChoiceField(
+        label="تصمیم مدیر",
+        choices=[("APPROVED", "✅ تأیید کارکرد و واریز قطعی پورسانت"), ("REJECTED", "❌ رد کارکرد")],
+        widget=forms.RadioSelect
+    )
+    manager_note = forms.CharField(
+        label="یادداشت / بازخورد برای کارمند",
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 2, "placeholder": "توضیح یا یادداشت برای کارمند (در صورت رد کارکرد درج توضیح الزامی است)..."})
+    )
+
+    def clean(self):
+        data = super().clean()
+        if data.get("action") == "REJECTED" and not data.get("manager_note", "").strip():
+            self.add_error("manager_note", "برای رد کارکرد، درج توضیح یا دلیل الزامی است.")
+        return data
 
 class ShiftForm(forms.ModelForm):
     start_time = forms.TimeField(
@@ -102,7 +133,6 @@ class DailyShiftLogForm(forms.ModelForm):
 
         self.fields["shift"].queryset = Shift.objects.filter(is_active=True)
         self.fields["main_department"].queryset = Department.objects.filter(is_active=True)
-
         self.fields["shift"].label = "شیفت کاری"
         self.fields["main_department"].label = "لاین اصلی"
         self.fields["employee_note"].label = "یادداشت یا توضیح برای مدیر"
@@ -114,12 +144,6 @@ class DailyShiftLogForm(forms.ModelForm):
                     self.fields["shift"].initial = employee.default_shift
                 if employee.primary_department:
                     self.fields["main_department"].initial = employee.primary_department
-
-    def clean(self):
-        data = super().clean()
-        main_dept = data.get("main_department")
-        has_support = data.get("has_support_line")
-        return data
 
 
 class SupportLineIntervalForm(forms.ModelForm):
@@ -185,6 +209,55 @@ class LineShiftPerformanceForm(forms.ModelForm):
         if not self.is_bound and not self.instance.pk:
             self.fields["date"].initial = jdatetime.date.fromgregorian(date=timezone.localdate()).strftime("%Y/%m/%d")
 
+class DepartmentMonthlyTargetForm(forms.ModelForm):
+    class Meta:
+        model = DepartmentMonthlyTarget
+        fields = [
+            "year_month",
+            "department",
+            "target_units",
+            "target_sales_amount",
+            "target_commission_points",
+            "reward_amount",
+            "description",
+        ]
+        widgets = {
+            "year_month": forms.TextInput(attrs={"placeholder": "۱۴۰۵/۰۶", "dir": "ltr"}),
+            "target_units": forms.NumberInput(attrs={"min": "0", "inputmode": "numeric"}),
+            "target_sales_amount": forms.NumberInput(attrs={"min": "0", "inputmode": "numeric"}),
+            "target_commission_points": forms.NumberInput(attrs={"min": "0", "inputmode": "numeric"}),
+            "reward_amount": forms.NumberInput(attrs={"min": "0", "inputmode": "numeric"}),
+            "description": forms.Textarea(attrs={"rows": 2, "placeholder": "توضیحات انگیزه و هدف برای پرسنل این لاین..."}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["department"].queryset = Department.objects.filter(is_active=True)
+        if not self.is_bound and not self.instance.pk:
+            j_now = jdatetime.date.fromgregorian(date=timezone.localdate())
+            self.fields["year_month"].initial = f"{j_now.year:04d}/{j_now.month:02d}"
+
+    def clean_year_month(self):
+        ym = self.cleaned_data.get("year_month", "").translate(PERSIAN_DIGITS).strip()
+        import re
+        if not re.match(r"^\d{4}/\d{2}$", ym):
+            raise forms.ValidationError("فرمت ماه شمسی باید به‌صورت ۱۴۰۵/۰۶ باشد.")
+        return ym
+
+class DepartmentForm(forms.ModelForm):
+    class Meta:
+        model = Department
+        fields = ["name", "is_active"]
+
+    def clean_name(self):
+        name = " ".join(self.cleaned_data["name"].split())
+        duplicate = Department.objects.filter(name__iexact=name)
+        if self.instance.pk:
+            duplicate = duplicate.exclude(pk=self.instance.pk)
+        if duplicate.exists():
+            raise forms.ValidationError("لاین دیگری با این نام وجود دارد.")
+        return name
+
 class ViolationForm(forms.ModelForm):
     violation_date = JalaliDateField(label="تاریخ تخلف")
     class Meta:
@@ -194,6 +267,26 @@ class ViolationForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["violation_date"].initial = jdatetime.date.fromgregorian(date=timezone.localdate()).strftime("%Y/%m/%d")
+        self.fields["rule"].queryset = ViolationRule.objects.filter(is_active=True).order_by("title")
+
+
+class ViolationRuleForm(forms.ModelForm):
+    class Meta:
+        model = ViolationRule
+        fields = [
+            "code", "title", "first_points", "second_points", "third_points",
+            "recurrence_window", "all_departments", "departments", "is_active",
+        ]
+        widgets = {"departments": forms.CheckboxSelectMultiple()}
+
+    def clean(self):
+        data = super().clean()
+        points = [data.get("first_points"), data.get("second_points"), data.get("third_points")]
+        if all(value is not None for value in points) and not (points[0] <= points[1] <= points[2]):
+            self.add_error("third_points", "مقادیر تکرار باید به‌ترتیب مرتبه اول، دوم و سوم صعودی باشند.")
+        if not data.get("all_departments") and not data.get("departments"):
+            self.add_error("departments", "حداقل یک لاین را انتخاب کنید یا قانون را سراسری قرار دهید.")
+        return data
 
 class EmployeeBaseForm(forms.ModelForm):
     start_date = JalaliDateField(label="تاریخ شروع همکاری", required=False)

@@ -2,43 +2,68 @@
 {% load persian %}
 {% block title %}گزارش جامع تسویه پورسانت پرسنل{% endblock %}
 {% block content %}
-<div class="page-head">
+<div class="admin-page-head">
     <div>
-        <p class="eyebrow">گزارش مالی و تسویه</p>
+        <span class="admin-kicker">گزارش مالی و تسویه</span>
         <h1>گزارش جامع تسویه پورسانت پرسنل</h1>
-        <p>دوره: از {{ start|jalali }} تا {{ end|jalali }}</p>
+        <p>دوره محاسباتی: از {{ start|jalali }} تا {{ end|jalali }}</p>
     </div>
-    <form method="get" class="filters" style="margin-bottom: 0;">
+    <div class="head-actions">
+        <a class="secondary" href="{% url 'management_line_rates' %}">📐 تنظیم ضرایب لاین و گرید</a>
+    </div>
+</div>
+
+<form class="admin-toolbar" method="get">
+    <div class="toolbar-search">
+        <span>📅</span>
         <input name="date" value="{{ filters.date }}" placeholder="انتخاب تاریخ ماه (۱۴۰۵/۰۶/۰۱)" class="jalali-date">
-        <button class="primary">فیلتر دوره</button>
-        <a class="secondary" href="{% url 'management_line_rates' %}">⚙️ تنظیم ضرایب لاین و گرید</a>
-    </form>
+    </div>
+    <button class="primary" style="padding: 8px 18px;">مشاهده دوره</button>
+    <a class="text-action" href="{% url 'management_commission_report' %}">ماه جاری</a>
+</form>
+
+<div class="admin-stat-grid">
+    <article>
+        <span class="stat-icon rose">◎</span>
+        <div>
+            <small>مجموع کل سهم کالاها</small>
+            <strong>{{ total_sales_units }}</strong>
+            <span>واحد کالا تسهیم‌شده</span>
+        </div>
+    </article>
+    <article>
+        <span class="stat-icon green">💵</span>
+        <div>
+            <small>مجموع ناخالص پورسانت</small>
+            <strong>{{ total_gross_payout|persian_int }}</strong>
+            <span>ریال (قبل از کسورات)</span>
+        </div>
+    </article>
+    <article>
+        <span class="stat-icon gold">⚠️</span>
+        <div>
+            <small>مجموع کسورات تخلفات</small>
+            <strong style="color: var(--red);">{{ total_deductions|persian_int }}</strong>
+            <span>ریال جریمه‌های ماه</span>
+        </div>
+    </article>
+    <article>
+        <span class="stat-icon blue">﷼</span>
+        <div>
+            <small>مجموع خالص پرداختی</small>
+            <strong style="color: var(--green, #237554);">{{ total_net_payout|persian_int }}</strong>
+            <span>ریال خالص نهایی تسویه</span>
+        </div>
+    </article>
 </div>
 
-<div class="stats">
-    <article>
-        <span>مجموع کل سهم کالاها</span>
-        <strong style="color: var(--green, #237554); font-size: 1.6rem;">{{ total_sales_units }}</strong>
-        <small>واحد کالا بین پرسنل</small>
-    </article>
-    <article>
-        <span>مجموع ناخالص پورسانت</span>
-        <strong>{{ total_gross_payout|persian_int }} ریال</strong>
-        <small>قبل از کسورات</small>
-    </article>
-    <article>
-        <span>مجموع کسورات تخلفات</span>
-        <strong style="color: #c53030;">{{ total_deductions|persian_int }} ریال</strong>
-        <small>کل جریمه‌های دوره</small>
-    </article>
-    <article>
-        <span>مجموع خالص پرداختی</span>
-        <strong style="color: var(--green, #237554); font-size: 1.6rem;">{{ total_net_payout|persian_int }} ریال</strong>
-        <small>خالص نهایی تسویه</small>
-    </article>
-</div>
-
-<article class="card">
+<article class="card admin-table-card">
+    <div class="section-heading">
+        <div>
+            <h2>ریز محاسبات پرسنل در این دوره</h2>
+            <p>سهم کالا، پورسانت فروش، کسورات و مبلغ خالص قابل پرداخت به هر کارمند</p>
+        </div>
+    </div>
     <div class="table-wrap">
         <table>
             <thead>
@@ -65,8 +90,10 @@
                             {% else %}
                             <span class="avatar small">{{ row.employee.first_name|slice:':1' }}</span>
                             {% endif %}
-                            <b>{{ row.employee.full_name }}</b>
-                            <small>{{ row.employee.employee_code }}</small>
+                            <div>
+                                <b>{{ row.employee.full_name }}</b>
+                                <small>کد: {{ row.employee.employee_code }}</small>
+                            </div>
                         </div>
                     </td>
                     <td><span class="badge">سطح {{ row.employee.commission_level.code }}</span></td>
@@ -76,26 +103,26 @@
                     <td>{{ row.metrics.gross_sales_commission|persian_int }} ریال</td>
                     <td>
                         {% if row.metrics.deduction > 0 %}
-                        <span style="color: #c53030;">{{ row.metrics.deduction|persian_int }} ریال</span>
+                        <span style="color: var(--red);">{{ row.metrics.deduction|persian_int }} ریال</span>
                         {% else %}
-                        ۰
+                        <span style="color: var(--muted);">۰</span>
                         {% endif %}
                     </td>
                     <td>
                         {% if row.metrics.reward > 0 %}
-                        <span style="color: var(--green, #237554);">+{{ row.metrics.reward|persian_int }}</span>
+                        <span style="color: var(--green, #237554); font-weight: 700;">+{{ row.metrics.reward|persian_int }}</span>
                         {% else %}
-                        —
+                        <span style="color: var(--muted);">—</span>
                         {% endif %}
                     </td>
-                    <td><strong style="color: var(--green, #237554); font-size: 1.1rem;">{{ row.metrics.commission|persian_int }} ریال</strong></td>
+                    <td><strong style="color: var(--green, #237554); font-size: 15px;">{{ row.metrics.commission|persian_int }} ریال</strong></td>
                     <td>
-                        <a class="table-link" href="{% url 'management_employee_detail' row.employee.pk %}?tab=summary">جزئیات کارمند</a>
+                        <a class="table-link" href="{% url 'management_employee_detail' row.employee.pk %}?tab=summary">پرونده پرسنل</a>
                     </td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="10" class="empty">کارمندی یافت نشد.</td>
+                    <td colspan="10" class="empty">کارمندی در این بازه یافت نشد.</td>
                 </tr>
                 {% endfor %}
             </tbody>

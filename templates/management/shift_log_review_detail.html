@@ -1,0 +1,185 @@
+{% extends 'base.html' %}
+{% load persian %}
+{% block title %}بررسی کارکرد {{ log.employee.full_name }} — {{ log.date|jalali }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div>
+        <p class="eyebrow">بررسی و تأیید کارکرد روزانه</p>
+        <h1>{{ log.employee.full_name }} — {{ log.date|jalali }}</h1>
+        <p>شیفت: <strong>{{ log.shift.title }}</strong> · گرید: <strong>سطح {{ log.employee.commission_level.code }}</strong> · لاین اصلی: <strong>{{ log.main_department.name }}</strong></p>
+    </div>
+    <a class="secondary" href="{% url 'management_shift_log_reviews' %}">بازگشت به صف بررسی</a>
+</div>
+
+{% if log.support_intervals.exists %}
+<article class="card" style="margin-bottom:18px">
+    <div class="card-head"><h2>🕒 بازه‌های دقیق حضور در لاین‌های کمکی</h2></div>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>لاین مقصد</th><th>ساعت شروع</th><th>ساعت پایان</th><th>مدت</th></tr></thead>
+            <tbody>
+                {% for interval in log.support_intervals.all %}
+                <tr>
+                    <td><b>{{ interval.department.name }}</b></td>
+                    <td>{{ interval.start_time|time:"H:i" }}</td>
+                    <td>{{ interval.end_time|time:"H:i" }}</td>
+                    <td>{{ interval.duration_display }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p style="margin-bottom:0"><b>مجموع کمکی:</b> {{ log.support_hours }} ساعت · <b>لاین اصلی:</b> {{ log.main_hours }} ساعت</p>
+</article>
+{% endif %}
+
+<!-- Quick Stats Summary of the Shift Log -->
+<div class="stats">
+    <article>
+        <span>مجموع ساعت کارکرد</span>
+        <strong style="color: var(--green, #237554);">{{ log.total_hours }} ساعت</strong>
+        <small>{{ log.main_hours }}h اصلی + {{ log.support_hours|default:'0' }}h کمکی</small>
+    </article>
+    <article>
+        <span>سهم محاسبه‌شده کالا</span>
+        <strong style="color: var(--green, #237554);">{{ calc.total_units_share }} کالا</strong>
+        <small>تسهیم ساعتی از فروش لاین‌ها</small>
+    </article>
+    <article>
+        <span>پورسانت محاسبه‌شده روز</span>
+        <strong style="color: var(--green, #237554); font-size: 1.5rem;">{{ calc.total_commission|persian_int }} ریال</strong>
+        <small>مبلغ قابل واریز قطعی به حساب</small>
+    </article>
+    <article>
+        <span>وضعیت فعلی</span>
+        <strong>
+            {% if log.status == 'APPROVED' %}
+            <span class="status approved">تأییدشده</span>
+            {% elif log.status == 'REJECTED' %}
+            <span class="status rejected">ردشده</span>
+            {% else %}
+            <span class="status pending">در انتظار تأیید</span>
+            {% endif %}
+        </strong>
+        <small>{% if log.is_frozen %}🔒 محاسبات فریز شده است{% else %}⏳ محاسبات در وضعیت باز{% endif %}</small>
+    </article>
+</div>
+
+<!-- Detailed Calculation Breakdown Card -->
+<article class="card">
+    <div class="card-head">
+        <h2>📊 ریز محاسبات تسهیم ساعتی و پورسانت لاین‌ها در این شیفت</h2>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>بخش / لاین</th>
+                    <th>نوع حضور</th>
+                    <th>ساعت کار کارمند</th>
+                    <th>مجموع ساعت کل پرسنل در این لاین</th>
+                    <th>فروش کل لاین در شیفت</th>
+                    <th>سهم محاسبه‌شده</th>
+                    <th>نرخ پورسانت (گرید {{ log.employee.commission_level.code }})</th>
+                    <th>مبلغ پورسانت لاین</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if calc.main_info %}
+                <tr>
+                    <td><b>{{ calc.main_info.department_name }}</b></td>
+                    <td><span class="badge" style="background: #e6f4ea; color: #137333;">لاین اصلی</span></td>
+                    <td>{{ calc.main_info.hours }} ساعت</td>
+                    <td>{{ calc.main_info.total_dept_hours }} ساعت</td>
+                    <td>
+                        <strong>{{ calc.main_info.total_sold_units }} عدد</strong>
+                        {% if not calc.main_info.has_performance_recorded %}
+                        <small style="color: #c53030;">⚠️ فروش این لاین هنوز ثبت نشده (صفر)</small>
+                        {% endif %}
+                    </td>
+                    <td><b style="color: var(--green, #237554); font-size: 14px;">{{ calc.main_info.share_units }} کالا</b></td>
+                    <td>{{ calc.main_info.rate_per_unit|persian_int }} ریال</td>
+                    <td><strong style="color: var(--green, #237554);">{{ calc.main_info.commission|persian_int }} ریال</strong></td>
+                </tr>
+                {% endif %}
+
+                {% for s in calc.support_infos %}
+                <tr>
+                    <td><b>{{ s.department_name }}</b></td>
+                    <td><span class="badge" style="background: #e8f0fe; color: #1a73e8;">لاین کمکی</span></td>
+                    <td>{{ s.hours }} ساعت</td>
+                    <td>{{ s.total_dept_hours }} ساعت</td>
+                    <td>
+                        <strong>{{ s.total_sold_units }} عدد</strong>
+                        {% if not s.has_performance_recorded %}
+                        <small style="color: #c53030;">⚠️ فروش این لاین هنوز ثبت نشده (صفر)</small>
+                        {% endif %}
+                    </td>
+                    <td><b style="color: var(--green, #237554); font-size: 14px;">{{ s.share_units }} کالا</b></td>
+                    <td>{{ s.rate_per_unit|persian_int }} ریال</td>
+                    <td><strong style="color: var(--green, #237554);">{{ s.commission|persian_int }} ریال</strong></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr style="background: #f9fafb; font-weight: bold;">
+                    <td colspan="5" style="text-align: left; padding-left: 20px;">جمع کل سهم و پورسانت این شیفت:</td>
+                    <td style="color: var(--green, #237554); font-size: 15px;">{{ calc.total_units_share }} کالا</td>
+                    <td>—</td>
+                    <td style="color: var(--green, #237554); font-size: 16px;">{{ calc.total_commission|persian_int }} ریال</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</article>
+
+{% if log.employee_note %}
+<article class="card">
+    <h3>📝 توضیحات و یادداشت کارمند هنگام ثبت:</h3>
+    <p style="background: rgba(0,0,0,0.02); padding: 12px 16px; border-radius: 8px; margin-top: 6px;">
+        {{ log.employee_note }}
+    </p>
+</article>
+{% endif %}
+
+<!-- Review & Action Form Card -->
+<article class="card form-card" style="border: 2px solid {% if log.status == 'APPROVED' %}#86efac{% else %}var(--green, #237554){% endif %};">
+    <div class="card-head">
+        <h2>⚖️ ثبت تصمیم مدیر و فریز مالی</h2>
+    </div>
+    
+    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 14px 18px; margin-bottom: 18px;">
+        <p style="margin: 0; font-size: 13px; color: #166534; line-height: 1.6;">
+            🔒 <strong>قانون فریز مالی:</strong> به محض زدن دکمه <strong>«تأیید کارکرد»</strong>، پورسانت روز کارمند به مبلغ <strong>{{ calc.total_commission|persian_int }} ریال</strong> به حساب کاربری وی واریز و برای همیشه فریز می‌شود. هرگونه تغییر در ضرایب یا قوانین آینده، این محاسبات تاریخی را تغییر نخواهد داد.
+        </p>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        <div class="field" style="margin-bottom: 16px;">
+            <label style="font-size: 13.5px; font-weight: 700; margin-bottom: 8px; display: block;">تصمیم نهایی مدیر:</label>
+            <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+                {% for radio in form.action %}
+                <label style="display: flex; align-items: center; gap: 6px; padding: 10px 18px; border-radius: 10px; border: 1.5px solid var(--line); background: #fff; cursor: pointer; font-weight: 600;">
+                    {{ radio.tag }}
+                    <span>{{ radio.choice_label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            {% for error in form.action.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </div>
+
+        <div class="field" style="margin-bottom: 18px;">
+            <label style="font-size: 13px; font-weight: 600; margin-bottom: 6px; display: block;">
+                یادداشت یا بازخورد برای کارمند <small style="color: var(--muted); font-weight: 400;">(در صورت رد کارکرد، نوشتن دلیل الزامی است)</small>:
+            </label>
+            {{ form.manager_note }}
+            {% for error in form.manager_note.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </div>
+
+        <button class="primary" style="padding: 12px 28px; font-size: 14px; font-weight: 700;">
+            ثبت تصمیم و اعمال فریز مالی
+        </button>
+    </form>
+</article>
+{% endblock %}

@@ -2,16 +2,16 @@
 {% load persian %}
 {% block title %}ثبت سریع فروش لاین‌ها (جدولی){% endblock %}
 {% block content %}
-<div class="page-head">
+<div class="admin-page-head">
     <div>
-        <p class="eyebrow">مدیریت فروش و عملکرد</p>
+        <span class="admin-kicker">مدیریت فروش و عملکرد</span>
         <h1>ثبت سریع فروش لاین‌ها</h1>
         <p>ورود تعداد کالای فروخته‌شده برای تمام لاین‌ها در یک تاریخ و شیفت مشخص</p>
     </div>
     <a class="secondary" href="{% url 'management_line_performances' %}">مشاهده فهرست فروش</a>
 </div>
 
-<article class="card filter-card">
+<article class="card filter-card" style="margin-bottom: 16px;">
     <form method="get" class="filters" style="margin-bottom: 0;">
         <input name="date" value="{{ selected_date_jalali }}" placeholder="تاریخ (۱۴۰۵/۰۶/۰۷)" class="jalali-date">
         <select name="shift" onchange="this.form.submit()">
@@ -29,33 +29,39 @@
         <input type="hidden" name="date" value="{{ selected_date_jalali }}">
         <input type="hidden" name="shift" value="{{ selected_shift.pk }}">
 
-        <div class="card-head" style="margin-bottom: 15px;">
-            <h2>ثبت فروش لاین‌ها برای: <span style="color: var(--green, #237554);">{{ selected_date|jalali }} — {{ selected_shift.title }}</span></h2>
+        <div class="section-heading" style="margin-bottom: 16px;">
+            <div>
+                <h2>ثبت آمار فروش: <span style="color: var(--green, #237554);">{{ selected_date|jalali }} — {{ selected_shift.title }}</span></h2>
+                <p>تعداد کالاهای فروخته‌شده هر لاین را در این شیفت وارد کنید</p>
+            </div>
         </div>
 
         <div class="table-wrap">
             <table>
                 <thead>
                     <tr>
-                        <th style="width: 40%;">لاین / بخش</th>
-                        <th style="width: 35%;">تعداد کالای فروخته‌شده (واحد)</th>
-                        <th style="width: 25%;">وضعیت رکورد</th>
+                        <th style="width: 35%;">لاین / بخش</th>
+                        <th style="width: 35%;">تعداد کالای فروخته‌شده (عدد)</th>
+                        <th style="width: 30%;">وضعیت رکورد در این شیفت</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for row in dept_rows %}
                     <tr>
                         <td>
-                            <strong style="font-size: 1.05rem;">{{ row.department.name }}</strong>
+                            <strong style="font-size: 14.5px;">{{ row.department.name }}</strong>
                         </td>
                         <td>
-                            <input type="number" name="sold_units_{{ row.department.pk }}" value="{{ row.sold_units }}" min="0" step="1" style="width: 140px; font-size: 1.1rem; font-weight: bold; padding: 6px 12px;" inputmode="numeric">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="number" name="sold_units_{{ row.department.pk }}" value="{{ row.sold_units }}" min="0" step="1" style="width: 140px; font-size: 15px; font-weight: 700; padding: 7px 12px; border-radius: 8px;" inputmode="numeric">
+                                <span style="color: var(--muted); font-size: 12px;">کالا</span>
+                            </div>
                         </td>
                         <td>
                             {% if row.record %}
-                            <span class="status approved">قبلاً ثبت شده ({{ row.sold_units }} عدد)</span>
+                            <span class="status approved">ثبت شده ({{ row.sold_units }} عدد)</span>
                             {% else %}
-                            <span style="color: #888;">ثبت‌نشده</span>
+                            <span class="status draft">هنوز ثبت نشده</span>
                             {% endif %}
                         </td>
                     </tr>
@@ -69,8 +75,8 @@
         </div>
 
         {% if dept_rows %}
-        <div style="margin-top: 20px; text-align: left;">
-            <button class="primary" name="save_batch" value="1" type="submit" style="padding: 10px 24px; font-size: 1.05rem;">
+        <div style="margin-top: 22px; display: flex; justify-content: flex-end;">
+            <button class="primary" name="save_batch" value="1" type="submit" style="padding: 12px 28px; font-size: 14px; font-weight: 700; border-radius: 10px; box-shadow: 0 4px 12px rgba(35, 117, 84, 0.25);">
                 💾 ذخیره عملکرد تمام لاین‌ها
             </button>
         </div>

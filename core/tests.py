@@ -13,6 +13,7 @@ from .models import (
     EmployeeLevelHistory,
     LineCommissionRate,
     LineShiftPerformance,
+    LineTarget,
     Shift,
     SupportLineInterval,
     Violation,
@@ -160,6 +161,105 @@ class ShiftManagementTests(BaseEmployeeTest):
         self.assertEqual(emp.default_shift, self.shift_evening)
         self.assertEqual(emp.standard_daily_hours, Decimal("8.0"))
 
+
+class DepartmentManagementTests(BaseEmployeeTest):
+    def test_manager_can_create_and_edit_department_with_audit(self):
+        self.client.force_login(self.manager_user)
+        response = self.client.post(reverse("management_department_create"), {"name": "  کیف   و کفش  ", "is_active": "on"})
+        self.assertEqual(response.status_code, 302)
+        department = Department.objects.get(name="کیف و کفش")
+        self.assertTrue(AuditLog.objects.filter(action="department.created", entity_id=str(department.pk)).exists())
+        response = self.client.post(reverse("management_department_edit", args=[department.pk]), {"name": "کفش", "is_active": ""})
+        self.assertEqual(response.status_code, 302)
+        department.refresh_from_db()
+        self.assertEqual(department.name, "کفش")
+        self.assertFalse(department.is_active)
+        self.assertTrue(AuditLog.objects.filter(action="department.updated", entity_id=str(department.pk)).exists())
+
+    def test_duplicate_department_name_is_rejected_case_insensitively(self):
+        self.client.force_login(self.manager_user)
+        response = self.client.post(reverse("management_department_create"), {"name": self.department.name, "is_active": "on"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "لاین دیگری با این نام وجود دارد")
+
+    def test_employee_cannot_manage_departments(self):
+        self.client.force_login(self.employee_user)
+        self.assertEqual(self.client.get(reverse("management_departments")).status_code, 403)
+
+    def test_department_cards_show_real_target_progress(self):
+        LineTarget.objects.create(
+            department=self.department, bronze_units=10, bronze_reward=100,
+            silver_units=20, silver_reward=200, gold_units=30, gold_reward=300,
+        )
+        LineShiftPerformance.objects.create(
+            date=date.today().replace(day=1), shift=self.shift_morning,
+            department=self.department, sold_units=5, recorded_by=self.manager_user,
+        )
+        self.client.force_login(self.manager_user)
+        response = self.client.get(reverse("management_departments"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "5 کالا")
+        self.assertContains(response, "50٪ مسیر تارگت بعدی")
+
+    def test_inactive_line_without_target_or_performance_renders_gracefully(self):
+        inactive = Department.objects.create(name="لاین غیرفعال", is_active=False)
+        self.client.force_login(self.manager_user)
+        response = self.client.get(reverse("management_departments"))
+        self.assertContains(response, inactive.name)
+        self.assertContains(response, "بدون داده")
+        detail = self.client.get(reverse("management_department_detail", args=[inactive.pk]))
+        self.assertEqual(detail.status_code, 200)
+        self.assertContains(detail, "هنوز عملکردی برای این لاین ثبت نشده است")
+
+    def test_old_line_rates_route_redirects_to_departments(self):
+        self.client.force_login(self.manager_user)
+        response = self.client.get(reverse("management_line_rates"))
+        self.assertRedirects(response, reverse("management_departments"))
+
+    def test_employee_cannot_access_department_control_center(self):
+        self.client.force_login(self.employee_user)
+        response = self.client.get(reverse("management_department_detail", args=[self.department.pk]))
+        self.assertEqual(response.status_code, 403)
+
+
+class ViolationRuleManagementTests(BaseEmployeeTest):
+    def test_manager_can_create_line_scoped_rule(self):
+        self.client.force_login(self.manager_user)
+        response = self.client.post(reverse("management_violation_rule_create"), {
+            "code": "LATE", "title": "تاخیر", "first_points": 1,
+            "second_points": 2, "third_points": 4,
+            "recurrence_window": ViolationRule.RecurrenceWindow.SAME_MONTH,
+            "departments": [self.department.pk], "is_active": "on",
+        })
+        self.assertEqual(response.status_code, 302)
+        rule = ViolationRule.objects.get(code="LATE")
+        self.assertFalse(rule.all_departments)
+        self.assertEqual(list(rule.departments.all()), [self.department])
+        self.assertTrue(AuditLog.objects.filter(action="violation_rule.created").exists())
+
+    def test_violation_keeps_rule_snapshot_after_rule_change(self):
+        rule = ViolationRule.objects.create(
+            code="V-SNAP", title="قانون اولیه", first_points=2, second_points=4, third_points=8,
+        )
+        self.client.force_login(self.manager_user)
+        response = self.client.post(reverse("violation_create"), {
+            "employee": self.employee.pk, "rule": rule.pk,
+            "violation_date": "۱۴۰۵/۰۶/۰۹", "occurrence": 2, "description": "شرح",
+        })
+        self.assertEqual(response.status_code, 302)
+        violation = Violation.objects.get(rule=rule)
+        rule.title = "قانون ویرایش‌شده"
+        rule.second_points = 20
+        rule.save()
+        violation.refresh_from_db()
+        self.assertEqual(violation.points_snapshot, 4)
+        self.assertEqual(violation.rule_snapshot["title"], "قانون اولیه")
+        self.assertEqual(violation.rule_snapshot["points"], 4)
+
+    def test_employee_cannot_manage_violation_rules(self):
+        self.client.force_login(self.employee_user)
+        self.assertEqual(self.client.get(reverse("management_violation_rules")).status_code, 403)
+
 class DailyShiftLogTests(BaseEmployeeTest):
     def setUp(self):
         super().setUp()
@@ -282,7 +382,7 @@ class DailyShiftLogTests(BaseEmployeeTest):
         response = self.client.post(reverse("shift_log_create"), payload)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(DailyShiftLog.objects.count(), 1)
-        self.assertContains(response, "قبلاً کارکرد ثبت کرده‌اید")
+        self.assertContains(response, "قبلاً کارکرد ثبت کرده‌ای")
 
     def test_employee_cannot_view_another_employee_shift_log(self):
         other_user = User.objects.create_user("E002", password="StrongPass123!")
@@ -315,7 +415,7 @@ class DailyShiftLogTests(BaseEmployeeTest):
             main_hours=Decimal("6.0"),
         )
         self.client.force_login(self.manager_user)
-        response = self.client.get(reverse("management_shift_logs"))
+        response = self.client.get(reverse("management_shift_log_reviews"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.employee.full_name)
 
@@ -395,14 +495,6 @@ class SupportLineIntervalTests(BaseEmployeeTest):
         data["support-0-DELETE"] = "on"
         self.client.post(reverse("shift_log_edit", args=[log.pk]), data)
         self.assertTrue(AuditLog.objects.filter(action="support_interval.deleted").exists())
-
-    def test_manager_can_review_and_edit_employee_intervals(self):
-        log = DailyShiftLog.objects.create(employee=self.employee, date=date.today(), shift=self.shift_morning, main_department=self.department, main_hours=Decimal("6"))
-        SupportLineInterval.objects.create(shift_log=log, department=self.shirt, start_time=time(10, 30), end_time=time(11, 30))
-        log.recalculate_allocations()
-        self.client.force_login(self.manager_user)
-        self.assertEqual(self.client.get(reverse("shift_log_detail", args=[log.pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse("shift_log_edit", args=[log.pk])).status_code, 200)
 
 class LineShiftPerformanceTests(BaseEmployeeTest):
     def setUp(self):
@@ -536,20 +628,59 @@ class LineCommissionEngineTests(BaseEmployeeTest):
         self.assertEqual(m2["gross_sales_commission"], 24000)
         self.assertEqual(m2["commission"], 24000)
 
-    def test_manager_can_view_and_update_rates_matrix(self):
+    def test_manager_can_update_rates_and_targets_from_department_detail(self):
         self.client.force_login(self.manager_user)
         response = self.client.get(reverse("management_line_rates"))
-        self.assertEqual(response.status_code, 200)
+        self.assertRedirects(response, reverse("management_departments"))
 
-        payload = {
-            f"rate_{self.dept_pants.pk}_{self.level_a.pk}": "2000",
-            f"rate_{self.dept_accessories.pk}_{self.level_a.pk}": "900",
-        }
-        response = self.client.post(reverse("management_line_rates"), payload)
+        detail_url = reverse("management_department_detail", args=[self.dept_pants.pk])
+        response = self.client.post(detail_url, {"section": "rates", f"rate_{self.level_a.pk}": "2000"})
+        self.assertEqual(response.status_code, 302)
+        response = self.client.post(detail_url, {
+            "section": "target", "bronze_units": "30", "bronze_reward": "5000000",
+            "silver_units": "60", "silver_reward": "12000000",
+            "gold_units": "90", "gold_reward": "30000000", "is_active": "on",
+        })
         self.assertEqual(response.status_code, 302)
 
         rate = LineCommissionRate.objects.get(department=self.dept_pants, commission_level=self.level_a)
         self.assertEqual(rate.rate_per_unit, 2000)
+        target = LineTarget.objects.get(department=self.dept_pants)
+        self.assertEqual(target.bronze_units, 30)
+        self.assertEqual(target.gold_reward, 30000000)
+        self.assertTrue(AuditLog.objects.filter(action="department.rates_updated").exists())
+        self.assertTrue(AuditLog.objects.filter(action="department.target_updated").exists())
+
+    def test_line_target_reward_uses_monthly_units_share(self):
+        LineTarget.objects.create(
+            department=self.dept_pants,
+            bronze_units=30,
+            bronze_reward=5000000,
+            silver_units=60,
+            silver_reward=12000000,
+            gold_units=90,
+            gold_reward=30000000,
+        )
+        DailyShiftLog.objects.create(
+            employee=self.employee,
+            date=date(2026, 8, 29),
+            shift=self.shift_morning,
+            main_department=self.dept_pants,
+            main_hours=Decimal("6.0"),
+        )
+        LineShiftPerformance.objects.create(
+            date=date(2026, 8, 29),
+            shift=self.shift_morning,
+            department=self.dept_pants,
+            sold_units=40,
+            recorded_by=self.manager_user,
+        )
+        metrics = employee_metrics(self.employee, date(2026, 8, 1), date(2026, 8, 31))
+        self.assertEqual(metrics["total_sales_units_share"], Decimal("40.0"))
+        self.assertEqual(metrics["reward"], 5000000)
+        self.assertEqual(metrics["line_target_result"]["achieved_title"], "تارگت برنزی 🥉")
+        self.assertEqual(metrics["line_target_result"]["next_target_title"], "تارگت نقره‌ای 🥈")
+        self.assertEqual(metrics["commission"], 5060000)
 
 class CommissionTests(BaseEmployeeTest):
     def test_violation_is_deduction(self):

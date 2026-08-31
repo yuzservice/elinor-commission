@@ -30,33 +30,47 @@
         </div>
     </a>
     
-    <nav>
-        <div class="nav-group-title">میز کار</div>
-        <a href="{% url 'dashboard' %}">📊 داشبورد و خانه</a>
-        <a href="{% url 'profile' %}">👤 پروفایل من</a>
-        <a href="{% url 'my_commission_report' %}">💰 کارنامه پورسانت من</a>
+    <nav class="sidebar-nav">
+        <a class="nav-home" href="{% url 'dashboard' %}"><span>⌂</span> داشبورد و خانه</a>
 
-        <div class="nav-group-title">کارکرد و شیفت</div>
-        <a href="{% url 'shift_log_create' %}">⏱️ ثبت کارکرد روزانه</a>
-        <a href="{% url 'shift_logs' %}">📋 کارکردهای من</a>
-
-        <div class="nav-group-title">تخلفات</div>
-        <a href="{% url 'violations' %}">⚠️ تخلفات</a>
+        {% if not user.employee.can_review %}
+        <!-- منوی اختصاصی کارمند -->
+        <details class="nav-section" open>
+            <summary><span>⏱️</span> میز کار من <i>⌄</i></summary>
+            <div>
+                <a href="{% url 'shift_log_create' %}">⏱️ ثبت کارکرد روزانه</a>
+                <a href="{% url 'shift_logs' %}">📋 کارکردهای من</a>
+                <a href="{% url 'my_commission_report' %}">💰 کارنامه پورسانت من</a>
+                <a href="{% url 'violations' %}">⚠️ تخلفات من</a>
+            </div>
+        </details>
+        {% endif %}
 
         {% if user.employee.can_review %}
-        <div class="nav-group-title" style="margin-top: 16px; color: rgba(223, 244, 233, 0.7); border-top: 1px solid rgba(255,255,255,0.08); padding-top: 12px;">مدیریت فروش و تسویه</div>
-        <a href="{% url 'management_commission_report' %}">💵 تسویه و گزارش پورسانت</a>
-        <a href="{% url 'management_line_rates' %}">📐 ضرایب لاین و گرید</a>
-        <a href="{% url 'management_line_performances' %}">🛍️ فروش روزانه لاین‌ها</a>
-        <a href="{% url 'management_shift_logs' %}">👥 گزارش کارکرد پرسنل</a>
-
-        <div class="nav-group-title">تنظیمات و تعاریف</div>
-        <a href="{% url 'management_shifts' %}">🕒 تعریف شیفت‌ها</a>
-        <a href="{% url 'management_employees' %}">👥 مدیریت کارکنان</a>
-        <a href="{% url 'violation_create' %}">⚠️ ثبت تخلف پرسنل</a>
-        <a href="{% url 'branding_settings' %}">🎨 تنظیمات برندینگ</a>
-        {% if user.is_staff %}<a href="/admin/">⚙️ Django Admin</a>{% endif %}
+        <!-- منوی اختصاصی مدیر -->
+        <details class="nav-section" open>
+            <summary><span>▦</span> عملیات و تأییدات <i>⌄</i></summary>
+            <div>
+                <a href="{% url 'management_shift_log_reviews' %}">✅ بررسی و تأیید کارکردها</a>
+                <a href="{% url 'management_line_performances' %}">🛍️ فروش روزانه لاین‌ها</a>
+                <a href="{% url 'management_commission_report' %}">💰 تسویه و گزارش پورسانت</a>
+                <a href="{% url 'violation_create' %}">⚠️ ثبت تخلف پرسنل</a>
+            </div>
+        </details>
+        <details class="nav-section" open>
+            <summary><span>⚙</span> تعاریف و تنظیمات <i>⌄</i></summary>
+            <div>
+                <a href="{% url 'management_employees' %}">👥 مدیریت کارکنان</a>
+                <a href="{% url 'management_departments' %}">👔 لاین‌ها (بخش‌ها)</a>
+                <a href="{% url 'management_violation_rules' %}">⚠️ قوانین تخلفات</a>
+                <a href="{% url 'management_shifts' %}">⏰ شیفت‌های کاری</a>
+                <a href="{% url 'branding_settings' %}">🎨 برندینگ و سامانه</a>
+                {% if user.is_staff %}<a href="/admin/">⚙️ پنل فنی Django</a>{% endif %}
+            </div>
+        </details>
         {% endif %}
+
+        <a class="nav-profile" href="{% url 'profile' %}"><span>◉</span> پروفایل من</a>
     </nav>
     
     <form method="post" action="{% url 'logout' %}">
@@ -85,5 +99,26 @@
     </section>
 </main>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const currentPath = window.location.pathname;
+    const navLinks = document.querySelectorAll('nav a');
+    navLinks.forEach(link => {
+        const href = link.getAttribute('href');
+        if (href) {
+            const isExact = href === currentPath;
+            const isSub = href !== '/' && href !== '/dashboard/' && currentPath.startsWith(href);
+            if (isExact || isSub) {
+                link.classList.add('active');
+                const parentDetails = link.closest('details');
+                if (parentDetails) {
+                    parentDetails.setAttribute('open', 'open');
+                }
+            }
+        }
+    });
+});
+</script>
 </body>
 </html>

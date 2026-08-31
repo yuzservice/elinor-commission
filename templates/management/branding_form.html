@@ -1,15 +1,15 @@
 {% extends 'base.html' %}
 {% block title %}تنظیمات برندینگ سامانه{% endblock %}
 {% block content %}
-<div class="page-head">
+<div class="admin-page-head">
     <div>
-        <p class="eyebrow">تنظیمات عمومی و هویت بصری</p>
+        <span class="admin-kicker">تنظیمات عمومی و هویت بصری</span>
         <h1>برندینگ و ظاهر سامانه</h1>
         <p>تنظیم نام سازمان، عنوان پنل، رنگ سازمانی، لوگو و آیکون مرورگر</p>
     </div>
 </div>
 
-<article class="card form-card wide">
+<article class="card form-card wide admin-form-card" style="max-width: 820px;">
     <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
         <div class="form-grid">
@@ -25,45 +25,43 @@
                 {% for error in form.panel_name.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
             </div>
 
-            <div class="field">
+            <div class="field span-2">
                 <label>{{ form.primary_color.label }}<em>*</em></label>
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <div style="width: 50px;">{{ form.primary_color }}</div>
-                    <small style="color: var(--muted);">رنگ دکمه‌ها، نشانگرها و عناصر فعال</small>
+                    <small style="color: var(--muted);">رنگ تم اصلی دکمه‌ها، نشانگرها و عناصر فعال سامانه</small>
                 </div>
                 {% for error in form.primary_color.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
             </div>
 
-            <div class="field"></div>
-
-            <div class="field" style="border: 1px dashed var(--line); border-radius: 12px; padding: 14px;">
+            <div class="field" style="border: 1px dashed var(--line); border-radius: 12px; padding: 16px; background: #fafcfa;">
                 <label style="font-weight: 700; margin-bottom: 8px;">لوگوی سامانه (در بالای منو و صفحه ورود)</label>
                 {% if settings.logo %}
                 <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 12px; background: rgba(0,0,0,0.02); padding: 10px; border-radius: 8px;">
                     <img src="{{ settings.logo.url }}" alt="لوگوی فعلی" style="max-height: 48px; max-width: 120px; object-fit: contain;">
                     <div>
-                        <small style="display: block; color: var(--green); font-weight: 600;">لوگوی فعلی ثبت شده است</small>
+                        <small style="display: block; color: var(--green); font-weight: 700;">لوگوی فعلی فعال است</small>
                         <small style="color: var(--muted);">برای تغییر، فایل جدید انتخاب کنید</small>
                     </div>
                 </div>
                 {% endif %}
                 {{ form.logo }}
-                <small class="help">فرمت‌های مجاز: PNG, JPG, SVG, WEBP (حداکثر ۵ مگابایت)</small>
+                <small class="help" style="margin-top: 6px;">فرمت‌های مجاز: PNG, JPG, SVG, WEBP (حداکثر ۵ مگابایت)</small>
                 {% for error in form.logo.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
             </div>
 
-            <div class="field" style="border: 1px dashed var(--line); border-radius: 12px; padding: 14px;">
+            <div class="field" style="border: 1px dashed var(--line); border-radius: 12px; padding: 16px; background: #fafcfa;">
                 <label style="font-weight: 700; margin-bottom: 8px;">فاوآیکون (Favicon - آیکون تب مرورگر)</label>
                 {% if settings.favicon %}
                 <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 12px; background: rgba(0,0,0,0.02); padding: 10px; border-radius: 8px;">
                     <img src="{{ settings.favicon.url }}" alt="فاوآیکون فعلی" style="width: 32px; height: 32px; object-fit: contain;">
                     <div>
-                        <small style="display: block; color: var(--green); font-weight: 600;">فاوآیکون فعلی فعال است</small>
+                        <small style="display: block; color: var(--green); font-weight: 700;">فاوآیکون فعلی فعال است</small>
                     </div>
                 </div>
                 {% endif %}
                 {{ form.favicon }}
-                <small class="help">فرمت‌های مجاز: ICO, PNG, SVG (حداکثر ۲ مگابایت)</small>
+                <small class="help" style="margin-top: 6px;">فرمت‌های مجاز: ICO, PNG, SVG (حداکثر ۲ مگابایت)</small>
                 {% for error in form.favicon.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
             </div>
         </div>
@@ -72,8 +70,8 @@
         <div class="message error">{{ error }}</div>
         {% endfor %}
 
-        <div style="margin-top: 15px;">
-            <button class="primary" type="submit" style="padding: 10px 24px; font-size: 1.05rem;">
+        <div class="form-actions" style="margin-top: 24px;">
+            <button class="primary" type="submit">
                 💾 ذخیره تنظیمات برندینگ
             </button>
         </div>
