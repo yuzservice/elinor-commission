@@ -58,6 +58,9 @@ If makemigrations is executed inside the container, copy the generated migration
 ## Core Business Rule
 Commission inputs come from structured shift logs and line sales. Violations remain a separate deduction source. The removed Activities module must not be reintroduced without a new product decision.
 
+## Safe deletion
+Management deletion is POST/CSRF-only from each detail/edit Danger Zone. Department, Shift, Employee, DailyShiftLog and ViolationRule report counted blockers; successful deletions create AuditLog entries. AuditLog and SystemSettings have no delete UI.
+
 ## Next Product Area
 Before major implementation, finalize:
 - violation logic

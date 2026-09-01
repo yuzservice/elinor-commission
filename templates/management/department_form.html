@@ -34,4 +34,5 @@
         <button class="primary" type="submit">{{ submit }}</button>
     </form>
 </article>
+{% if department %}<article class="card" style="margin-top:24px;border:1px solid #fecaca;background:#fffafa"><h2 style="color:#b42318">منطقه خطر</h2><p>حذف فقط زمانی انجام می‌شود که هیچ وابستگی عملیاتی یا تنظیماتی باقی نمانده باشد.</p><form method="post" action="{% url 'management_department_delete' department.pk %}" onsubmit="return confirm('لاین «{{ department.name|escapejs }}» برای همیشه حذف شود؟');">{% csrf_token %}<button type="submit" class="secondary" style="color:#b42318;border-color:#ef4444">حذف لاین</button></form></article>{% endif %}
 {% endblock %}

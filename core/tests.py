@@ -222,6 +222,86 @@ class DepartmentManagementTests(BaseEmployeeTest):
         self.assertEqual(response.status_code, 403)
 
 
+class ManagementDeletionTests(BaseEmployeeTest):
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.manager_user)
+
+    def test_delete_is_manager_only_and_post_only(self):
+        shift = Shift.objects.create(code="DELETE_AUTH", title="حذف مجوز", start_time=time(8), end_time=time(9))
+        self.assertEqual(self.client.get(reverse("management_shift_delete", args=[shift.pk])).status_code, 405)
+        self.client.force_login(self.employee_user)
+        self.assertEqual(self.client.post(reverse("management_shift_delete", args=[shift.pk])).status_code, 403)
+        self.assertTrue(Shift.objects.filter(pk=shift.pk).exists())
+
+    def test_department_delete_success_audits_and_dependency_message_counts(self):
+        clean = Department.objects.create(name="لاین قابل حذف")
+        response = self.client.post(reverse("management_department_delete", args=[clean.pk]))
+        self.assertRedirects(response, reverse("management_departments"))
+        self.assertFalse(Department.objects.filter(pk=clean.pk).exists())
+        self.assertTrue(AuditLog.objects.filter(action="department.deleted", entity_id=str(clean.pk)).exists())
+        response = self.client.post(reverse("management_department_delete", args=[self.department.pk]), follow=True)
+        self.assertContains(response, "2 کارمند با این لاین به‌عنوان لاین اصلی")
+        self.assertTrue(Department.objects.filter(pk=self.department.pk).exists())
+
+    def test_shift_delete_blocks_with_count_then_deletes_clean_shift(self):
+        response = self.client.post(reverse("management_shift_delete", args=[self.shift_morning.pk]), follow=True)
+        self.assertContains(response, "2 کارمند با شیفت پیش‌فرض")
+        clean = Shift.objects.create(code="DELETE_ME", title="شیفت حذف", start_time=time(8), end_time=time(9))
+        self.client.post(reverse("management_shift_delete", args=[clean.pk]))
+        self.assertFalse(Shift.objects.filter(pk=clean.pk).exists())
+        self.assertTrue(AuditLog.objects.filter(action="shift.deleted", entity_id=str(clean.pk)).exists())
+
+    def test_employee_delete_blocks_history_and_keeps_user_on_success(self):
+        rule = ViolationRule.objects.create(code="EMP_BLOCK", title="وابستگی کارمند", first_points=1, second_points=2, third_points=3)
+        Violation.objects.create(employee=self.employee, rule=rule, violation_date=date(2026, 8, 1),
+                                 occurrence=1, points_snapshot=1, recorded_by=self.manager_user)
+        response = self.client.post(reverse("management_employee_delete", args=[self.employee.pk]), follow=True)
+        self.assertContains(response, "1 تخلف ثبت‌شده")
+        self.assertTrue(Employee.objects.filter(pk=self.employee.pk).exists())
+        user = User.objects.create_user("delete-user")
+        clean = Employee.objects.create(user=user, employee_code="DEL1", first_name="حذف", last_name="آزمایشی",
+                                        mobile="09120000111", commission_level=self.level_a)
+        self.client.post(reverse("management_employee_delete", args=[clean.pk]))
+        self.assertFalse(Employee.objects.filter(pk=clean.pk).exists())
+        self.assertTrue(User.objects.filter(pk=user.pk).exists())
+        self.assertTrue(AuditLog.objects.filter(action="employee.deleted", entity_id=str(clean.pk)).exists())
+
+    def test_shift_log_delete_blocks_frozen_and_support_intervals(self):
+        log = DailyShiftLog.objects.create(employee=self.employee, date=date(2026, 8, 1), shift=self.shift_morning,
+                                           main_department=self.department, is_frozen=True)
+        response = self.client.post(reverse("management_shift_log_delete", args=[log.pk]), follow=True)
+        self.assertContains(response, "1 کارکرد تأیید یا فریز‌شده")
+        log.is_frozen = False
+        log.save(update_fields=["is_frozen"])
+        SupportLineInterval.objects.create(shift_log=log, department=Department.objects.create(name="کمکی حذف"),
+                                           start_time=time(11), end_time=time(12))
+        response = self.client.post(reverse("management_shift_log_delete", args=[log.pk]), follow=True)
+        self.assertContains(response, "1 بازه کمکی")
+
+    def test_violation_rule_delete_blocks_and_clean_rule_deletes(self):
+        linked = ViolationRule.objects.create(code="LINKED", title="قانون مرتبط", first_points=1, second_points=2, third_points=3)
+        linked.departments.add(self.department)
+        response = self.client.post(reverse("management_violation_rule_delete", args=[linked.pk]), follow=True)
+        self.assertContains(response, "1 لاین مرتبط")
+        clean = ViolationRule.objects.create(code="CLEAN", title="قانون پاک", first_points=1, second_points=2, third_points=3)
+        self.client.post(reverse("management_violation_rule_delete", args=[clean.pk]))
+        self.assertFalse(ViolationRule.objects.filter(pk=clean.pk).exists())
+
+    def test_line_performance_and_violation_delete_with_audit(self):
+        performance = LineShiftPerformance.objects.create(date=date(2026, 8, 2), shift=self.shift_evening,
+            department=self.department, sold_units=10, recorded_by=self.manager_user)
+        violation = Violation.objects.create(employee=self.employee, rule=ViolationRule.objects.create(
+            code="DELETE_V", title="تخلف حذف", first_points=1, second_points=2, third_points=3),
+            violation_date=date(2026, 8, 2), occurrence=1, points_snapshot=1, recorded_by=self.manager_user)
+        self.client.post(reverse("management_line_performance_delete", args=[performance.pk]))
+        self.client.post(reverse("management_violation_delete", args=[violation.pk]))
+        self.assertFalse(LineShiftPerformance.objects.filter(pk=performance.pk).exists())
+        self.assertFalse(Violation.objects.filter(pk=violation.pk).exists())
+        self.assertTrue(AuditLog.objects.filter(action="line_performance.deleted", entity_id=str(performance.pk)).exists())
+        self.assertTrue(AuditLog.objects.filter(action="violation.deleted", entity_id=str(violation.pk)).exists())
+
+
 class ViolationRuleManagementTests(BaseEmployeeTest):
     def test_manager_can_create_line_scoped_rule(self):
         self.client.force_login(self.manager_user)

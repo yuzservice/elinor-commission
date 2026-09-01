@@ -182,4 +182,5 @@
         </button>
     </form>
 </article>
+<article class="card" style="margin-top:24px;border:1px solid #fecaca;background:#fffafa"><h2 style="color:#b42318">منطقه خطر</h2><p>کارکرد تأیید/فریز‌شده یا دارای بازه کمکی قابل حذف نیست.</p><form method="post" action="{% url 'management_shift_log_delete' log.pk %}" onsubmit="return confirm('کارکرد این روز حذف شود؟');">{% csrf_token %}<button type="submit" class="secondary" style="color:#b42318;border-color:#ef4444">حذف کارکرد</button></form></article>
 {% endblock %}

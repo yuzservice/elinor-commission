@@ -61,4 +61,5 @@
         </div>
     </form>
 </article>
+{% if item %}<article class="card" style="margin-top:24px;border:1px solid #fecaca;background:#fffafa"><h2 style="color:#b42318">منطقه خطر</h2><p>این رکورد فروش برای همیشه حذف می‌شود.</p><form method="post" action="{% url 'management_line_performance_delete' item.pk %}" onsubmit="return confirm('این رکورد فروش حذف شود؟');">{% csrf_token %}<button type="submit" class="secondary" style="color:#b42318;border-color:#ef4444">حذف رکورد فروش</button></form></article>{% endif %}
 {% endblock %}

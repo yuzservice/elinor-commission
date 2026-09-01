@@ -522,6 +522,16 @@ def line_performance_snapshot(obj):
         "sales_amount": obj.sales_amount,
     }
 
+def dependency_message(entity_label, blockers):
+    details = "، ".join(f"{count} {label}" for label, count in blockers if count)
+    return f"{entity_label} فعلاً قابل حذف نیست. ابتدا موارد زیر را تعیین تکلیف کنید: {details}."
+
+def delete_with_audit(*, request, obj, action, description, old_values=None):
+    with transaction.atomic():
+        audit(actor=request.user, action=action, instance=obj, description=description,
+              old_values=old_values or {})
+        obj.delete()
+
 @login_required
 @manager_required
 def management_line_performances(request):
@@ -607,6 +617,24 @@ def management_line_performance_edit(request, pk):
         "management/line_performance_form.html",
         {"form": form, "title": "ویرایش فروش لاین", "item": obj, "submit": "ذخیره تغییرات"},
     )
+
+@login_required
+@manager_required
+@require_POST
+def management_line_performance_delete(request, pk):
+    obj = get_object_or_404(
+        LineShiftPerformance.objects.select_related("shift", "department"),
+        pk=pk,
+    )
+    snapshot = line_performance_snapshot(obj)
+    label = f"{obj.department.name} - {obj.date} - {obj.shift.title}"
+
+    delete_with_audit(request=request, obj=obj, action="line_performance.deleted",
+                      description=f"حذف فروش روزانه لاین: {label}", old_values=snapshot)
+
+    messages.success(request, f"رکورد فروش «{label}» حذف شد.")
+    return redirect("management_line_performances")
+
 
 @login_required
 @manager_required
@@ -935,6 +963,40 @@ def management_violation_rule_edit(request, pk):
         return redirect("management_violation_rules")
     return render(request, "management/violation_rule_form.html", {"form": form, "rule": rule, "title": "ویرایش قانون تخلف"})
 
+@login_required
+@manager_required
+@require_POST
+def management_violation_rule_delete(request, pk):
+    rule = get_object_or_404(ViolationRule, pk=pk)
+    blockers = [("تخلف ثبت‌شده", rule.violations.count()), ("لاین مرتبط", rule.departments.count())]
+    if any(count for _, count in blockers):
+        messages.error(request, dependency_message("این قانون تخلف", blockers))
+        return redirect("management_violation_rule_edit", pk=pk)
+    title = rule.title
+    delete_with_audit(request=request, obj=rule, action="violation_rule.deleted",
+                      description=f"حذف قانون تخلف: {title}", old_values={"title": title, "code": rule.code})
+    messages.success(request, f"قانون تخلف «{title}» حذف شد.")
+    return redirect("management_violation_rules")
+
+@login_required
+@manager_required
+def management_violation_detail(request, pk):
+    violation = get_object_or_404(Violation.objects.select_related("employee", "rule", "recorded_by"), pk=pk)
+    return render(request, "management/violation_detail.html", {"violation": violation})
+
+@login_required
+@manager_required
+@require_POST
+def management_violation_delete(request, pk):
+    violation = get_object_or_404(Violation.objects.select_related("employee", "rule"), pk=pk)
+    snapshot = {"employee": violation.employee.full_name, "rule": violation.rule.title,
+                "date": str(violation.violation_date), "points": violation.points_snapshot}
+    label = f"{violation.rule.title} برای {violation.employee.full_name}"
+    delete_with_audit(request=request, obj=violation, action="violation.deleted",
+                      description=f"حذف تخلف ثبت‌شده: {label}", old_values=snapshot)
+    messages.success(request, f"تخلف «{label}» حذف شد.")
+    return redirect("violations")
+
 # ==========================================
 # Shifts Management
 # ==========================================
@@ -969,6 +1031,23 @@ def management_shift_edit(request, pk):
         messages.success(request, f"شیفت «{shift.title}» با موفقیت ویرایش شد.")
         return redirect("management_shifts")
     return render(request, "management/shift_form.html", {"form": form, "shift": shift, "title": "ویرایش شیفت کاری", "submit": "ذخیره تغییرات"})
+
+@login_required
+@manager_required
+@require_POST
+def management_shift_delete(request, pk):
+    shift = get_object_or_404(Shift, pk=pk)
+    blockers = [("کارمند با شیفت پیش‌فرض", shift.employees.count()),
+                ("کارکرد ثبت‌شده", shift.shift_logs.count()),
+                ("فروش روزانه لاین", shift.line_performances.count())]
+    if any(count for _, count in blockers):
+        messages.error(request, dependency_message("این شیفت", blockers))
+        return redirect("management_shift_edit", pk=pk)
+    title = shift.title
+    delete_with_audit(request=request, obj=shift, action="shift.deleted",
+                      description=f"حذف شیفت: {title}", old_values={"title": title, "code": shift.code})
+    messages.success(request, f"شیفت «{title}» حذف شد.")
+    return redirect("management_shifts")
 
 # ==========================================
 # Departments Management (غیرقابل حذف)
@@ -1013,7 +1092,7 @@ def management_departments(request):
 def management_department_detail(request, pk):
     department = get_object_or_404(Department, pk=pk)
     levels = CommissionLevel.objects.order_by("code")
-    target, _ = LineTarget.objects.get_or_create(department=department)
+    target = LineTarget.objects.filter(department=department).first()
 
     if request.method == "POST":
         section = request.POST.get("section")
@@ -1032,6 +1111,7 @@ def management_department_detail(request, pk):
                             )
                     action = "department.rates_updated"
                 elif section == "target":
+                    target = target or LineTarget(department=department)
                     values = {}
                     for field in ("bronze_units", "bronze_reward", "silver_units", "silver_reward", "gold_units", "gold_reward"):
                         values[field] = int(request.POST.get(field, getattr(target, field)))
@@ -1065,7 +1145,7 @@ def management_department_detail(request, pk):
     recent_performances = department.shift_performances.select_related("shift")[:10]
     return render(request, "management/department_detail.html", {
         "department": department, "rate_rows": rate_rows, "target": target,
-        "performance_units": units, "target_result": target.evaluate_target(units) if target.is_active else None,
+        "performance_units": units, "target_result": target.evaluate_target(units) if target and target.is_active else None,
         "rules": rules, "history": history, "recent_performances": recent_performances,
         "start": start, "end": end,
     })
@@ -1094,6 +1174,57 @@ def management_department_edit(request, pk):
         messages.success(request, f"لاین «{dept.name}» به‌روزرسانی شد.")
         return redirect("management_departments")
     return render(request, "management/department_form.html", {"form": form, "department": dept, "title": "ویرایش لاین", "submit": "ذخیره تغییرات"})
+
+def department_delete_blockers(department):
+    """وابستگی‌هایی که حذف لاین نباید با پاک‌کردن آن‌ها تاریخچه را از بین ببرد."""
+    blockers = []
+
+    checks = [
+        ("کارمند با این لاین به‌عنوان لاین اصلی", department.primary_employees.count()),
+        ("کارمند عضو این لاین", department.employees.count()),
+        ("کارکرد ثبت‌شده در لاین اصلی", department.main_shift_logs.count()),
+        ("کارکرد ثبت‌شده در لاین کمکی", department.support_shift_logs.count()),
+        ("بازه کمکی ثبت‌شده", department.support_intervals.count()),
+        ("فروش روزانه ثبت‌شده", department.shift_performances.count()),
+        ("ضریب پورسانت", department.commission_rates.count()),
+        ("تارگت لاین", int(LineTarget.objects.filter(department=department).exists())),
+        ("تارگت گرید", department.grade_targets.count()),
+        ("تارگت ماهانه تاریخی", department.monthly_targets.count()),
+        ("اتصال قانون تخلف", department.violation_rules.count()),
+    ]
+
+    for label, count in checks:
+        if count:
+            blockers.append((label, count))
+
+    return blockers
+
+
+@login_required
+@manager_required
+@require_POST
+def management_department_delete(request, pk):
+    department = get_object_or_404(Department, pk=pk)
+    blockers = department_delete_blockers(department)
+
+    if blockers:
+        messages.error(
+            request,
+            dependency_message("این لاین", blockers)
+        )
+        return redirect("management_department_edit", pk=pk)
+
+    department_id = department.pk
+    department_name = department.name
+
+    delete_with_audit(request=request, obj=department, action="department.deleted",
+                      description=f"حذف لاین بدون وابستگی: {department_name}",
+                      old_values={"id": department_id, "name": department_name,
+                                  "is_active": department.is_active})
+
+    messages.success(request, f"لاین «{department_name}» با موفقیت حذف شد.")
+    return redirect("management_departments")
+
 
 # ==========================================
 # Employees Management
@@ -1259,6 +1390,64 @@ def management_employee_edit(request, pk):
         "management/employee_form.html",
         {"form": form, "employee": employee, "title": "ویرایش کارمند", "submit": "ذخیره تغییرات"},
     )
+
+@login_required
+@manager_required
+@require_POST
+def management_employee_delete(request, pk):
+    employee = get_object_or_404(Employee.objects.select_related("user"), pk=pk)
+    blockers = [("کارکرد ثبت‌شده", employee.shift_logs.count()),
+                ("تخلف ثبت‌شده", employee.violations.count()),
+                ("سابقه تغییر گرید", employee.level_history.count())]
+    if any(count for _, count in blockers):
+        messages.error(request, dependency_message("این کارمند", blockers))
+        return redirect("management_employee_edit", pk=pk)
+    name, user_id = employee.full_name, employee.user_id
+    delete_with_audit(request=request, obj=employee, action="employee.deleted",
+                      description=f"حذف پرونده کارمند: {name}",
+                      old_values={"employee_code": employee.employee_code, "user_id": user_id})
+    messages.success(request, f"پرونده «{name}» حذف شد؛ حساب کاربری برای جلوگیری از حذف ضمنی نگه داشته شد.")
+    return redirect("management_employees")
+
+@login_required
+@manager_required
+@require_POST
+def management_shift_log_delete(request, pk):
+    log = get_object_or_404(DailyShiftLog.objects.select_related("employee"), pk=pk)
+    blockers = [("بازه کمکی", log.support_intervals.count())]
+    if log.is_frozen or log.status == DailyShiftLog.Status.APPROVED:
+        blockers.insert(0, ("کارکرد تأیید یا فریز‌شده", 1))
+    if any(count for _, count in blockers):
+        messages.error(request, dependency_message("این کارکرد", blockers))
+        return redirect("management_shift_log_review_detail", pk=pk)
+    snapshot = {"employee": log.employee.full_name, "date": str(log.date), "status": log.status}
+    delete_with_audit(request=request, obj=log, action="shift_log.deleted",
+                      description=f"حذف کارکرد {log.employee.full_name} در {log.date}", old_values=snapshot)
+    messages.success(request, "کارکرد حذف شد.")
+    return redirect("management_shift_log_reviews")
+
+@login_required
+@manager_required
+@require_POST
+def management_line_rate_delete(request, pk):
+    rate = get_object_or_404(LineCommissionRate.objects.select_related("department", "commission_level"), pk=pk)
+    department, label = rate.department, f"گرید {rate.commission_level.code}"
+    delete_with_audit(request=request, obj=rate, action="line_commission_rate.deleted",
+                      description=f"حذف ضریب پورسانت {label} از {department.name}",
+                      old_values={"rate_per_unit": rate.rate_per_unit})
+    messages.success(request, f"ضریب پورسانت {label} حذف شد.")
+    return redirect("management_department_detail", pk=department.pk)
+
+@login_required
+@manager_required
+@require_POST
+def management_line_target_delete(request, pk):
+    target = get_object_or_404(LineTarget.objects.select_related("department"), pk=pk)
+    department = target.department
+    delete_with_audit(request=request, obj=target, action="line_target.deleted",
+                      description=f"حذف تنظیمات تارگت {department.name}")
+    messages.success(request, "تنظیمات تارگت لاین حذف شد.")
+    return redirect("management_department_detail", pk=department.pk)
 
 @login_required
 @manager_required

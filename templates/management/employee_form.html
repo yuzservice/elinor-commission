@@ -38,4 +38,5 @@
         </div>
     </form>
 </article>
+{% if employee %}<article class="card" style="margin-top:24px;border:1px solid #fecaca;background:#fffafa;max-width:820px"><h2 style="color:#b42318">منطقه خطر</h2><p>پرونده فقط بدون سابقه کارکرد، تخلف یا تغییر گرید حذف می‌شود. حساب ورود به‌صورت ضمنی حذف نخواهد شد.</p><form method="post" action="{% url 'management_employee_delete' employee.pk %}" onsubmit="return confirm('پرونده «{{ employee.full_name|escapejs }}» حذف شود؟');">{% csrf_token %}<button type="submit" class="secondary" style="color:#b42318;border-color:#ef4444">حذف پرونده کارمند</button></form></article>{% endif %}
 {% endblock %}
