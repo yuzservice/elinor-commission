@@ -1428,29 +1428,6 @@ def management_shift_log_delete(request, pk):
 
 @login_required
 @manager_required
-@require_POST
-def management_line_rate_delete(request, pk):
-    rate = get_object_or_404(LineCommissionRate.objects.select_related("department", "commission_level"), pk=pk)
-    department, label = rate.department, f"گرید {rate.commission_level.code}"
-    delete_with_audit(request=request, obj=rate, action="line_commission_rate.deleted",
-                      description=f"حذف ضریب پورسانت {label} از {department.name}",
-                      old_values={"rate_per_unit": rate.rate_per_unit})
-    messages.success(request, f"ضریب پورسانت {label} حذف شد.")
-    return redirect("management_department_detail", pk=department.pk)
-
-@login_required
-@manager_required
-@require_POST
-def management_line_target_delete(request, pk):
-    target = get_object_or_404(LineTarget.objects.select_related("department"), pk=pk)
-    department = target.department
-    delete_with_audit(request=request, obj=target, action="line_target.deleted",
-                      description=f"حذف تنظیمات تارگت {department.name}")
-    messages.success(request, "تنظیمات تارگت لاین حذف شد.")
-    return redirect("management_department_detail", pk=department.pk)
-
-@login_required
-@manager_required
 def management_employee_password(request, pk):
     employee = get_object_or_404(Employee.objects.select_related("user"), pk=pk)
     form = ManagerPasswordResetForm(employee.user, request.POST or None)

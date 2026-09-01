@@ -244,6 +244,14 @@ class ManagementDeletionTests(BaseEmployeeTest):
         self.assertContains(response, "2 کارمند با این لاین به‌عنوان لاین اصلی")
         self.assertTrue(Department.objects.filter(pk=self.department.pk).exists())
 
+    def test_department_detail_only_offers_deleting_the_department(self):
+        clean = Department.objects.create(name="لاین مرکز کنترل")
+        response = self.client.get(reverse("management_department_detail", args=[clean.pk]))
+        self.assertContains(response, "حذف لاین")
+        self.assertNotContains(response, "حذف ضریب گرید")
+        self.assertNotContains(response, "حذف تنظیمات تارگت")
+        self.assertFalse(LineTarget.objects.filter(department=clean).exists())
+
     def test_shift_delete_blocks_with_count_then_deletes_clean_shift(self):
         response = self.client.post(reverse("management_shift_delete", args=[self.shift_morning.pk]), follow=True)
         self.assertContains(response, "2 کارمند با شیفت پیش‌فرض")

@@ -27,8 +27,6 @@ urlpatterns = [
 
     # Manager Line Rates & Commissions Settlement
     path("management/line-rates/", views.management_line_rates, name="management_line_rates"),
-    path("management/line-rates/<int:pk>/delete/", views.management_line_rate_delete, name="management_line_rate_delete"),
-    path("management/line-targets/<int:pk>/delete/", views.management_line_target_delete, name="management_line_target_delete"),
     path("management/commissions/", views.management_commission_report, name="management_commission_report"),
 
     # Violations

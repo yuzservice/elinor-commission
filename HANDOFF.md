@@ -60,6 +60,7 @@ Commission inputs come from structured shift logs and line sales. Violations rem
 
 ## Safe deletion
 Management deletion is POST/CSRF-only from each detail/edit Danger Zone. Department, Shift, Employee, DailyShiftLog and ViolationRule report counted blockers; successful deletions create AuditLog entries. AuditLog and SystemSettings have no delete UI.
+The managed entities are Department, Shift, Employee, DailyShiftLog, LineShiftPerformance, ViolationRule and Violation. Department deletion is available from its edit page and control center, never from the list. Internal line rates/targets/grades are not separate deletable management entities; their mistakenly added delete endpoints were removed.
 
 ## Next Product Area
 Before major implementation, finalize:
