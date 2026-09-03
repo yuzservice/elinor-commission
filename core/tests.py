@@ -18,6 +18,7 @@ from .models import (
     SupportLineInterval,
     Violation,
     ViolationRule,
+    DepartmentMonthlyTarget,
 )
 from .services import employee_metrics
 
@@ -244,6 +245,19 @@ class ManagementDeletionTests(BaseEmployeeTest):
         self.assertContains(response, "2 کارمند با این لاین به‌عنوان لاین اصلی")
         self.assertTrue(Department.objects.filter(pk=self.department.pk).exists())
 
+    def test_department_with_rates_and_target_deletes_successfully(self):
+        dept = Department.objects.create(name="لاین با ضریب و تارگت")
+        LineCommissionRate.objects.create(department=dept, commission_level=self.level_a, rate_per_unit=1200)
+        LineTarget.objects.create(department=dept, bronze_units=100, silver_units=200, gold_units=300)
+        DepartmentMonthlyTarget.objects.create(department=dept, year_month="1405/06", created_by=self.manager_user)
+        response = self.client.post(reverse("management_department_delete", args=[dept.pk]))
+        self.assertRedirects(response, reverse("management_departments"))
+        self.assertFalse(Department.objects.filter(pk=dept.pk).exists())
+        self.assertFalse(LineCommissionRate.objects.filter(department_id=dept.pk).exists())
+        self.assertFalse(LineTarget.objects.filter(department_id=dept.pk).exists())
+        self.assertFalse(DepartmentMonthlyTarget.objects.filter(department_id=dept.pk).exists())
+        self.assertTrue(AuditLog.objects.filter(action="department.deleted", entity_id=str(dept.pk)).exists())
+
     def test_department_detail_only_offers_deleting_the_department(self):
         clean = Department.objects.create(name="لاین مرکز کنترل")
         response = self.client.get(reverse("management_department_detail", args=[clean.pk]))
@@ -260,7 +274,12 @@ class ManagementDeletionTests(BaseEmployeeTest):
         self.assertFalse(Shift.objects.filter(pk=clean.pk).exists())
         self.assertTrue(AuditLog.objects.filter(action="shift.deleted", entity_id=str(clean.pk)).exists())
 
-    def test_employee_delete_blocks_history_and_keeps_user_on_success(self):
+    def test_employee_delete_blocks_history_and_deletes_clean_employee_and_user(self):
+        # Cannot delete self
+        self_resp = self.client.post(reverse("management_employee_delete", args=[self.manager.pk]), follow=True)
+        self.assertContains(self_resp, "شما نمی‌توانید حساب کاربری خودتان را که در حال حاضر با آن وارد شده‌اید حذف کنید.")
+        self.assertTrue(Employee.objects.filter(pk=self.manager.pk).exists())
+
         rule = ViolationRule.objects.create(code="EMP_BLOCK", title="وابستگی کارمند", first_points=1, second_points=2, third_points=3)
         Violation.objects.create(employee=self.employee, rule=rule, violation_date=date(2026, 8, 1),
                                  occurrence=1, points_snapshot=1, recorded_by=self.manager_user)
@@ -272,20 +291,77 @@ class ManagementDeletionTests(BaseEmployeeTest):
                                         mobile="09120000111", commission_level=self.level_a)
         self.client.post(reverse("management_employee_delete", args=[clean.pk]))
         self.assertFalse(Employee.objects.filter(pk=clean.pk).exists())
-        self.assertTrue(User.objects.filter(pk=user.pk).exists())
+        self.assertFalse(User.objects.filter(pk=user.pk).exists())
         self.assertTrue(AuditLog.objects.filter(action="employee.deleted", entity_id=str(clean.pk)).exists())
 
-    def test_shift_log_delete_blocks_frozen_and_support_intervals(self):
-        log = DailyShiftLog.objects.create(employee=self.employee, date=date(2026, 8, 1), shift=self.shift_morning,
-                                           main_department=self.department, is_frozen=True)
+    def test_shift_log_delete_allowed_for_frozen_and_support_intervals_with_audit(self):
+        log = DailyShiftLog.objects.create(
+            employee=self.employee,
+            date=date(2026, 8, 1),
+            shift=self.shift_morning,
+            main_department=self.department,
+            status=DailyShiftLog.Status.APPROVED,
+            is_frozen=True,
+            frozen_commission_amount=150000,
+            frozen_total_units_share=Decimal("15.0"),
+        )
+        SupportLineInterval.objects.create(
+            shift_log=log,
+            department=Department.objects.create(name="کمکی حذف"),
+            start_time=time(11),
+            end_time=time(12),
+        )
         response = self.client.post(reverse("management_shift_log_delete", args=[log.pk]), follow=True)
-        self.assertContains(response, "1 کارکرد تأیید یا فریز‌شده")
-        log.is_frozen = False
-        log.save(update_fields=["is_frozen"])
-        SupportLineInterval.objects.create(shift_log=log, department=Department.objects.create(name="کمکی حذف"),
-                                           start_time=time(11), end_time=time(12))
-        response = self.client.post(reverse("management_shift_log_delete", args=[log.pk]), follow=True)
-        self.assertContains(response, "1 بازه کمکی")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(DailyShiftLog.objects.filter(pk=log.pk).exists())
+        self.assertFalse(SupportLineInterval.objects.filter(shift_log_id=log.pk).exists())
+        log_entry = AuditLog.objects.filter(action="shift_log.deleted", entity_id=str(log.pk)).first()
+        self.assertIsNotNone(log_entry)
+        self.assertIn("150,000", log_entry.description)
+        self.assertEqual(log_entry.old_values.get("frozen_commission_amount"), 150000)
+
+    def test_manager_can_revert_approved_shift_log_and_re_approve(self):
+        LineShiftPerformance.objects.create(
+            date=date(2026, 8, 1),
+            shift=self.shift_morning,
+            department=self.department,
+            sold_units=50,
+            recorded_by=self.manager_user,
+        )
+        log = DailyShiftLog.objects.create(
+            employee=self.employee,
+            date=date(2026, 8, 1),
+            shift=self.shift_morning,
+            main_department=self.department,
+            main_hours=Decimal("6.0"),
+            total_hours=Decimal("6.0"),
+            status=DailyShiftLog.Status.APPROVED,
+            is_frozen=True,
+            frozen_commission_amount=70000,
+            frozen_total_units_share=Decimal("50.0"),
+        )
+        revert_resp = self.client.post(
+            reverse("management_shift_log_revert", args=[log.pk]),
+            {"revert_reason": "نیاز به بررسی مجدد ساعت"},
+            follow=True,
+        )
+        self.assertEqual(revert_resp.status_code, 200)
+        log.refresh_from_db()
+        self.assertEqual(log.status, DailyShiftLog.Status.PENDING)
+        self.assertFalse(log.is_frozen)
+        self.assertEqual(log.frozen_commission_amount, 0)
+        self.assertTrue(AuditLog.objects.filter(action="shift_log.reverted_to_pending", entity_id=str(log.pk)).exists())
+
+        approve_resp = self.client.post(
+            reverse("management_shift_log_review_detail", args=[log.pk]),
+            {"action": "APPROVED", "manager_note": "تأیید مجدد"},
+            follow=True,
+        )
+        self.assertEqual(approve_resp.status_code, 200)
+        log.refresh_from_db()
+        self.assertEqual(log.status, DailyShiftLog.Status.APPROVED)
+        self.assertTrue(log.is_frozen)
+        self.assertGreater(log.frozen_commission_amount, 0)
 
     def test_violation_rule_delete_blocks_and_clean_rule_deletes(self):
         linked = ViolationRule.objects.create(code="LINKED", title="قانون مرتبط", first_points=1, second_points=2, third_points=3)
@@ -802,8 +878,14 @@ class EmployeeManagementTests(BaseEmployeeTest):
         with self.assertRaises(IntegrityError):
             with transaction.atomic(): Employee.objects.create(user=User.objects.create_user("duplicate2"),employee_code="E099",first_name="الف",last_name="ب",mobile="09120000002",commission_level=self.level_a)
     def test_manager_can_create_employee_atomically(self):
-        response=self.client.post(reverse("management_employee_create"),self.employee_payload()); self.assertEqual(response.status_code,302)
-        obj=Employee.objects.get(employee_code="E002"); self.assertEqual(obj.user.username,"E002"); self.assertTrue(AuditLog.objects.filter(action="employee.created",entity_id=str(obj.pk)).exists())
+        payload = self.employee_payload()
+        payload.pop("employee_code", None)
+        response = self.client.post(reverse("management_employee_create"), payload)
+        self.assertEqual(response.status_code, 302)
+        obj = Employee.objects.get(user__username="E002")
+        self.assertTrue(obj.employee_code)
+        self.assertEqual(obj.user.username, "E002")
+        self.assertTrue(AuditLog.objects.filter(action="employee.created", entity_id=str(obj.pk)).exists())
     def test_manager_can_edit_and_level_change_creates_history_and_audit(self):
         payload=self.employee_payload(username=self.employee.user.username,first_name="ویرایش",mobile=self.employee.mobile,employee_code=self.employee.employee_code,commission_level=self.level_b.pk,level_reason="ارتقای آزمایشی"); payload.pop("initial_password"); payload.pop("role")
         response=self.client.post(reverse("management_employee_edit",args=[self.employee.pk]),payload); self.assertEqual(response.status_code,302)
@@ -812,6 +894,56 @@ class EmployeeManagementTests(BaseEmployeeTest):
     def test_deactivation_syncs_login_and_audits(self):
         payload=self.employee_payload(username=self.employee.user.username,mobile=self.employee.mobile,employee_code=self.employee.employee_code,commission_level=self.level_a.pk); payload.pop("initial_password"); payload.pop("role"); payload.pop("is_active")
         self.client.post(reverse("management_employee_edit",args=[self.employee.pk]),payload); self.employee_user.refresh_from_db(); self.assertFalse(self.employee_user.is_active); self.assertTrue(AuditLog.objects.filter(action="employee.deactivated").exists())
+    def test_employee_file_tabs_summary_and_edit(self):
+        LineTarget.objects.create(department=self.department, bronze_units=500, silver_units=1000, gold_units=3000, is_active=True)
+        LineCommissionRate.objects.create(department=self.department, commission_level=self.level_a, rate_per_unit=1500)
+        summary = self.client.get(reverse("management_employee_detail", args=[self.employee.pk]))
+        self.assertEqual(summary.status_code, 200)
+        self.assertContains(summary, "خلاصه")
+        self.assertContains(summary, "کارکردها")
+        self.assertContains(summary, "ویرایش")
+        self.assertContains(summary, "کیف پول تأییدشده")
+        self.assertContains(summary, "تارگت لاین")
+        self.assertNotContains(summary, "این بخش در مرحله بعدی توسعه تکمیل می‌شود.")
+
+        shift_logs = self.client.get(reverse("management_employee_detail", args=[self.employee.pk]) + "?tab=shift_logs")
+        self.assertEqual(shift_logs.status_code, 200)
+        self.assertContains(shift_logs, "سوابق کارکرد شیفت پرسنل")
+
+        violations = self.client.get(reverse("management_employee_detail", args=[self.employee.pk]) + "?tab=violations")
+        self.assertEqual(violations.status_code, 200)
+        self.assertContains(violations, "تخلفات ثبت‌شده")
+
+        levels = self.client.get(reverse("management_employee_detail", args=[self.employee.pk]) + "?tab=levels")
+        self.assertEqual(levels.status_code, 200)
+        self.assertContains(levels, "تاریخچه تغییر گرید")
+
+        edit = self.client.get(reverse("management_employee_detail", args=[self.employee.pk]) + "?tab=edit")
+        self.assertContains(edit, "ذخیره تغییرات")
+        self.assertContains(edit, "منطقه خطر")
+        redirect = self.client.get(reverse("management_employee_edit", args=[self.employee.pk]))
+        self.assertEqual(redirect.status_code, 302)
+        self.assertIn("tab=edit", redirect["Location"])
+
+    def test_unchecking_primary_department_auto_reassigns_or_clears(self):
+        new_dept = Department.objects.create(name="لاین جدید تست")
+        payload = self.employee_payload(
+            username=self.employee.user.username,
+            mobile=self.employee.mobile,
+            employee_code=self.employee.employee_code,
+            commission_level=self.level_a.pk,
+            primary_department=self.department.pk,
+            departments=[new_dept.pk],
+        )
+        payload.pop("initial_password")
+        payload.pop("role")
+        response = self.client.post(reverse("management_employee_edit", args=[self.employee.pk]), payload)
+        self.assertEqual(response.status_code, 302)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.primary_department, new_dept)
+        self.assertIn(new_dept, self.employee.departments.all())
+        self.assertNotIn(self.department, self.employee.departments.all())
+
     def test_manager_password_reset_and_plaintext_not_logged(self):
         password="NewSecurePass456!"; response=self.client.post(reverse("management_employee_password",args=[self.employee.pk]),{"new_password1":password,"new_password2":password})
         self.assertEqual(response.status_code,302); self.employee_user.refresh_from_db(); self.assertTrue(self.employee_user.check_password(password)); log=AuditLog.objects.get(action="employee.password_reset"); self.assertNotIn(password,str(log.old_values)+str(log.new_values)+log.description)

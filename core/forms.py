@@ -296,30 +296,41 @@ class EmployeeBaseForm(forms.ModelForm):
             "first_name",
             "last_name",
             "mobile",
-            "employee_code",
-            "profile_photo",
-            "start_date",
             "default_shift",
             "standard_daily_hours",
             "primary_department",
-            "departments",
             "commission_level",
+            "departments",
+            "start_date",
+            "profile_photo",
             "is_active",
         ]
         widgets = {
-            "departments": forms.CheckboxSelectMultiple(),
+            "departments": forms.SelectMultiple(attrs={"class": "custom-multiselect"}),
             "standard_daily_hours": forms.NumberInput(attrs={"step": "0.5", "min": "1", "inputmode": "decimal"}),
         }
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["commission_level"].label = "گرید پورسانت"
+        self.fields["primary_department"].label = "لاین اصلی"
+        self.fields["departments"].label = "لاین‌های مجاز (حضور اصلی و کمکی)"
+        self.fields["departments"].help_text = "لاین‌هایی که کارمند مجاز به حضور در آن‌ها به عنوان لاین اصلی یا کمکی است را انتخاب کنید."
         if not self.is_bound and self.instance.pk and self.instance.start_date:
             self.initial["start_date"] = jdatetime.date.fromgregorian(date=self.instance.start_date).strftime("%Y/%m/%d")
     def clean(self):
         data = super().clean()
         primary = data.get("primary_department")
         departments = data.get("departments")
-        if primary and departments is not None and primary not in departments:
-            self.add_error("departments", "بخش اصلی باید در فهرست بخش‌های کارمند نیز انتخاب شود.")
+        if departments is not None:
+            if primary and primary not in departments:
+                # اگر کاربر تیک لاین اصلی قبلی را برداشته ولی دراپ‌داون بالا را تغییر نداده:
+                if self.instance.pk and self.instance.primary_department_id == getattr(primary, "pk", None):
+                    new_primary = departments.first() if hasattr(departments, "first") else (departments[0] if departments else None)
+                    data["primary_department"] = new_primary
+                else:
+                    data["departments"] = departments | Department.objects.filter(pk=primary.pk)
+            elif not primary and departments.exists():
+                data["primary_department"] = departments.first()
         return data
 
 class EmployeeCreateForm(EmployeeBaseForm):
@@ -332,18 +343,18 @@ class EmployeeCreateForm(EmployeeBaseForm):
 
     class Meta(EmployeeBaseForm.Meta):
         fields = [
-            "username",
             "first_name",
             "last_name",
+            "username",
+            "initial_password",
             "mobile",
-            "employee_code",
-            "profile_photo",
             "start_date",
             "default_shift",
             "standard_daily_hours",
             "primary_department",
-            "departments",
             "commission_level",
+            "departments",
+            "profile_photo",
             "is_active",
         ]
 
@@ -368,22 +379,20 @@ class EmployeeEditForm(EmployeeBaseForm):
         max_length=150,
         help_text="نام کاربری انگلیسی جهت ورود به سامانه",
     )
-    level_reason = forms.CharField(label="دلیل تغییر Level", required=False, widget=forms.Textarea(attrs={"rows": 2}))
 
     class Meta(EmployeeBaseForm.Meta):
         fields = [
-            "username",
             "first_name",
             "last_name",
+            "username",
             "mobile",
-            "employee_code",
-            "profile_photo",
-            "start_date",
             "default_shift",
             "standard_daily_hours",
             "primary_department",
-            "departments",
             "commission_level",
+            "start_date",
+            "profile_photo",
+            "departments",
             "is_active",
         ]
 

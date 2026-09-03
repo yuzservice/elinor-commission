@@ -101,6 +101,141 @@
 </div>
 
 <script>
+function initCustomMultiselect() {
+    document.querySelectorAll('select.custom-multiselect').forEach(select => {
+        if (select.dataset.multiselectInitialized) return;
+        select.dataset.multiselectInitialized = "true";
+        select.style.display = "none";
+
+        const container = document.createElement('div');
+        container.className = 'multiselect-container';
+
+        const trigger = document.createElement('div');
+        trigger.className = 'multiselect-trigger';
+        trigger.tabIndex = 0;
+
+        const tagsWrap = document.createElement('div');
+        tagsWrap.className = 'multiselect-tags';
+
+        const placeholder = document.createElement('span');
+        placeholder.className = 'multiselect-placeholder';
+        placeholder.textContent = 'انتخاب لاین‌های مجاز...';
+
+        const arrow = document.createElement('span');
+        arrow.className = 'multiselect-arrow';
+        arrow.textContent = '▾';
+
+        trigger.appendChild(tagsWrap);
+        trigger.appendChild(placeholder);
+        trigger.appendChild(arrow);
+
+        const menu = document.createElement('div');
+        menu.className = 'multiselect-menu';
+
+        const searchWrap = document.createElement('div');
+        searchWrap.className = 'multiselect-search-wrap';
+        const searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.className = 'multiselect-search';
+        searchInput.placeholder = 'جستجوی لاین...';
+        searchWrap.appendChild(searchInput);
+        menu.appendChild(searchWrap);
+
+        const optionsWrap = document.createElement('div');
+        optionsWrap.className = 'multiselect-options';
+        menu.appendChild(optionsWrap);
+
+        container.appendChild(trigger);
+        container.appendChild(menu);
+        select.parentNode.insertBefore(container, select.nextSibling);
+
+        function updateUI() {
+            tagsWrap.innerHTML = '';
+            const selectedOptions = Array.from(select.selectedOptions);
+            if (selectedOptions.length === 0) {
+                placeholder.style.display = 'block';
+            } else {
+                placeholder.style.display = 'none';
+                selectedOptions.forEach(opt => {
+                    const badge = document.createElement('span');
+                    badge.className = 'multiselect-badge';
+                    badge.innerHTML = `${opt.text} <span class="badge-remove" data-val="${opt.value}">×</span>`;
+                    badge.querySelector('.badge-remove').addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        opt.selected = false;
+                        select.dispatchEvent(new Event('change', { bubbles: true }));
+                        renderOptions();
+                        updateUI();
+                    });
+                    tagsWrap.appendChild(badge);
+                });
+            }
+        }
+
+        function renderOptions() {
+            optionsWrap.innerHTML = '';
+            const query = searchInput.value.trim().toLowerCase();
+            let hasVisible = false;
+
+            Array.from(select.options).forEach(opt => {
+                if (!opt.value) return;
+                if (query && !opt.text.toLowerCase().includes(query)) {
+                    return;
+                }
+                hasVisible = true;
+                const optEl = document.createElement('div');
+                optEl.className = 'multiselect-option' + (opt.selected ? ' selected' : '');
+                optEl.dataset.val = opt.value;
+                optEl.innerHTML = `<span class="option-checkbox"></span><span class="option-text">${opt.text}</span>`;
+                optEl.addEventListener('click', () => {
+                    opt.selected = !opt.selected;
+                    select.dispatchEvent(new Event('change', { bubbles: true }));
+                    renderOptions();
+                    updateUI();
+                });
+                optionsWrap.appendChild(optEl);
+            });
+
+            if (!hasVisible) {
+                optionsWrap.innerHTML = '<div style="padding: 12px; text-align: center; color: var(--muted); font-size: 12px;">موردی یافت نشد.</div>';
+            }
+        }
+
+        trigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = container.classList.contains('open');
+            document.querySelectorAll('.multiselect-container.open').forEach(c => {
+                if (c !== container) c.classList.remove('open');
+            });
+            if (!isOpen) {
+                container.classList.add('open');
+                renderOptions();
+                searchInput.value = '';
+                setTimeout(() => searchInput.focus(), 50);
+            } else {
+                container.classList.remove('open');
+            }
+        });
+
+        searchInput.addEventListener('click', (e) => e.stopPropagation());
+        searchInput.addEventListener('input', renderOptions);
+
+        document.addEventListener('click', (e) => {
+            if (!container.contains(e.target)) {
+                container.classList.remove('open');
+            }
+        });
+
+        select.addEventListener('change', () => {
+            renderOptions();
+            updateUI();
+        });
+
+        renderOptions();
+        updateUI();
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const currentPath = window.location.pathname;
     const navLinks = document.querySelectorAll('nav a');
@@ -118,6 +253,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
+
+    initCustomMultiselect();
 });
 </script>
 </body>

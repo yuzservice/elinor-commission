@@ -130,6 +130,8 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
 
         return {
             "department": dept,
+            "department_id": dept.pk if dept else None,
+            "department_name": dept.name if dept else "",
             "hours": round(hours, 2),
             "total_dept_hours": round(total_dept_hours, 2),
             "total_sold_units": total_sold,
@@ -258,6 +260,37 @@ def reject_shift_log(shift_log, actor, manager_note=""):
         instance=shift_log,
         description=manager_note,
         new_values={"status": DailyShiftLog.Status.REJECTED}
+    )
+    return shift_log
+
+@transaction.atomic
+def revert_shift_log_to_pending(shift_log, actor, reason=""):
+    """خروج از حالت فریز/تأیید و بازگشت کارکرد به وضعیت در انتظار بررسی."""
+    old_values = {
+        "status": shift_log.status,
+        "is_frozen": shift_log.is_frozen,
+        "frozen_commission_amount": shift_log.frozen_commission_amount,
+        "frozen_total_units_share": str(shift_log.frozen_total_units_share),
+    }
+    shift_log.status = DailyShiftLog.Status.PENDING
+    shift_log.reviewed_by = None
+    shift_log.reviewed_at = None
+    shift_log.manager_note = reason
+    shift_log.is_frozen = False
+    shift_log.frozen_main_share_units = Decimal("0.0")
+    shift_log.frozen_support_share_units = Decimal("0.0")
+    shift_log.frozen_total_units_share = Decimal("0.0")
+    shift_log.frozen_commission_amount = 0
+    shift_log.frozen_snapshot_data = {}
+    shift_log.save()
+
+    audit(
+        actor=actor,
+        action="shift_log.reverted_to_pending",
+        instance=shift_log,
+        description=reason or "بازگشت به وضعیت در انتظار بررسی توسط مدیر",
+        old_values=old_values,
+        new_values={"status": DailyShiftLog.Status.PENDING, "is_frozen": False},
     )
     return shift_log
 

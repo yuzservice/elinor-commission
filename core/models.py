@@ -59,6 +59,18 @@ class Shift(models.Model):
     def duration_display(self):
         return f"{self.standard_hours} ساعت"
 
+def generate_next_employee_code():
+    codes = Employee.objects.values_list("employee_code", flat=True)
+    numeric_codes = []
+    for c in codes:
+        try:
+            numeric_codes.append(int(c))
+        except (ValueError, TypeError):
+            pass
+    if numeric_codes:
+        return str(max(numeric_codes) + 1)
+    return "1001"
+
 class Employee(models.Model):
     class Role(models.TextChoices):
         MANAGER = "MANAGER", "مدیر"
@@ -102,6 +114,8 @@ class Employee(models.Model):
     @property
     def level(self): return self.commission_level
     def save(self, *args, **kwargs):
+        if not self.employee_code:
+            self.employee_code = generate_next_employee_code()
         super().save(*args, **kwargs)
         if self.user_id and self.user.is_active != self.is_active:
             User.objects.filter(pk=self.user_id).update(is_active=self.is_active)
@@ -605,7 +619,7 @@ class DepartmentMonthlyTarget(models.Model):
     )
     department = models.ForeignKey(
         Department,
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name="monthly_targets",
         verbose_name="لاین / بخش"
     )

@@ -182,5 +182,47 @@
         </button>
     </form>
 </article>
-<article class="card" style="margin-top:24px;border:1px solid #fecaca;background:#fffafa"><h2 style="color:#b42318">منطقه خطر</h2><p>کارکرد تأیید/فریز‌شده یا دارای بازه کمکی قابل حذف نیست.</p><form method="post" action="{% url 'management_shift_log_delete' log.pk %}" onsubmit="return confirm('کارکرد این روز حذف شود؟');">{% csrf_token %}<button type="submit" class="secondary" style="color:#b42318;border-color:#ef4444">حذف کارکرد</button></form></article>
+
+{% if log.status == 'APPROVED' or log.is_frozen %}
+<article class="card" style="margin-top:20px; border: 1.5px solid #fde047; background: #fefce8;">
+    <div class="card-head">
+        <h2>🔄 لغو تأیید و بازگشت به صف بررسی</h2>
+    </div>
+    <p style="font-size: 13px; color: #713f12; margin-bottom: 14px; line-height: 1.6;">
+        این کارکرد قبلاً تأیید و فریز شده است. در صورت نیاز به ویرایش یا بازنگری، می‌توانید آن را به صف «در انتظار بررسی» بازگردانید.
+        با این کار، محاسبات موقتاً از حالت فریز خارج شده و تا زمان بررسی و تأیید مجدد، از کیف پول و کارنامه کسر می‌گردد.
+    </p>
+    <form method="post" action="{% url 'management_shift_log_revert' log.pk %}" onsubmit="return confirm('کارکرد از حالت تأیید خارج شود و به صف بررسی برگردد؟');">
+        {% csrf_token %}
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <input type="text" name="revert_reason" placeholder="دلیل بازگشت به صف بررسی (اختیاری)..." style="flex: 1; min-width: 240px; padding: 9px 12px; border: 1px solid #ca8a04; border-radius: 8px;">
+            <button type="submit" class="secondary" style="background: #fff; border-color: #ca8a04; color: #854d0e; font-weight: 700;">
+                لغو تأیید و بازگشت به صف بررسی
+            </button>
+        </div>
+    </form>
+</article>
+{% endif %}
+
+<article class="card" style="margin-top:24px;border:1px solid #fecaca;background:#fffafa">
+    <h2 style="color:#b42318">منطقه خطر</h2>
+    {% if log.status == 'APPROVED' or log.is_frozen %}
+    <p style="font-size: 13px; color: #7f1d1d; line-height: 1.6;">
+        ⚠️ <strong>توجه مدیر:</strong> این کارکرد قبلاً تأیید و فریز شده است (پورسانت: <strong>{{ log.frozen_commission_amount|persian_int }} ریال</strong>).
+        با حذف این کارکرد، مبلغ پورسانت از کیف پول و کارنامه کارمند کسر گردیده و بازه‌های کمکی آن نیز پاک خواهند شد. این عملیات در لاگ ممیزی مالی ثبت می‌گردد.
+    </p>
+    <form method="post" action="{% url 'management_shift_log_delete' log.pk %}" onsubmit="return confirm('آیا از حذف قطعی این کارکرد تأییدشده اطمینان دارید؟ پورسانت فریز شده از کیف پول کارمند کسر خواهد شد.');">
+        {% csrf_token %}
+        <button type="submit" class="secondary" style="color:#b42318;border-color:#ef4444;font-weight:700">حذف قطعی کارکرد تأییدشده</button>
+    </form>
+    {% else %}
+    <p style="font-size: 13px; color: #7f1d1d;">
+        با حذف این کارکرد، اطلاعات ثبت‌شده و بازه‌های کمکی مربوط به آن حذف خواهند شد.
+    </p>
+    <form method="post" action="{% url 'management_shift_log_delete' log.pk %}" onsubmit="return confirm('کارکرد این روز حذف شود؟');">
+        {% csrf_token %}
+        <button type="submit" class="secondary" style="color:#b42318;border-color:#ef4444;font-weight:700">حذف کارکرد</button>
+    </form>
+    {% endif %}
+</article>
 {% endblock %}

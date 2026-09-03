@@ -6,7 +6,7 @@ from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth import update_session_auth_hash
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import Coalesce
 from django.views.decorators.http import require_POST
@@ -54,6 +54,7 @@ from .services import (
     change_employee_level,
     employee_metrics,
     reject_shift_log,
+    revert_shift_log_to_pending,
 )
 
 def health(request):
@@ -140,6 +141,9 @@ def shift_log_snapshot(obj):
         "support_hours": str(obj.support_hours),
         "total_hours": str(obj.total_hours),
         "status": obj.status,
+        "is_frozen": obj.is_frozen,
+        "frozen_commission_amount": obj.frozen_commission_amount,
+        "frozen_total_units_share": str(obj.frozen_total_units_share),
         "support_intervals": [
             {
                 "id": item.pk,
@@ -1186,10 +1190,6 @@ def department_delete_blockers(department):
         ("کارکرد ثبت‌شده در لاین کمکی", department.support_shift_logs.count()),
         ("بازه کمکی ثبت‌شده", department.support_intervals.count()),
         ("فروش روزانه ثبت‌شده", department.shift_performances.count()),
-        ("ضریب پورسانت", department.commission_rates.count()),
-        ("تارگت لاین", int(LineTarget.objects.filter(department=department).exists())),
-        ("تارگت گرید", department.grade_targets.count()),
-        ("تارگت ماهانه تاریخی", department.monthly_targets.count()),
         ("اتصال قانون تخلف", department.violation_rules.count()),
     ]
 
@@ -1216,6 +1216,17 @@ def management_department_delete(request, pk):
 
     department_id = department.pk
     department_name = department.name
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM core_activitytype_departments WHERE department_id = %s",
+                [department_id],
+            )
+    except Exception:
+        pass
+
+    department.monthly_targets.all().delete()
 
     delete_with_audit(request=request, obj=department, action="department.deleted",
                       description=f"حذف لاین بدون وابستگی: {department_name}",
@@ -1244,6 +1255,87 @@ def employee_snapshot(employee):
         "start_date": str(employee.start_date or ""),
         "is_active": employee.is_active,
     }
+
+def _employee_file_url(pk, tab="summary"):
+    return f"{reverse('management_employee_detail', args=[pk])}?tab={tab}"
+
+def _employee_file_context(employee, tab="summary", form=None):
+    allowed = {"summary", "shift_logs", "edit", "violations", "levels"}
+    legacy = {"info": "summary", "performance": "summary", "commission": "summary"}
+    tab = legacy.get(tab, tab)
+    if tab not in allowed:
+        tab = "summary"
+    start, end = month_range()
+
+    shift_logs_qs = employee.shift_logs.select_related("shift", "main_department", "reviewed_by").prefetch_related(
+        "support_departments", "support_intervals__department"
+    )
+    shift_logs_rows = []
+    if tab == "shift_logs":
+        for item in shift_logs_qs[:35]:
+            calc = calculate_single_shift_log(item)
+            shift_logs_rows.append({"log": item, "calc": calc})
+
+    ctx = {
+        "employee": employee,
+        "tab": tab,
+        "shift_logs_rows": shift_logs_rows,
+        "shift_log_count": employee.shift_logs.count(),
+        "violations": employee.violations.select_related("rule", "recorded_by")[:30],
+        "violation_count": employee.violations.count(),
+        "level_history_count": employee.level_history.count(),
+        "start": start,
+        "end": end,
+        "metrics": None,
+        "line_rate": None,
+        "form": form,
+    }
+    if tab in {"summary", "shift_logs"}:
+        ctx["metrics"] = employee_metrics(employee, start, end)
+        if employee.primary_department_id:
+            ctx["line_rate"] = LineCommissionRate.objects.filter(
+                department_id=employee.primary_department_id,
+                commission_level_id=employee.commission_level_id,
+            ).first()
+    if tab == "edit" and form is None:
+        ctx["form"] = EmployeeEditForm(instance=employee)
+    return ctx
+
+def _save_employee_edit(request, employee, form):
+    old = employee_snapshot(employee)
+    old_level = employee.commission_level
+    with transaction.atomic():
+        requested_level = form.cleaned_data["commission_level"]
+        new_username = form.cleaned_data["username"]
+        obj = form.save(commit=False)
+        obj.commission_level = old_level
+        obj.primary_department = form.cleaned_data.get("primary_department")
+        obj.save()
+        form.save_m2m()
+
+        user_updated_fields = ["first_name", "last_name"]
+        obj.user.first_name = obj.first_name
+        obj.user.last_name = obj.last_name
+        if obj.user.username != new_username:
+            obj.user.username = new_username
+            user_updated_fields.append("username")
+        obj.user.save(update_fields=user_updated_fields)
+
+        change_employee_level(obj, requested_level, request.user, "تغییر توسط مدیر")
+        new = employee_snapshot(obj)
+        changed = {k: v for k, v in new.items() if old.get(k) != v}
+        old_changed = {k: old[k] for k in changed}
+        if changed:
+            audit(actor=request.user, action="employee.updated", instance=obj, old_values=old_changed, new_values=changed)
+        if old["is_active"] != obj.is_active:
+            audit(
+                actor=request.user,
+                action="employee.activated" if obj.is_active else "employee.deactivated",
+                instance=obj,
+                old_values={"is_active": old["is_active"]},
+                new_values={"is_active": obj.is_active},
+            )
+    return obj
 
 @login_required
 @manager_required
@@ -1326,104 +1418,123 @@ def management_employee_create(request):
 def management_employee_detail(request, pk):
     employee = get_object_or_404(
         Employee.objects.select_related("commission_level", "primary_department", "default_shift", "user").prefetch_related(
-            "departments", "level_history__previous_level", "level_history__new_level"
+            "departments", "level_history__previous_level", "level_history__new_level", "level_history__changed_by"
         ),
         pk=pk,
     )
-    tab = request.GET.get("tab", "summary")
-    allowed = {"summary", "performance", "shift_logs", "violations", "commission", "levels", "info"}
-    if tab not in allowed:
-        tab = "summary"
     return render(
         request,
         "management/employee_detail.html",
-        {
-            "employee": employee,
-            "tab": tab,
-            "shift_logs": employee.shift_logs.select_related("shift", "main_department").prefetch_related("support_departments")[:20],
-            "violations": employee.violations.select_related("rule")[:20],
-        },
+        _employee_file_context(employee, request.GET.get("tab", "summary")),
     )
 
 @login_required
 @manager_required
 def management_employee_edit(request, pk):
-    employee = get_object_or_404(Employee.objects.select_related("commission_level", "default_shift", "user"), pk=pk)
-    old = employee_snapshot(employee)
-    old_level = employee.commission_level
-    form = EmployeeEditForm(request.POST or None, request.FILES or None, instance=employee)
-    if request.method == "POST" and form.is_valid():
-        with transaction.atomic():
-            requested_level = form.cleaned_data["commission_level"]
-            new_username = form.cleaned_data["username"]
-            obj = form.save(commit=False)
-            obj.commission_level = old_level
-            obj.save()
-            form.save_m2m()
-
-            user_updated_fields = ["first_name", "last_name"]
-            obj.user.first_name = obj.first_name
-            obj.user.last_name = obj.last_name
-            if obj.user.username != new_username:
-                obj.user.username = new_username
-                user_updated_fields.append("username")
-            obj.user.save(update_fields=user_updated_fields)
-
-            change_employee_level(obj, requested_level, request.user, form.cleaned_data.get("level_reason", ""))
-            new = employee_snapshot(obj)
-            changed = {k: v for k, v in new.items() if old.get(k) != v}
-            old_changed = {k: old[k] for k in changed}
-            if changed:
-                audit(actor=request.user, action="employee.updated", instance=obj, old_values=old_changed, new_values=changed)
-            if old["is_active"] != obj.is_active:
-                audit(
-                    actor=request.user,
-                    action="employee.activated" if obj.is_active else "employee.deactivated",
-                    instance=obj,
-                    old_values={"is_active": old["is_active"]},
-                    new_values={"is_active": obj.is_active},
-                )
-        messages.success(request, "اطلاعات کارمند و نام کاربری به‌روزرسانی شد.")
-        return redirect("management_employee_detail", pk=obj.pk)
-    return render(
-        request,
-        "management/employee_form.html",
-        {"form": form, "employee": employee, "title": "ویرایش کارمند", "submit": "ذخیره تغییرات"},
+    employee = get_object_or_404(
+        Employee.objects.select_related("commission_level", "primary_department", "default_shift", "user").prefetch_related(
+            "departments", "level_history__previous_level", "level_history__new_level", "level_history__changed_by"
+        ),
+        pk=pk,
     )
+    if request.method != "POST":
+        return redirect(_employee_file_url(pk, "edit"))
+    form = EmployeeEditForm(request.POST, request.FILES, instance=employee)
+    if form.is_valid():
+        obj = _save_employee_edit(request, employee, form)
+        messages.success(request, "اطلاعات کارمند و نام کاربری به‌روزرسانی شد.")
+        return redirect(_employee_file_url(obj.pk, "edit"))
+    return render(request, "management/employee_detail.html", _employee_file_context(employee, "edit", form))
 
 @login_required
 @manager_required
 @require_POST
 def management_employee_delete(request, pk):
     employee = get_object_or_404(Employee.objects.select_related("user"), pk=pk)
+    if employee.user_id == request.user.id:
+        messages.error(request, "شما نمی‌توانید حساب کاربری خودتان را که در حال حاضر با آن وارد شده‌اید حذف کنید.")
+        return redirect(_employee_file_url(pk, "edit"))
+
     blockers = [("کارکرد ثبت‌شده", employee.shift_logs.count()),
                 ("تخلف ثبت‌شده", employee.violations.count()),
                 ("سابقه تغییر گرید", employee.level_history.count())]
     if any(count for _, count in blockers):
         messages.error(request, dependency_message("این کارمند", blockers))
-        return redirect("management_employee_edit", pk=pk)
-    name, user_id = employee.full_name, employee.user_id
-    delete_with_audit(request=request, obj=employee, action="employee.deleted",
-                      description=f"حذف پرونده کارمند: {name}",
-                      old_values={"employee_code": employee.employee_code, "user_id": user_id})
-    messages.success(request, f"پرونده «{name}» حذف شد؛ حساب کاربری برای جلوگیری از حذف ضمنی نگه داشته شد.")
+        return redirect(_employee_file_url(pk, "edit"))
+    name = employee.full_name
+    user = employee.user
+    username = user.username if user else ""
+    user_id = user.pk if user else None
+
+    old_values = {
+        "employee_code": employee.employee_code,
+        "full_name": name,
+        "username": username,
+        "user_id": user_id,
+        "mobile": employee.mobile,
+    }
+
+    with transaction.atomic():
+        audit(
+            actor=request.user,
+            action="employee.deleted",
+            instance=employee,
+            description=f"حذف کامل پرونده و حساب کاربری: {name} ({username})",
+            old_values=old_values,
+        )
+        employee.delete()
+        if user and not user.is_superuser and user.pk != request.user.pk:
+            user.delete()
+
+    messages.success(request, f"پرونده و حساب کاربری «{name}» ({username}) با موفقیت حذف شد.")
     return redirect("management_employees")
 
 @login_required
 @manager_required
 @require_POST
-def management_shift_log_delete(request, pk):
+def management_shift_log_revert(request, pk):
+    """خروج کارکرد از حالت تأیید و فریز، و بازگشت به وضعیت در انتظار بررسی."""
     log = get_object_or_404(DailyShiftLog.objects.select_related("employee"), pk=pk)
-    blockers = [("بازه کمکی", log.support_intervals.count())]
-    if log.is_frozen or log.status == DailyShiftLog.Status.APPROVED:
-        blockers.insert(0, ("کارکرد تأیید یا فریز‌شده", 1))
-    if any(count for _, count in blockers):
-        messages.error(request, dependency_message("این کارکرد", blockers))
-        return redirect("management_shift_log_review_detail", pk=pk)
-    snapshot = {"employee": log.employee.full_name, "date": str(log.date), "status": log.status}
-    delete_with_audit(request=request, obj=log, action="shift_log.deleted",
-                      description=f"حذف کارکرد {log.employee.full_name} در {log.date}", old_values=snapshot)
-    messages.success(request, "کارکرد حذف شد.")
+    reason = request.POST.get("revert_reason", "").strip()
+    revert_shift_log_to_pending(log, request.user, reason=reason)
+    messages.info(
+        request,
+        f"کارکرد روز {log.date} «{log.employee.full_name}» از حالت تأیید خارج شد و به صف در انتظار بررسی بازگشت."
+    )
+    return redirect("management_shift_log_review_detail", pk=pk)
+
+@login_required
+@manager_required
+@require_POST
+def management_shift_log_delete(request, pk):
+    log = get_object_or_404(
+        DailyShiftLog.objects.select_related("employee", "shift", "main_department").prefetch_related(
+            "support_departments", "support_intervals__department"
+        ),
+        pk=pk,
+    )
+    was_approved = log.status == DailyShiftLog.Status.APPROVED or log.is_frozen
+    snapshot = shift_log_snapshot(log)
+    name = log.employee.full_name
+    date_str = str(log.date)
+    desc = f"حذف کارکرد {name} در {date_str}"
+    if was_approved:
+        desc += f" (تأییدشده با پورسانت فریز: {log.frozen_commission_amount:,} ریال)"
+
+    delete_with_audit(
+        request=request,
+        obj=log,
+        action="shift_log.deleted",
+        description=desc,
+        old_values=snapshot,
+    )
+    if was_approved:
+        messages.success(
+            request,
+            f"کارکرد روز {date_str} «{name}» حذف شد و مبالغ فریز شده آن از کارنامه و کیف پول کسر گردید."
+        )
+    else:
+        messages.success(request, f"کارکرد روز {date_str} «{name}» با موفقیت حذف شد.")
     return redirect("management_shift_log_reviews")
 
 @login_required
@@ -1435,7 +1546,7 @@ def management_employee_password(request, pk):
         form.save()
         audit(actor=request.user, action="employee.password_reset", instance=employee, description="رمز عبور توسط مدیر بازنشانی شد.")
         messages.success(request, "رمز عبور با موفقیت تغییر کرد.")
-        return redirect("management_employee_detail", pk=employee.pk)
+        return redirect(_employee_file_url(employee.pk, "edit"))
     return render(request, "management/password_form.html", {"form": form, "employee": employee})
 
 # ==========================================

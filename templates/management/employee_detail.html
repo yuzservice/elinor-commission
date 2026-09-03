@@ -1,97 +1,375 @@
 {% extends 'base.html' %}
 {% load persian %}
-{% block title %}{{ employee.full_name }}{% endblock %}
+{% block title %}پرونده {{ employee.full_name }}{% endblock %}
 {% block content %}
-<div class="profile-hero card">
-    <div class="profile-main">
+<div class="admin-page-head">
+    <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
         {% if employee.profile_photo %}
-        <img class="profile-photo" src="{{ employee.profile_photo.url }}" alt="">
+        <img class="profile-photo" src="{{ employee.profile_photo.url }}" alt="" style="width: 64px; height: 64px; border-radius: 16px; object-fit: cover; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
         {% else %}
-        <div class="profile-photo fallback">{{ employee.first_name|slice:':1' }}</div>
+        <div class="avatar" style="width: 64px; height: 64px; border-radius: 16px; font-size: 26px; background: var(--green2); color: var(--green); box-shadow: 0 4px 12px rgba(35,117,84,0.12);">
+            {{ employee.first_name|slice:':1' }}
+        </div>
         {% endif %}
         <div>
-            <p class="eyebrow">نام کاربری: <strong style="color: var(--green, #237554);">{{ employee.user.username }}</strong> · کد پرسنلی: {{ employee.employee_code }}</p>
-            <h1>{{ employee.full_name }}</h1>
-            <p>{{ employee.primary_department|default:'بدون بخش' }} · Level {{ employee.commission_level.code }} · {% if employee.is_active %}فعال{% else %}غیرفعال{% endif %}</p>
+            <span class="admin-kicker">پرونده پرسنلی · کد: {{ employee.employee_code }}</span>
+            <h1 style="margin: 2px 0 6px;">{{ employee.full_name }}</h1>
+            <p style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0;">
+                <span class="file-status {% if employee.is_active %}is-active{% else %}is-inactive{% endif %}">
+                    {% if employee.is_active %}● فعال{% else %}○ غیرفعال{% endif %}
+                </span>
+                <span class="badge" style="background: var(--green2); color: var(--green); font-weight: 700;">
+                    گرید {{ employee.commission_level.code }}
+                </span>
+                <span class="badge" style="background: #f1f5f3; color: var(--ink);">
+                    {{ employee.primary_department|default:'بدون لاین اصلی' }}
+                </span>
+                {% if employee.default_shift %}
+                <span class="badge" style="background: #f1f5f3; color: var(--ink);">
+                    {{ employee.default_shift.title }}
+                </span>
+                {% endif %}
+            </p>
         </div>
     </div>
-    <div class="profile-actions">
-        <a class="secondary" href="{% url 'management_employee_password' employee.pk %}">تغییر رمز</a>
-        <a class="primary" href="{% url 'management_employee_edit' employee.pk %}">ویرایش</a>
+    <div class="head-actions">
+        <a class="secondary" href="{% url 'management_employees' %}">بازگشت به فهرست پرسنل</a>
+        <a class="secondary" href="{% url 'management_employee_password' employee.pk %}">🔑 تغییر رمز عبور</a>
     </div>
 </div>
 
-<nav class="tabs">
-    <a class="{% if tab == 'summary' %}active{% endif %}" href="?tab=summary">خلاصه</a>
-    <a class="{% if tab == 'performance' %}active{% endif %}" href="?tab=performance">عملکرد</a>
-    <a class="{% if tab == 'violations' %}active{% endif %}" href="?tab=violations">تخلفات</a>
-    <a class="{% if tab == 'commission' %}active{% endif %}" href="?tab=commission">پورسانت</a>
-    <a class="{% if tab == 'levels' %}active{% endif %}" href="?tab=levels">تاریخچه Level</a>
-    <a class="{% if tab == 'info' %}active{% endif %}" href="?tab=info">اطلاعات پرونده</a>
+<nav class="control-tabs file-tabs" aria-label="بخش‌های پرونده">
+    <a class="{% if tab == 'summary' %}active{% endif %}" href="?tab=summary">
+        📊 خلاصه عملکرد
+    </a>
+    <a class="{% if tab == 'shift_logs' %}active{% endif %}" href="?tab=shift_logs">
+        ⏱️ سوابق کارکردها
+        {% if shift_log_count %}<span class="tab-count">{{ shift_log_count|persian_digits }}</span>{% endif %}
+    </a>
+    <a class="{% if tab == 'edit' %}active{% endif %}" href="?tab=edit">
+        ✏️ ویرایش پرونده
+    </a>
+    <a class="{% if tab == 'violations' %}active{% endif %}" href="?tab=violations">
+        ⚠️ تخلفات ثبت‌شده
+        {% if violation_count %}<span class="tab-count">{{ violation_count|persian_digits }}</span>{% endif %}
+    </a>
+    <a class="{% if tab == 'levels' %}active{% endif %}" href="?tab=levels">
+        📈 تاریخچه گرید
+        {% if level_history_count %}<span class="tab-count">{{ level_history_count|persian_digits }}</span>{% endif %}
+    </a>
 </nav>
 
 {% if tab == 'summary' %}
-<div class="stats">
-    <article>
-        <span>Level فعلی</span>
-        <strong>{{ employee.commission_level.code }}</strong>
-    </article>
-    <article>
-        <span>وضعیت</span>
-        <strong>{% if employee.is_active %}فعال{% else %}غیرفعال{% endif %}</strong>
-    </article>
-    <article>
-        <span>شیفت کاری</span>
-        <strong>{{ employee.default_shift.title|default:'—' }} ({{ employee.standard_daily_hours }} ساعت)</strong>
-    </article>
-    <article>
-        <span>بخش اصلی</span>
-        <strong>{{ employee.primary_department|default:'—' }}</strong>
-    </article>
-</div>
-<div class="stats">
-    <article>
-        <span>نام کاربری سیستم</span>
-        <strong style="color: var(--green, #237554); font-size: 1.3rem;">{{ employee.user.username }}</strong>
-    </article>
-    <article>
-        <span>کد پرسنلی</span>
-        <strong>{{ employee.employee_code }}</strong>
-    </article>
-    <article>
-        <span>تعداد تخلفات</span>
-        <strong>{{ employee.violations.count }}</strong>
-    </article>
-</div>
+<p class="file-period" style="margin-bottom: 16px;">نمای ماه جاری · {{ start|jalali }} تا {{ end|jalali }}</p>
 
-{% elif tab == 'levels' %}
-<article class="card">
+<section class="admin-stat-grid">
+    <article>
+        <span class="stat-icon green">💰</span>
+        <div>
+            <small>کیف پول تأییدشده این ماه</small>
+            <strong>{{ metrics.wallet_balance|persian_int }}</strong>
+            <span>ریال پورسانت قطعی فریز شده</span>
+        </div>
+    </article>
+    <article>
+        <span class="stat-icon gold">⏳</span>
+        <div>
+            <small>در انتظار بررسی و تأیید</small>
+            <strong>{{ metrics.pending_commission|persian_int }}</strong>
+            <span>{{ metrics.pending_shift_logs_count|persian_digits }} شیفت بررسی‌نشده</span>
+        </div>
+    </article>
+    <article>
+        <span class="stat-icon blue">🛍️</span>
+        <div>
+            <small>سهم کالا از فروش ماه</small>
+            <strong>{{ metrics.total_sales_units_share|persian_digits }}</strong>
+            <span>{{ metrics.approved_shift_logs_count|persian_digits }} شیفت تأییدشده</span>
+        </div>
+    </article>
+    <article>
+        <span class="stat-icon rose">⚠️</span>
+        <div>
+            <small>کسور تخلفات ماه جاری</small>
+            <strong>{{ metrics.deduction|persian_int }}</strong>
+            <span>{{ metrics.violation_points|persian_digits }} امتیاز تخلف ثبت‌شده</span>
+        </div>
+    </article>
+</section>
+
+{% if metrics.line_target_result %}
+<article class="card file-target-card {% if metrics.line_target_result.achieved_level == 3 %}is-gold{% endif %}" style="border-radius: 16px; padding: 20px;">
+    <div class="card-head" style="margin-bottom: 8px;">
+        <div>
+            <span class="badge" style="background: var(--green2); color: var(--green); margin-bottom: 6px; font-weight: 700;">
+                🎯 تارگت عملکرد لاین {{ employee.primary_department.name }}
+            </span>
+            <h2 style="margin: 4px 0;">{{ metrics.line_target_result.achieved_title }}</h2>
+            <p style="margin: 0; color: var(--muted); font-size: 13px;">
+                عملکرد این ماه: <strong>{{ metrics.line_target_result.units_sold|persian_digits }} کالا</strong>
+                {% if metrics.line_target_result.next_target_units %}
+                · هدف بعدی: <strong>{{ metrics.line_target_result.next_target_title }} — {{ metrics.line_target_result.next_target_units|persian_digits }} کالا</strong>
+                {% endif %}
+            </p>
+        </div>
+        <div class="file-target-score">
+            <b>{{ metrics.line_target_result.progress_percent|persian_digits }}٪</b>
+            {% if metrics.line_target_result.reward_amount > 0 %}
+            <small style="color: var(--green); font-weight: 700;">
+                🎁 پاداش: {{ metrics.line_target_result.reward_amount|persian_int }} ریال
+            </small>
+            {% endif %}
+        </div>
+    </div>
+    <div class="progress-track" style="height: 10px; margin-top: 12px;"><i style="width: {{ metrics.line_target_result.progress_percent }}%"></i></div>
+    <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 12px; color: var(--muted); flex-wrap: wrap; gap: 8px;">
+        <span>🥉 برنزی: <b>{{ metrics.line_target_result.bronze_units|persian_digits }}</b> کالا / {{ metrics.line_target_result.bronze_reward|persian_int }} ریال</span>
+        <span>🥈 نقره‌ای: <b>{{ metrics.line_target_result.silver_units|persian_digits }}</b> کالا / {{ metrics.line_target_result.silver_reward|persian_int }} ریال</span>
+        <span>🥇 طلایی: <b>{{ metrics.line_target_result.gold_units|persian_digits }}</b> کالا / {{ metrics.line_target_result.gold_reward|persian_int }} ریال</span>
+    </div>
+</article>
+{% else %}
+<article class="card file-target-empty" style="border-radius: 16px;">
+    <div class="card-head"><h2>🎯 تارگت ماهانه لاین</h2></div>
+    <p class="empty" style="padding: 16px !important;">{% if employee.primary_department %}برای لاین «{{ employee.primary_department.name }}» تارگت فعال تعریف نشده است.{% else %}لاین اصلی این کارمند مشخص نیست؛ تارگت قابل محاسبه نیست.{% endif %}</p>
+</article>
+{% endif %}
+
+<article class="card" style="border-radius: 16px;">
     <div class="card-head">
-        <h2>تاریخچه تغییر Level</h2>
+        <h2>📋 شناسنامه پرسنلی و کاری</h2>
+    </div>
+    <div class="detail-pairs">
+        <div><small>کد پرسنلی</small><b>{{ employee.employee_code }}</b></div>
+        <div><small>نام کاربری ورود</small><b style="color: var(--green);">{{ employee.user.username }}</b></div>
+        <div><small>شماره موبایل</small><b dir="ltr">{{ employee.mobile }}</b></div>
+        <div><small>نرخ پورسانت روی لاین اصلی</small><b>{% if line_rate %}{{ line_rate.rate_per_unit|persian_int }} ریال (گرید {{ employee.commission_level.code }}){% else %}—{% endif %}</b></div>
+        <div><small>شیفت پیش‌فرض</small><b>{{ employee.default_shift.title|default:'—' }} ({{ employee.standard_daily_hours|persian_digits }} ساعت)</b></div>
+        <div><small>تاریخ شروع همکاری</small><b>{{ employee.start_date|jalali|default:'—' }}</b></div>
+    </div>
+    <div style="margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <span style="font-size: 13px; color: var(--muted);">لاین‌های مجاز برای حضور و شیفت کمکی:</span>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+            {% for d in employee.departments.all %}
+            <span class="badge" style="background: var(--bg); border: 1px solid var(--line); color: var(--ink); font-weight: 600;">{{ d.name }}</span>
+            {% empty %}
+            <span style="color: var(--muted); font-size: 12px;">—</span>
+            {% endfor %}
+        </div>
+    </div>
+</article>
+
+{% elif tab == 'shift_logs' %}
+<section class="admin-stat-grid">
+    <article>
+        <span class="stat-icon green">💰</span>
+        <div>
+            <small>کیف پول تأییدشده این ماه</small>
+            <strong>{{ metrics.wallet_balance|persian_int }}</strong>
+            <span>ریال پورسانت واریز قطعی</span>
+        </div>
+    </article>
+    <article>
+        <span class="stat-icon gold">⏳</span>
+        <div>
+            <small>در انتظار بررسی</small>
+            <strong>{{ metrics.pending_commission|persian_int }}</strong>
+            <span>{{ metrics.pending_shift_logs_count|persian_digits }} شیفت بررسی‌نشده</span>
+        </div>
+    </article>
+    <article>
+        <span class="stat-icon blue">🛍️</span>
+        <div>
+            <small>سهم کالا این ماه</small>
+            <strong>{{ metrics.total_sales_units_share|persian_digits }}</strong>
+            <span>{{ metrics.approved_shift_logs_count|persian_digits }} شیفت تأییدشده</span>
+        </div>
+    </article>
+    <article>
+        <span class="stat-icon gold">⏱️</span>
+        <div>
+            <small>کل شیفت‌های ثبت‌شده</small>
+            <strong>{{ shift_log_count|persian_digits }}</strong>
+            <span>شیفت کاری از ابتدا</span>
+        </div>
+    </article>
+</section>
+
+<article class="card" style="border-radius: 16px;">
+    <div class="card-head">
+        <div>
+            <h2>⏱️ سوابق کارکرد شیفت کارمند</h2>
+            <p>مشاهده ساعات کارکرد، تسهیم ساعتی فروش و وضعیت فریز مالی هر شیفت</p>
+        </div>
     </div>
     <div class="table-wrap">
         <table>
             <thead>
                 <tr>
-                    <th>از</th>
-                    <th>به</th>
+                    <th>تاریخ و شیفت</th>
+                    <th>لاین اصلی (ساعت)</th>
+                    <th>لاین‌های کمکی (ساعت)</th>
+                    <th>کل کارکرد</th>
+                    <th>سهم کالا</th>
+                    <th>پورسانت روز</th>
+                    <th>وضعیت تأیید</th>
+                    <th>عملیات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in shift_logs_rows %}
+                <tr>
+                    <td>
+                        <b>{{ row.log.date|jalali }}</b>
+                        <small style="color: var(--muted); display: block;">{{ row.log.shift.title }}</small>
+                    </td>
+                    <td>
+                        <b>{{ row.log.main_department.name }}</b>
+                        <small style="color: var(--muted); display: block;">{{ row.log.main_hours|persian_digits }} ساعت</small>
+                    </td>
+                    <td>
+                        {% if row.log.has_support_line %}
+                        <span style="color: var(--green, #237554); font-weight: 600;">{{ row.log.support_departments_display }}</span>
+                        <small style="color: var(--muted); display: block;">{{ row.log.support_hours|persian_digits }} ساعت</small>
+                        {% else %}
+                        <span style="color: var(--muted);">—</span>
+                        {% endif %}
+                    </td>
+                    <td><strong>{{ row.log.total_hours|persian_digits }} ساعت</strong></td>
+                    <td>
+                        <span class="badge" style="background: var(--green2); color: var(--green); font-weight: 700;">
+                            {{ row.calc.total_units_share|persian_digits }} کالا
+                        </span>
+                    </td>
+                    <td>
+                        <strong style="color: var(--green, #237554); font-size: 13.5px;">
+                            {{ row.calc.total_commission|persian_int }} ریال
+                        </strong>
+                        {% if row.log.is_frozen %}
+                        <small style="color: #059669; display: block;">🔒 فریز قطعی</small>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if row.log.status == 'APPROVED' %}
+                        <span class="status approved">✅ تأیید و واریز شد</span>
+                        {% elif row.log.status == 'REJECTED' %}
+                        <span class="status rejected">❌ رد شد</span>
+                        {% else %}
+                        <span class="status pending">⏳ در انتظار بررسی</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a class="table-link" href="{% url 'management_shift_log_review_detail' row.log.pk %}" style="padding: 5px 10px; border-radius: 6px; background: #f0fdf4; display: inline-block;">
+                            بررسی کارکرد
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="empty">هنوز کارکردی برای این کارمند ثبت نشده است.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</article>
+
+{% elif tab == 'edit' %}
+<article class="card form-card wide admin-form-card file-edit-card" style="border-radius: 16px;">
+    <div class="card-head">
+        <div>
+            <h2>✏️ ویرایش مشخصات پرسنل</h2>
+            <p>تغییر نام، شماره تماس، گرید، شیفت پیش‌فرض و لاین‌های کاری</p>
+        </div>
+        <a class="secondary" href="{% url 'management_employee_password' employee.pk %}">🔑 بازنشانی رمز عبور</a>
+    </div>
+    <form method="post" action="{% url 'management_employee_edit' employee.pk %}" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="form-grid">
+            {% for field in form %}
+            {% if field.name == 'is_active' %}
+            <div class="field span-2 switch-field-card">
+                <div class="switch-info">
+                    <label for="{{ field.id_for_label }}">
+                        وضعیت حساب کارمند: فعال
+                    </label>
+                    <small>
+                        در صورت فعال بودن، کارمند می‌تواند وارد سامانه شود و کارکرد روزانه خود را ثبت نماید.
+                    </small>
+                </div>
+                <label class="toggle-switch">
+                    {{ field }}
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            {% else %}
+            <div class="field {% if field.name == 'departments' %}span-2 field-departments-chips{% endif %}">
+                <label>{{ field.label }}{% if field.field.required %}<em>*</em>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<small class="help">{{ field.help_text|safe }}</small>{% endif %}
+                {% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% for error in form.non_field_errors %}
+        <div class="message error">{{ error }}</div>
+        {% endfor %}
+        <div class="form-actions">
+            <button class="primary" type="submit" style="padding: 11px 26px; font-weight: 700;">ذخیره تغییرات پرونده</button>
+            <a class="secondary" href="{% url 'management_employee_password' employee.pk %}">تغییر رمز ورود</a>
+        </div>
+    </form>
+</article>
+
+<article class="card file-danger" style="margin-top: 24px; border: 1px solid #fecaca; background: #fffafa; border-radius: 16px;">
+    <div class="card-head">
+        <div>
+            <h2 style="color: #b42318;">منطقه خطر (حذف پرونده)</h2>
+            <p style="color: #991b1b; margin-top: 4px;">
+                پرونده فقط در صورت نداشتن سابقه کارکرد، تخلف یا تغییر گرید قابل حذف است. با حذف پرونده، حساب کاربری ورود نیز به صورت کامل حذف و آزاد خواهد شد.
+            </p>
+        </div>
+    </div>
+    <form method="post" action="{% url 'management_employee_delete' employee.pk %}" onsubmit="return confirm('پرونده و حساب کاربری «{{ employee.full_name|escapejs }}» حذف شود؟');">
+        {% csrf_token %}
+        <button type="submit" class="secondary danger-action" style="color: #b42318; border-color: #ef4444; font-weight: 700;">
+            حذف پرونده و حساب کاربری کارمند
+        </button>
+    </form>
+</article>
+
+{% elif tab == 'levels' %}
+<article class="card" style="border-radius: 16px;">
+    <div class="card-head">
+        <div>
+            <h2>📈 تاریخچه ارتقا و تغییر گرید کارمند</h2>
+            <p>سابقه ثبت‌شده تغییرات سطح پورسانتی و دلایل ثبت‌شده توسط مدیران</p>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>از گرید</th>
+                    <th>به گرید</th>
                     <th>تغییردهنده</th>
-                    <th>تاریخ</th>
-                    <th>دلیل</th>
+                    <th>تاریخ تغییر</th>
+                    <th>دلیل و توضیحات مدیر</th>
                 </tr>
             </thead>
             <tbody>
                 {% for h in employee.level_history.all %}
                 <tr>
-                    <td>{{ h.previous_level.code|default:'—' }}</td>
-                    <td><b>{{ h.new_level.code }}</b></td>
-                    <td>{{ h.changed_by.get_full_name|default:h.changed_by.username }}</td>
+                    <td><span class="badge" style="background: #f3f4f6;">{{ h.previous_level.code|default:'—' }}</span></td>
+                    <td><span class="badge" style="background: var(--green2); color: var(--green); font-weight: 800; font-size: 12.5px;">گرید {{ h.new_level.code }}</span></td>
+                    <td><b>{{ h.changed_by.get_full_name|default:h.changed_by.username }}</b></td>
                     <td>{{ h.changed_at.date|jalali }}</td>
-                    <td>{{ h.reason|default:'—' }}</td>
+                    <td><small style="max-width: 300px; white-space: normal; line-height: 1.4;">{{ h.reason|default:'—' }}</small></td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="5" class="empty">هنوز تغییری ثبت نشده است.</td>
+                    <td colspan="5" class="empty">هنوز تغییری در گرید این کارمند ثبت نشده است.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -99,54 +377,45 @@
     </div>
 </article>
 
-{% elif tab == 'info' %}
-<article class="card info-grid">
-    <div><span>نام کاربری (جهت ورود به سامانه)</span><b style="color: var(--green, #237554);">{{ employee.user.username }}</b></div>
-    <div><span>کد پرسنلی</span><b>{{ employee.employee_code }}</b></div>
-    <div><span>نام</span><b>{{ employee.first_name }}</b></div>
-    <div><span>نام خانوادگی</span><b>{{ employee.last_name }}</b></div>
-    <div><span>شماره موبایل</span><b dir="ltr">{{ employee.mobile }}</b></div>
-    <div><span>نقش کاربری</span><b>{{ employee.get_role_display }}</b></div>
-    <div><span>شیفت پیش‌فرض</span><b>{{ employee.default_shift.title|default:'—' }}</b></div>
-    <div><span>ساعت کاری استاندارد</span><b>{{ employee.standard_daily_hours }} ساعت</b></div>
-    <div><span>بخش اصلی</span><b>{{ employee.primary_department|default:'—' }}</b></div>
-    <div><span>همه بخش‌های مجاز</span><b>{% for d in employee.departments.all %}{{ d.name }}{% if not forloop.last %}، {% endif %}{% empty %}—{% endfor %}</b></div>
-    <div><span>تاریخ شروع همکاری</span><b>{{ employee.start_date|jalali }}</b></div>
-</article>
-
 {% elif tab == 'violations' %}
-<article class="card">
-    <h2>تخلفات اخیر</h2>
+<article class="card" style="border-radius: 16px;">
+    <div class="card-head">
+        <div>
+            <h2>⚠️ تخلفات ثبت‌شده</h2>
+            <p>سوابق تخلف و کسر امتیازهای انضباطی پرسنل</p>
+        </div>
+        <a class="secondary" href="{% url 'violation_create' %}">+ ثبت تخلف جدید</a>
+    </div>
     <div class="table-wrap">
         <table>
             <thead>
                 <tr>
-                    <th>عنوان</th>
-                    <th>امتیاز</th>
-                    <th>تاریخ</th>
+                    <th>عنوان قانون تخلف</th>
+                    <th>مرتبه وقوع</th>
+                    <th>امتیاز کسرشده</th>
+                    <th>تاریخ ثبت</th>
+                    <th>شرح و یادداشت مدیر</th>
+                    <th>ثبت‌کننده</th>
                 </tr>
             </thead>
             <tbody>
                 {% for v in violations %}
                 <tr>
-                    <td>{{ v.rule.title }}</td>
-                    <td>{{ v.points_snapshot }}</td>
+                    <td><b>{{ v.rule.title }}</b></td>
+                    <td><span class="badge" style="background: #fef2f2; color: #b91c1c; font-weight: 700;">مرتبه {{ v.occurrence|persian_digits }}</span></td>
+                    <td><strong style="color: #dc2626; font-size: 14px;">{{ v.points_snapshot|persian_digits }} امتیاز</strong></td>
                     <td>{{ v.violation_date|jalali }}</td>
+                    <td><small style="max-width: 250px; white-space: normal; line-height: 1.4;">{{ v.description|default:'—' }}</small></td>
+                    <td><small>{{ v.recorded_by.get_full_name|default:v.recorded_by.username }}</small></td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="3" class="empty">موردی ثبت نشده است.</td>
+                    <td colspan="6" class="empty">هیچ تخلفی برای این کارمند ثبت نشده است. 🎉</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-</article>
-
-{% else %}
-<article class="card placeholder">
-    <h2>{% if tab == 'performance' %}عملکرد{% else %}پورسانت{% endif %}</h2>
-    <p>این بخش در مرحله بعدی توسعه تکمیل می‌شود.</p>
 </article>
 {% endif %}
 {% endblock %}

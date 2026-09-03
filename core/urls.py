@@ -15,6 +15,7 @@ urlpatterns = [
     path("management/shift-log-reviews/", views.management_shift_log_reviews, name="management_shift_log_reviews"),
     path("management/shift-log-reviews/<int:pk>/", views.management_shift_log_review_detail, name="management_shift_log_review_detail"),
     path("management/shift-log-reviews/<int:pk>/quick-approve/", views.management_shift_log_quick_approve, name="management_shift_log_quick_approve"),
+    path("management/shift-log-reviews/<int:pk>/revert/", views.management_shift_log_revert, name="management_shift_log_revert"),
     path("management/shift-log-reviews/<int:pk>/delete/", views.management_shift_log_delete, name="management_shift_log_delete"),
     path("management/shift-logs/", views.management_shift_logs, name="management_shift_logs"),
 
