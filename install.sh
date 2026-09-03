@@ -106,12 +106,22 @@ else
     echo -e "${YELLOW}Running in HTTP mode without SSL on port 8010: http://${SERVER_IP}:8010${NC}"
 fi
 
-# Generate random secure passwords
-SECRET_KEY=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 50 || echo "secret-key-$(date +%s)")
-POSTGRES_PASSWORD=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 24 || echo "pgpass-$(date +%s)")
+# Preserve existing credentials if .env exists, or generate new secure ones
+SECRET_KEY=""
+POSTGRES_PASSWORD=""
 
 if [ -f .env ]; then
+    echo -e "${YELLOW}Found existing .env file. Preserving existing database credentials...${NC}"
+    SECRET_KEY=$(grep -E '^SECRET_KEY=' .env | cut -d '=' -f2- | tr -d '\r' || true)
+    POSTGRES_PASSWORD=$(grep -E '^POSTGRES_PASSWORD=' .env | cut -d '=' -f2- | tr -d '\r' || true)
     cp .env .env.bak
+fi
+
+if [ -z "$SECRET_KEY" ]; then
+    SECRET_KEY=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 50 || echo "secret-key-$(date +%s)")
+fi
+if [ -z "$POSTGRES_PASSWORD" ]; then
+    POSTGRES_PASSWORD=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 24 || echo "pgpass-$(date +%s)")
 fi
 
 if [ "$HAS_SSL" = "y" ]; then
@@ -166,6 +176,7 @@ read -r create_admin < /dev/tty || create_admin="y"
 create_admin=${create_admin:-y}
 if [[ "$create_admin" =~ ^[Yy]$ ]]; then
     $COMPOSE_CMD exec web python manage.py createsuperuser
+    $COMPOSE_CMD exec web python manage.py shell -c "from django.contrib.auth.models import User; from core.decorators import get_or_create_manager_employee; [get_or_create_manager_employee(u) for u in User.objects.filter(is_staff=True)]" 2>/dev/null || true
 fi
 
 echo -e "Do you want to seed sample test data (lines, shifts, targets)? (y/n) [Default: n]: "
