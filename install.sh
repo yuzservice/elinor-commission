@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# اسکریپت نصب و راه‌اندازی آسان سامانه عملکرد و پورسانت الینور با داکر و SSL خودکار
-# Elinor Commission System — Automated Docker & SSL Installer
+# Elinor Commission System — One-Liner Automated Docker & SSL Installer
 # ==============================================================================
 
 set -e
 
-# رنگ‌ها برای خروجی زیباتر
+# Terminal colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -16,85 +15,102 @@ NC='\033[0m'
 
 echo -e "${GREEN}${BOLD}"
 echo "=================================================================="
-echo "    🚀 سامانه عملکرد و پورسانت الینور — نصب آسان با داکر و SSL     "
+echo "    🚀 Elinor Commission System — Easy Docker & SSL Installer     "
 echo "=================================================================="
 echo -e "${NC}"
 
-# ۱. بررسی نیازمندی‌های داکر
-echo -e "${BLUE}▶ مرحله ۱: بررسی پیش‌نیازهای سیستم...${NC}"
-if ! command -v docker &> /dev/null; then
-    echo -e "${YELLOW}داکر نصب نیست. در حال بررسی امکان نصب خودکار...${NC}"
-    if [ -f /etc/debian_version ] || [ -f /etc/lsb-release ]; then
-        read -p "آیا مایلید داکر به صورت خودکار نصب شود؟ (y/n): " install_docker
-        if [[ "$install_docker" =~ ^[Yy]$ ]]; then
-            echo -e "${BLUE}در حال نصب Docker و پلاگین Docker Compose...${NC}"
-            sudo apt-get update
-            sudo apt-get install -y ca-certificates curl gnupg
-            sudo install -m 0755 -d /etc/apt/keyrings
-            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes
-            sudo chmod a+r /etc/apt/keyrings/docker.gpg
-            echo \
-              "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-              $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-              sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-            sudo apt-get update
-            sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-            sudo systemctl enable --now docker
-            sudo usermod -aG docker "$USER" 2>/dev/null || true
-            echo -e "${GREEN}✓ داکر با موفقیت نصب شد.${NC}"
-        else
-            echo -e "${RED}خطا: برای ادامه، لطفاً ابتدا داکر را نصب کنید.${NC}"
-            exit 1
-        fi
+REPO_URL="https://github.com/yuzservice/elinor-commission.git"
+TARGET_DIR="elinor-commission"
+
+# 1. Setup & Navigate to Repository Directory
+if [ ! -f "compose.yaml" ]; then
+    echo -e "${BLUE}▶ [1/5] Setting up project directory...${NC}"
+    if ! command -v git &> /dev/null; then
+        echo -e "${YELLOW}Installing git and curl...${NC}"
+        sudo apt-get update -y && sudo apt-get install -y git curl
+    fi
+
+    if [ ! -d "$TARGET_DIR" ]; then
+        echo -e "Cloning repository from ${REPO_URL}..."
+        git clone "$REPO_URL" "$TARGET_DIR"
+        cd "$TARGET_DIR"
     else
-        echo -e "${RED}خطا: داکر نصب نیست. لطفاً Docker را نصب کنید و مجدداً این اسکریپت را اجرا نمایید.${NC}"
+        echo -e "Found existing '${TARGET_DIR}' folder, navigating and pulling latest changes..."
+        cd "$TARGET_DIR"
+        git pull --ff-only 2>/dev/null || true
+    fi
+else
+    echo -e "${GREEN}✓ Already inside project directory.${NC}"
+fi
+
+# 2. Check / Install Docker & Docker Compose
+echo -e "\n${BLUE}▶ [2/5] Checking Docker & Docker Compose...${NC}"
+if ! command -v docker &> /dev/null; then
+    echo -e "${YELLOW}Docker is not installed. Installing Docker and Compose plugin...${NC}"
+    if [ -f /etc/debian_version ] || [ -f /etc/lsb-release ]; then
+        sudo apt-get update -y
+        sudo apt-get install -y ca-certificates curl gnupg
+        sudo install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes
+        sudo chmod a+r /etc/apt/keyrings/docker.gpg
+        echo \
+          "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+          $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+          sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+        sudo apt-get update -y
+        sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+        sudo systemctl enable --now docker
+        sudo usermod -aG docker "$USER" 2>/dev/null || true
+        echo -e "${GREEN}✓ Docker installed successfully.${NC}"
+    else
+        echo -e "${RED}Error: Automatic docker install only supported on Debian/Ubuntu. Please install Docker manually.${NC}"
         exit 1
     fi
 else
-    echo -e "${GREEN}✓ Docker در سیستم شناسایی شد.${NC}"
+    echo -e "${GREEN}✓ Docker is already installed.${NC}"
 fi
 
-# بررسی دستور docker compose
+# Resolve Docker Compose command
 if docker compose version &> /dev/null; then
     COMPOSE_CMD="docker compose"
 elif command -v docker-compose &> /dev/null; then
     COMPOSE_CMD="docker-compose"
 else
-    echo -e "${RED}خطا: Docker Compose یافت نشد.${NC}"
+    echo -e "${RED}Error: Docker Compose not found.${NC}"
     exit 1
 fi
-echo -e "${GREEN}✓ Docker Compose آماده است.${NC}"
+echo -e "${GREEN}✓ Docker Compose ready.${NC}"
 
-# ۲. پیکربندی فایل .env و SSL
-echo -e "
-${BLUE}▶ مرحله ۲: پیکربندی دامنه و امنیت (SSL / HTTPS)...${NC}"
-
+# 3. Domain & SSL Configuration
+echo -e "\n${BLUE}▶ [3/5] Domain & Security (SSL / HTTPS) Configuration...${NC}"
 HAS_SSL="n"
 DOMAIN_NAME=""
 SERVER_IP=""
 
-read -p "آیا مایل به اتصال دامنه و فعال‌سازی رایگان SSL (HTTPS) هستید؟ (y/n) [پیش‌فرض: y]: " ssl_choice
+echo -e "Do you want to configure a domain name with automatic free SSL (HTTPS)? (y/n) [Default: y]: "
+read -r ssl_choice < /dev/tty || ssl_choice="y"
 ssl_choice=${ssl_choice:-y}
 
 if [[ "$ssl_choice" =~ ^[Yy]$ ]]; then
     HAS_SSL="y"
     while [ -z "$DOMAIN_NAME" ]; do
-        read -p "لطفاً نام دامنه خود را بدون http یا https وارد کنید (مثال: panel.elinor.com): " DOMAIN_NAME
+        echo -e "Enter your domain name (e.g. commission.example.com): "
+        read -r DOMAIN_NAME < /dev/tty
         DOMAIN_NAME=$(echo "$DOMAIN_NAME" | tr -d ' ' | tr '[:upper:]' '[:lower:]')
     done
-    echo -e "${GREEN}دامنه تنظیم شد: https://${DOMAIN_NAME}${NC}"
+    echo -e "${GREEN}✓ Domain configured: https://${DOMAIN_NAME}${NC}"
 else
-    read -p "آدرس IP سرور یا نام هاست (برای دسترسی لوکال اینتر بزنید تا localhost شود): " SERVER_IP
+    echo -e "Enter server IP address or hostname (Press Enter for localhost): "
+    read -r SERVER_IP < /dev/tty || SERVER_IP="localhost"
     SERVER_IP=${SERVER_IP:-localhost}
-    echo -e "${YELLOW}سیستم بدون SSL و روی پورت 8010 با آدرس http://${SERVER_IP}:8010 راه‌اندازی خواهد شد.${NC}"
+    echo -e "${YELLOW}Running in HTTP mode without SSL on port 8010: http://${SERVER_IP}:8010${NC}"
 fi
 
-# تولید کلیدهای تصادفی امن
+# Generate random secure passwords
 SECRET_KEY=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 50 || echo "secret-key-$(date +%s)")
 POSTGRES_PASSWORD=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 24 || echo "pgpass-$(date +%s)")
 
 if [ -f .env ]; then
-    echo -e "${YELLOW}یک فایل .env از قبل وجود دارد. در حال پشتیبان‌گیری در .env.bak...${NC}"
     cp .env .env.bak
 fi
 
@@ -128,54 +144,50 @@ SECURE_SSL_REDIRECT=false
 SERVE_MEDIA=true
 EOF
 fi
-echo -e "${GREEN}✓ تنظیمات امنیتی در فایل .env ذخیره شد.${NC}"
+echo -e "${GREEN}✓ Configuration saved to .env${NC}"
 
-# ۳. بیلد و اجرای کانتینرها
-echo -e "
-${BLUE}▶ مرحله ۳: بیلد و راه‌اندازی کانتینرهای داکر...${NC}"
-
+# 4. Build and Run Containers
+echo -e "\n${BLUE}▶ [4/5] Building & Launching Docker Services...${NC}"
 if [ "$HAS_SSL" = "y" ]; then
-    echo -e "در حال راه‌اندازی سرویس‌های Web، PostgreSQL و Caddy (SSL خودکار)..."
+    echo -e "Starting Web, PostgreSQL, and Caddy (Automatic SSL Proxy)..."
     $COMPOSE_CMD -f compose.yaml -f compose.prod.yaml up -d --build
 else
-    echo -e "در حال راه‌اندازی سرویس‌های Web و PostgreSQL..."
+    echo -e "Starting Web and PostgreSQL on port 8010..."
     $COMPOSE_CMD up -d --build
 fi
 
-echo -e "صبر برای راه‌اندازی کامل پایگاه‌داده و اجرای مهاجرت‌ها (Migration)..."
-sleep 7
+echo -e "Waiting for database and auto-migrations to initialize..."
+sleep 6
 
-# ۴. ساخت مدیر اولیه و داده‌های پایه
-echo -e "
-${BLUE}▶ مرحله ۴: تنظیمات کاربران اولیه...${NC}"
-
-read -p "آیا مایل به ایجاد حساب کاربری مدیر اصلی (Superuser) هستید؟ (y/n) [پیش‌فرض: y]: " create_admin
+# 5. Superuser & Initial Data
+echo -e "\n${BLUE}▶ [5/5] Initial Setup & Admin User...${NC}"
+echo -e "Do you want to create an admin superuser now? (y/n) [Default: y]: "
+read -r create_admin < /dev/tty || create_admin="y"
 create_admin=${create_admin:-y}
 if [[ "$create_admin" =~ ^[Yy]$ ]]; then
     $COMPOSE_CMD exec web python manage.py createsuperuser
 fi
 
-read -p "آیا مایل به درج داده‌های تستی و اولیه پیش‌فرض (لاین‌ها، شیفت‌ها، تارگت‌ها) هستید؟ (y/n) [پیش‌فرض: n]: " seed_data
+echo -e "Do you want to seed sample test data (lines, shifts, targets)? (y/n) [Default: n]: "
+read -r seed_data < /dev/tty || seed_data="n"
 if [[ "$seed_data" =~ ^[Yy]$ ]]; then
     $COMPOSE_CMD exec web python manage.py seed
 fi
 
-# ۵. اتمام و نمایش اطلاعات دسترسی
-echo -e "
-${GREEN}${BOLD}=================================================================="
-echo "    🎉 تبریک! سامانه عملکرد و پورسانت الینور با موفقیت نصب شد.    "
+# Completion Banner
+echo -e "\n${GREEN}${BOLD}=================================================================="
+echo "    🎉 Elinor Commission System successfully installed!          "
 echo -e "==================================================================${NC}"
 
 if [ "$HAS_SSL" = "y" ]; then
-    echo -e "🔗 نشانی دسترسی سامانه: ${BOLD}https://${DOMAIN_NAME}${NC}"
-    echo -e "🔒 گواهی SSL به طور کاملاً خودکار فعال و تمدید می‌شود."
+    echo -e "🔗 Access URL: ${BOLD}https://${DOMAIN_NAME}${NC}"
+    echo -e "🔒 SSL certificate is automatically managed & renewed by Caddy."
 else
-    echo -e "🔗 نشانی دسترسی سامانه: ${BOLD}http://${SERVER_IP}:8010${NC}"
+    echo -e "🔗 Access URL: ${BOLD}http://${SERVER_IP}:8010${NC}"
 fi
 
-echo -e "
-برای مشاهده لاگ‌های سیستم:"
-echo -e "  ${YELLOW}$COMPOSE_CMD logs -f web${NC}"
-echo -e "برای متوقف کردن سامانه:"
-echo -e "  ${YELLOW}$COMPOSE_CMD down${NC}"
+echo -e "\nUseful commands:"
+echo -e "  View logs:   ${YELLOW}$COMPOSE_CMD logs -f web${NC}"
+echo -e "  Stop system: ${YELLOW}$COMPOSE_CMD down${NC}"
+echo -e "  Restart:     ${YELLOW}$COMPOSE_CMD restart${NC}"
 echo ""
