@@ -860,6 +860,13 @@ class EmployeePermissionTests(BaseEmployeeTest):
         self.employee.is_active=False; self.employee.save(); self.employee_user.refresh_from_db(); self.assertFalse(self.employee_user.is_active); self.assertFalse(self.client.login(username="E001",password="StrongPass123!"))
     def test_user_without_employee_does_not_500(self):
         user=User.objects.create_user("standalone",password="StrongPass123!"); self.client.force_login(user); self.assertEqual(self.client.get(reverse("dashboard")).status_code,403)
+    def test_superuser_without_employee_auto_creates_manager_profile(self):
+        superuser = User.objects.create_superuser("admin_auto", password="AdminPass123!")
+        self.client.force_login(superuser)
+        response = self.client.get(reverse("dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Employee.objects.filter(user=superuser).exists())
+        self.assertEqual(superuser.employee.role, Employee.Role.MANAGER)
     def test_employee_can_access_own_profile(self):
         self.client.force_login(self.employee_user); response=self.client.get(reverse("profile")); self.assertEqual(response.status_code,200); self.assertContains(response,self.employee.full_name)
     def test_employee_cannot_change_own_level(self): self.client.force_login(self.employee_user); self.assertEqual(self.client.post(reverse("management_employee_edit",args=[self.employee.pk]),{}).status_code,403)

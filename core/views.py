@@ -15,7 +15,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 import jdatetime
-from .decorators import manager_required, reviewer_required
+from .decorators import get_or_create_manager_employee, manager_required, reviewer_required
 from .forms import (
     BrandingForm,
     DailyShiftLogForm,
@@ -72,10 +72,8 @@ def supervised_employees(employee):
 
 @login_required
 def dashboard(request):
-    employee = getattr(request.user, "employee", None)
+    employee = get_or_create_manager_employee(request.user)
     if not employee:
-        if request.user.is_staff:
-            return redirect("admin:index")
         raise PermissionDenied("برای این حساب پروفایل کارمند تعریف نشده است.")
     return manager_dashboard(request) if employee.can_review else employee_dashboard(request)
 
