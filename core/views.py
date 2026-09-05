@@ -10,7 +10,14 @@ from django.db import IntegrityError, connection, transaction
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import Coalesce
 from django.views.decorators.http import require_POST
-from django.http import JsonResponse
+from django.http import FileResponse, JsonResponse
+from .backup_service import (
+    create_system_backup,
+    delete_backup_file,
+    get_backup_file_path,
+    list_system_backups,
+    restore_system_backup,
+)
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -1617,3 +1624,106 @@ def branding_settings(request):
         except Exception as exc:
             form.add_error(None, f"خطا در ذخیره فایل یا تنظیمات: {exc}")
     return render(request, "management/branding_form.html", {"form": form, "settings": settings})
+
+
+# ==========================================
+# Backup and Restore (پشتیبان‌گیری و بازیابی اطلاعات)
+# ==========================================
+
+@login_required
+@manager_required
+def management_backup_view(request):
+    """صفحه مدیریت پشتیبان‌گیری و بازیابی اطلاعات سیستم."""
+    backups = list_system_backups()
+    latest_backup = backups[0] if backups else None
+    return render(
+        request,
+        "management/backup.html",
+        {
+            "backups": backups,
+            "latest_backup": latest_backup,
+            "total_backups_count": len(backups),
+        },
+    )
+
+
+@login_required
+@manager_required
+@require_POST
+def management_backup_create(request):
+    """ایجاد نسخه پشتیبان کامل ZIP جدید."""
+    note = request.POST.get("note", "").strip()
+    download_immediately = request.POST.get("download") == "1"
+    try:
+        zip_path, meta = create_system_backup(actor=request.user, note=note)
+        if download_immediately:
+            response = FileResponse(open(zip_path, "rb"), content_type="application/zip")
+            response["Content-Disposition"] = f'attachment; filename="{zip_path.name}"'
+            return response
+        messages.success(request, f"فایل پشتیبان «{zip_path.name}» با موفقیت ایجاد و روی سرور ذخیره شد.")
+    except Exception as exc:
+        messages.error(request, f"خطا در ایجاد فایل پشتیبان: {exc}")
+    return redirect("management_backup")
+
+
+@login_required
+@manager_required
+def management_backup_download(request, filename):
+    """دانلود فایل پشتیبان ZIP از سرور."""
+    try:
+        path = get_backup_file_path(filename)
+        response = FileResponse(open(path, "rb"), content_type="application/zip")
+        response["Content-Disposition"] = f'attachment; filename="{path.name}"'
+        return response
+    except ValidationError as exc:
+        messages.error(request, str(exc))
+        return redirect("management_backup")
+
+
+@login_required
+@manager_required
+@require_POST
+def management_backup_restore(request):
+    """بازیابی سامانه از فایل ZIP بارگذاری‌شده یا انتخاب‌شده از لیست سرور."""
+    uploaded_file = request.FILES.get("backup_file")
+    existing_filename = request.POST.get("filename")
+
+    if not uploaded_file and not existing_filename:
+        messages.error(request, "لطفاً یک فایل پشتیبان ZIP انتخاب یا بارگذاری نمایید.")
+        return redirect("management_backup")
+
+    try:
+        if uploaded_file:
+            target_source = uploaded_file
+            label = uploaded_file.name
+        else:
+            target_source = get_backup_file_path(existing_filename)
+            label = existing_filename
+
+        meta = restore_system_backup(target_source, actor=request.user)
+        messages.success(
+            request,
+            f"اطلاعات سامانه با موفقیت از «{label}» بازیابی شد و ساختار دیتابیس با آخرین نسخه برنامه همگام گردید."
+        )
+    except ValidationError as exc:
+        messages.error(request, f"خطا در اعتبارسنجی فایل پشتیبان: {exc.message if hasattr(exc, 'message') else exc}")
+    except Exception as exc:
+        messages.error(request, f"خطای غیرمنتظره در بازیابی داده‌ها: {exc}")
+
+    return redirect("management_backup")
+
+
+@login_required
+@manager_required
+@require_POST
+def management_backup_delete(request, filename):
+    """حذف فایل پشتیبان از روی سرور."""
+    try:
+        deleted = delete_backup_file(filename, actor=request.user)
+        if deleted:
+            messages.success(request, f"فایل پشتیبان «{filename}» با موفقیت حذف شد.")
+        else:
+            messages.error(request, "فایل پشتیبان پیدا نشد.")
+    except Exception as exc:
+        messages.error(request, f"خطا در حذف فایل: {exc}")
+    return redirect("management_backup")

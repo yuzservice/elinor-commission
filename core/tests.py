@@ -1,4 +1,5 @@
 from datetime import date, time
+import zipfile
 from decimal import Decimal
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
@@ -957,3 +958,53 @@ class EmployeeManagementTests(BaseEmployeeTest):
     def test_employee_can_change_own_password(self):
         self.client.force_login(self.employee_user); new="EmployeeNewPass789!"; response=self.client.post(reverse("profile_password"),{"old_password":"StrongPass123!","new_password1":new,"new_password2":new})
         self.assertEqual(response.status_code,302); self.employee_user.refresh_from_db(); self.assertTrue(self.employee_user.check_password(new))
+
+
+class BackupRestoreTests(BaseEmployeeTest):
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.manager_user)
+
+    def test_backup_permission_manager_only(self):
+        self.client.force_login(self.employee_user)
+        self.assertEqual(self.client.get(reverse("management_backup")).status_code, 403)
+        self.assertEqual(self.client.post(reverse("management_backup_create")).status_code, 403)
+        self.client.force_login(self.manager_user)
+        self.assertEqual(self.client.get(reverse("management_backup")).status_code, 200)
+
+    def test_superuser_auto_creates_manager_profile(self):
+        superuser = User.objects.create_superuser("admin_auto", "admin@test.com", "AdminPass123!")
+        self.client.force_login(superuser)
+        response = self.client.get(reverse("dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(hasattr(superuser, "employee"))
+        self.assertEqual(superuser.employee.role, Employee.Role.MANAGER)
+
+    def test_create_system_backup_and_download_and_delete(self):
+        from core.backup_service import create_system_backup, list_system_backups, delete_backup_file
+        zip_path, meta = create_system_backup(actor=self.manager_user, note="تست پشتیبان‌گیری خودکار")
+        self.assertTrue(zip_path.exists())
+        self.assertTrue(zipfile.is_zipfile(zip_path))
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            self.assertIn("backup_meta.json", zf.namelist())
+            self.assertIn("data.json", zf.namelist())
+
+        # Test listing backups
+        backups = list_system_backups()
+        self.assertTrue(any(b["filename"] == zip_path.name for b in backups))
+
+        # Test download endpoint
+        response = self.client.get(reverse("management_backup_download", args=[zip_path.name]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/zip")
+
+        # Test delete endpoint
+        del_resp = self.client.post(reverse("management_backup_delete", args=[zip_path.name]))
+        self.assertEqual(del_resp.status_code, 302)
+        self.assertFalse(zip_path.exists())
+
+    def test_restore_system_backup_validation(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        bad_file = SimpleUploadedFile("fake.zip", b"not a valid zip content", content_type="application/zip")
+        response = self.client.post(reverse("management_backup_restore"), {"backup_file": bad_file})
+        self.assertEqual(response.status_code, 302)

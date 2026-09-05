@@ -1,0 +1,187 @@
+{% extends 'base.html' %}
+{% load persian %}
+{% block title %}پشتیبان‌گیری و بازیابی اطلاعات{% endblock %}
+{% block content %}
+<div class="admin-page-head">
+    <div>
+        <span class="admin-kicker">مدیریت و نگهداری داده‌ها</span>
+        <h1>💾 پشتیبان‌گیری و بازیابی اطلاعات</h1>
+        <p>ایجاد نسخه پشتیبان کامل ZIP از پایگاه‌داده و فایل‌ها، دانلود مستقیم و بازیابی هوشمند با ارتقای خودکار</p>
+    </div>
+    <div class="head-actions">
+        <a class="secondary" href="{% url 'branding_settings' %}">🎨 تنظیمات برندینگ</a>
+        <a class="secondary" href="{% url 'dashboard' %}">بازگشت به داشبورد</a>
+    </div>
+</div>
+
+<!-- کارت‌های آماری وضعیت پشتیبان‌گیری -->
+<section class="admin-stat-grid">
+    <article>
+        <span class="stat-icon green">📦</span>
+        <div>
+            <small>تعداد نسخه‌های پشتیبان</small>
+            <strong>{{ total_backups_count|persian_digits }}</strong>
+            <span>فایل ذخیره‌شده روی سرور</span>
+        </div>
+    </article>
+    <article>
+        <span class="stat-icon blue">⏱️</span>
+        <div>
+            <small>آخرین تاریخ پشتیبان‌گیری</small>
+            <strong>{% if latest_backup %}{{ latest_backup.created_at_jalali|slice:":10" }}{% else %}—{% endif %}</strong>
+            <span>{% if latest_backup %}{{ latest_backup.created_at_jalali|slice:"11:" }}{% else %}هنوز بکاپی ثبت نشده{% endif %}</span>
+        </div>
+    </article>
+    <article>
+        <span class="stat-icon gold">🗄️</span>
+        <div>
+            <small>نوع پایگاه‌داده</small>
+            <strong>PostgreSQL</strong>
+            <span>سازگار با ساختار Django Migrations</span>
+        </div>
+    </article>
+    <article>
+        <span class="stat-icon rose">🛡️</span>
+        <div>
+            <small>پشتیبان اضطراری خودکار</small>
+            <strong>فعال</strong>
+            <span>بکاپ خودکار پیش از هر بازیابی</span>
+        </div>
+    </article>
+</section>
+
+<!-- بخش عملیات: ایجاد بکاپ جدید و آپلود بکاپ -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 18px; margin-bottom: 24px;">
+    <!-- کارت ۱: ایجاد پشتیبان جدید -->
+    <article class="card" style="border-radius: 16px; display: flex; flex-direction: column;">
+        <div class="card-head">
+            <div>
+                <h2>✨ ایجاد نسخه پشتیبان جدید</h2>
+                <p>خروجی فشرده ZIP شامل دیتابیس کامل، عکس‌های پرسنل و متادیتای سیستم</p>
+            </div>
+        </div>
+        <form method="post" action="{% url 'management_backup_create' %}" style="display: flex; flex-direction: column; flex: 1;">
+            {% csrf_token %}
+            <div class="field" style="flex: 1;">
+                <label>یادداشت یا برچسب نسخه (اختیاری):</label>
+                <input type="text" name="note" placeholder="مثال: بکاپ پیش از تسویه حساب شهریور یا ارتقای سیستم...">
+                <small class="help">این یادداشت جهت شناسایی آسان در متادیتای فایل پشتیبان ذخیره می‌شود.</small>
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px;">
+                <button type="submit" name="download" value="1" class="primary" style="padding: 10px 18px; font-weight: 700;">
+                    ⬇️ ایجاد و دانلود آنی فایل ZIP
+                </button>
+                <button type="submit" name="download" value="0" class="secondary" style="padding: 10px 16px;">
+                    ذخیره روی سرور
+                </button>
+            </div>
+        </form>
+    </article>
+
+    <!-- کارت ۲: بازیابی از فایل آپلودی -->
+    <article class="card" style="border-radius: 16px; border: 1.5px solid #fed7aa; background: #fffdfa; display: flex; flex-direction: column;">
+        <div class="card-head">
+            <div>
+                <h2 style="color: #c2410c;">📥 آپلود و بازیابی فایل پشتیبان (Restore)</h2>
+                <p style="color: #9a3412;">بازیابی اطلاعات از فایل ZIP نسخه‌های فعلی یا قبلی سامانه</p>
+            </div>
+        </div>
+        <form method="post" action="{% url 'management_backup_restore' %}" enctype="multipart/form-data" onsubmit="return confirm('⚠️ اخطار بسیار مهم:\nآیا از بازیابی این فایل پشتیبان مطمئن هستید؟\n\nسیستم پیش از بازیابی به طور خودکار یک نسخه بکاپ اضطراری از داده‌های فعلی می‌گیرد تا اطلاعات از بین نرود.');" style="display: flex; flex-direction: column; flex: 1;">
+            {% csrf_token %}
+            <div class="field" style="flex: 1;">
+                <label>انتخاب فایل فشرده ZIP پشتیبان:</label>
+                <input type="file" name="backup_file" accept=".zip" required style="padding: 8px; background: #fff;">
+                <small class="help" style="color: #c2410c;">
+                    💡 سیستم حتی در صورت تغییرات اسکیما بین نسخه‌ها، پس از بازیابی به صورت خودکار مایگریشن‌ها را اجرا کرده و داده‌ها را با آخرین نسخه تطبیق می‌دهد.
+                </small>
+            </div>
+            <div style="margin-top: 14px;">
+                <button type="submit" class="secondary danger-action" style="padding: 10px 20px; font-weight: 700; background: #fff; border-color: #f97316; color: #ea580c;">
+                    ⚡ بارگذاری و بازیابی اطلاعات سامانه
+                </button>
+            </div>
+        </form>
+    </article>
+</div>
+
+<!-- جدول نسخه‌های پشتیبان موجود روی سرور -->
+<article class="card" style="border-radius: 16px;">
+    <div class="card-head">
+        <div>
+            <h2>📋 بایگانی نسخه‌های پشتیبان موجود روی سرور</h2>
+            <p>مشاهده، دانلود مستقیم و بازیابی نسخه‌های ذخیره‌شده در پوشه backups سرور</p>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>نام فایل پشتیبان</th>
+                    <th>نوع</th>
+                    <th>حجم فایل</th>
+                    <th>تاریخ و ساعت ایجاد (شمسی)</th>
+                    <th>ایجادکننده</th>
+                    <th>یادداشت نسخه</th>
+                    <th>عملیات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for b in backups %}
+                <tr>
+                    <td>
+                        <strong style="direction: ltr; display: inline-block; font-family: monospace; font-size: 12.5px;">
+                            {{ b.filename }}
+                        </strong>
+                    </td>
+                    <td>
+                        <span class="badge" style="background: {% if b.is_zip %}var(--green2){% else %}#fef3c7{% endif %}; color: {% if b.is_zip %}var(--green){% else %}#b45309{% endif %}; font-weight: 700;">
+                            {{ b.type }}
+                        </span>
+                    </td>
+                    <td><b>{{ b.size_display|persian_digits }}</b></td>
+                    <td>{{ b.created_at_jalali|persian_digits }}</td>
+                    <td><small>{{ b.created_by }}</small></td>
+                    <td>
+                        {% if b.note %}
+                        <span style="font-size: 12px; color: var(--ink);">{{ b.note }}</span>
+                        {% else %}
+                        <span style="color: var(--muted);">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 6px; align-items: center;">
+                            <a class="table-link" href="{% url 'management_backup_download' b.filename %}" style="padding: 5px 10px; border-radius: 6px; background: #f0fdf4; display: inline-block;">
+                                ⬇️ دانلود
+                            </a>
+
+                            {% if b.is_zip %}
+                            <form method="post" action="{% url 'management_backup_restore' %}" onsubmit="return confirm('آیا از بازیابی نسخه «{{ b.filename|escapejs }}» اطمینان دارید؟');" style="margin: 0;">
+                                {% csrf_token %}
+                                <input type="hidden" name="filename" value="{{ b.filename }}">
+                                <button type="submit" class="table-link" style="border: 0; background: #fff7ed; color: #c2410c; padding: 5px 10px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 700;">
+                                    بازیابی این نسخه
+                                </button>
+                            </form>
+                            {% endif %}
+
+                            <form method="post" action="{% url 'management_backup_delete' b.filename %}" onsubmit="return confirm('فایل «{{ b.filename|escapejs }}» از روی سرور حذف شود؟');" style="margin: 0;">
+                                {% csrf_token %}
+                                <button type="submit" style="border: 0; background: transparent; color: #dc2626; cursor: pointer; font-size: 14px; padding: 4px;" title="حذف فایل">
+                                    🗑️
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="empty">
+                        هنوز هیچ فایل پشتیبانی در سرور ایجاد نشده است. با زدن دکمه «ایجاد و دانلود آنی فایل ZIP» اولین نسخه را ثبت کنید.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</article>
+{% endblock %}

@@ -51,6 +51,11 @@ urlpatterns = [
 
     # Settings & Definitions
     path("management/settings/branding/", views.branding_settings, name="branding_settings"),
+    path("management/settings/backup/", views.management_backup_view, name="management_backup"),
+    path("management/settings/backup/create/", views.management_backup_create, name="management_backup_create"),
+    path("management/settings/backup/download/<str:filename>/", views.management_backup_download, name="management_backup_download"),
+    path("management/settings/backup/restore/", views.management_backup_restore, name="management_backup_restore"),
+    path("management/settings/backup/delete/<str:filename>/", views.management_backup_delete, name="management_backup_delete"),
     path("management/shifts/", views.management_shifts, name="management_shifts"),
     path("management/shifts/create/", views.management_shift_create, name="management_shift_create"),
     path("management/shifts/<int:pk>/edit/", views.management_shift_edit, name="management_shift_edit"),
