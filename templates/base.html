@@ -76,9 +76,10 @@
     
     <form method="post" action="{% url 'logout' %}">
         {% csrf_token %}
-        <button class="logout">خروج از حساب</button>
+        <button class="logout" type="submit">🚪 خروج از حساب</button>
     </form>
 </aside>
+<div class="sidebar-backdrop" id="sidebarBackdrop" onclick="document.body.classList.remove('nav-open')"></div>
 {% endif %}
 
 <main class="{% if not user.is_authenticated %}auth-main{% endif %}">
@@ -237,6 +238,235 @@ function initCustomMultiselect() {
     });
 }
 
+function initJalaliDatepicker() {
+    const monthNames = ["فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"];
+    const weekDays = ["ش", "ی", "د", "س", "چ", "پ", "ج"];
+
+    function g2j(gy, gm, gd) {
+        var g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+        var jy = (gy <= 1600) ? 0 : 979;
+        gy -= (gy <= 1600) ? 621 : 1600;
+        var gy2 = (gm > 1) ? (gy + 1) : gy;
+        var days = (365 * gy) + (Math.floor((gy2 + 3) / 4)) - (Math.floor((gy2 + 99) / 100)) + (Math.floor((gy2 + 399) / 400)) - 80 + gd + g_d_m[gm];
+        jy += 33 * Math.floor(days / 12053);
+        days %= 12053;
+        jy += 4 * Math.floor(days / 1461);
+        days %= 1461;
+        if (days > 365) {
+            jy += Math.floor((days - 1) / 365);
+            days = (days - 1) % 365;
+        }
+        var jm = (days < 186) ? 1 + Math.floor(days / 31) : 7 + Math.floor((days - 186) / 30);
+        var jd = 1 + ((days < 186) ? (days % 31) : ((days - 186) % 30));
+        return { jy: jy, jm: jm, jd: jd };
+    }
+
+    function j2g(jy, jm, jd) {
+        var gy = jy <= 979 ? 621 : 1600;
+        jy -= jy <= 979 ? 0 : 979;
+        var days = 365 * jy + Math.floor(jy / 33) * 8 + Math.floor(((jy % 33) + 3) / 4) + 78 + jd + ((jm < 7) ? (jm - 1) * 31 : ((jm - 7) * 30 + 186));
+        gy += 400 * Math.floor(days / 146097);
+        days %= 146097;
+        if (days > 36524) {
+            gy += 100 * Math.floor(--days / 36524);
+            days %= 36524;
+            if (days >= 365) days++;
+        }
+        gy += 4 * Math.floor(days / 1461);
+        days %= 1461;
+        if (days > 365) {
+            jy += Math.floor((days - 1) / 365);
+            days = (days - 1) % 365;
+        }
+        var gd = days + 1;
+        var sal_a = [0, 31, ((gy % 4 === 0 && gy % 100 !== 0) || (gy % 400 === 0)) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        var gm;
+        for (gm = 0; gm < 13 && gd > sal_a[gm]; gm++) gd -= sal_a[gm];
+        return new Date(gy, gm - 1, gd);
+    }
+
+    function isLeap(jy) {
+        return (((((jy - 474) % 2820) + 2820) % 2820 * 682) - 110) % 2816 < 682;
+    }
+
+    function getDaysInMonth(jy, jm) {
+        if (jm <= 6) return 31;
+        if (jm <= 11) return 30;
+        return isLeap(jy) ? 30 : 29;
+    }
+
+    const todayG = new Date();
+    const todayJ = g2j(todayG.getFullYear(), todayG.getMonth(), todayG.getDate());
+
+    let pickerEl = document.getElementById('jalali-datepicker-popup');
+    if (!pickerEl) {
+        pickerEl = document.createElement('div');
+        pickerEl.id = 'jalali-datepicker-popup';
+        pickerEl.className = 'jalali-datepicker-popup';
+        pickerEl.style.display = 'none';
+        document.body.appendChild(pickerEl);
+    }
+
+    let activeInput = null;
+    let viewYear = todayJ.jy;
+    let viewMonth = todayJ.jm;
+
+    function renderCalendar() {
+        if (!pickerEl || !activeInput) return;
+        const daysInMonth = getDaysInMonth(viewYear, viewMonth);
+        const firstDayG = j2g(viewYear, viewMonth, 1);
+        const startWeekDay = (firstDayG.getDay() + 1) % 7;
+
+        let curVal = activeInput.value.trim();
+        let selY = 0, selM = 0, selD = 0;
+        if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(curVal)) {
+            const parts = curVal.split('/').map(Number);
+            selY = parts[0]; selM = parts[1]; selD = parts[2];
+        }
+
+        let html = `
+            <div class="jdp-header">
+                <button type="button" class="jdp-btn jdp-next">&lt;</button>
+                <div class="jdp-title">
+                    <span class="jdp-month">${monthNames[viewMonth - 1]}</span>
+                    <span class="jdp-year">${viewYear}</span>
+                </div>
+                <button type="button" class="jdp-btn jdp-prev">&gt;</button>
+            </div>
+            <div class="jdp-weekdays">
+                ${weekDays.map(w => `<span>${w}</span>`).join('')}
+            </div>
+            <div class="jdp-days">
+        `;
+
+        for (let i = 0; i < startWeekDay; i++) {
+            html += `<span class="jdp-day empty"></span>`;
+        }
+
+        for (let d = 1; d <= daysInMonth; d++) {
+            const isToday = (viewYear === todayJ.jy && viewMonth === todayJ.jm && d === todayJ.jd);
+            const isSelected = (viewYear === selY && viewMonth === selM && d === selD);
+            let cls = 'jdp-day';
+            if (isToday) cls += ' today';
+            if (isSelected) cls += ' selected';
+            html += `<span class="${cls}" data-day="${d}">${d}</span>`;
+        }
+
+        html += `
+            </div>
+            <div class="jdp-footer">
+                <button type="button" class="jdp-footer-btn jdp-today">امروز</button>
+                <button type="button" class="jdp-footer-btn jdp-close">بستن</button>
+            </div>
+        `;
+
+        pickerEl.innerHTML = html;
+
+        pickerEl.querySelector('.jdp-prev').onclick = (e) => {
+            e.stopPropagation();
+            viewMonth--;
+            if (viewMonth < 1) { viewMonth = 12; viewYear--; }
+            renderCalendar();
+        };
+
+        pickerEl.querySelector('.jdp-next').onclick = (e) => {
+            e.stopPropagation();
+            viewMonth++;
+            if (viewMonth > 12) { viewMonth = 1; viewYear++; }
+            renderCalendar();
+        };
+
+        pickerEl.querySelectorAll('.jdp-day:not(.empty)').forEach(el => {
+            el.onclick = (e) => {
+                e.stopPropagation();
+                const d = Number(el.dataset.day);
+                const mm = String(viewMonth).padStart(2, '0');
+                const dd = String(d).padStart(2, '0');
+                activeInput.value = `${viewYear}/${mm}/${dd}`;
+                activeInput.dispatchEvent(new Event('input', { bubbles: true }));
+                activeInput.dispatchEvent(new Event('change', { bubbles: true }));
+                closePicker();
+            };
+        });
+
+        pickerEl.querySelector('.jdp-today').onclick = (e) => {
+            e.stopPropagation();
+            const mm = String(todayJ.jm).padStart(2, '0');
+            const dd = String(todayJ.jd).padStart(2, '0');
+            activeInput.value = `${todayJ.jy}/${mm}/${dd}`;
+            activeInput.dispatchEvent(new Event('input', { bubbles: true }));
+            activeInput.dispatchEvent(new Event('change', { bubbles: true }));
+            closePicker();
+        };
+
+        pickerEl.querySelector('.jdp-close').onclick = (e) => {
+            e.stopPropagation();
+            closePicker();
+        };
+    }
+
+    function positionPicker() {
+        if (!activeInput || !pickerEl) return;
+        const rect = activeInput.getBoundingClientRect();
+        const popupWidth = 290;
+        let left = rect.left;
+        let top = rect.bottom + window.scrollY + 6;
+
+        if (left + popupWidth > window.innerWidth) {
+            left = window.innerWidth - popupWidth - 16;
+        }
+        if (left < 10) left = 10;
+
+        pickerEl.style.top = `${top}px`;
+        pickerEl.style.left = `${left}px`;
+    }
+
+    function openPicker(input) {
+        activeInput = input;
+        let curVal = input.value.trim();
+        if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(curVal)) {
+            const parts = curVal.split('/').map(Number);
+            viewYear = parts[0];
+            viewMonth = parts[1];
+        } else {
+            viewYear = todayJ.jy;
+            viewMonth = todayJ.jm;
+        }
+        renderCalendar();
+        positionPicker();
+        pickerEl.style.display = 'block';
+    }
+
+    function closePicker() {
+        if (pickerEl) pickerEl.style.display = 'none';
+        activeInput = null;
+    }
+
+    document.querySelectorAll('input.jalali-date, input[name="date"], input[name="start_date"], input[name="violation_date"]').forEach(inp => {
+        if (inp.dataset.jdpInit) return;
+        inp.dataset.jdpInit = "true";
+        inp.setAttribute('autocomplete', 'off');
+
+        inp.addEventListener('focus', () => openPicker(inp));
+        inp.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openPicker(inp);
+        });
+    });
+
+    document.addEventListener('click', (e) => {
+        if (pickerEl && pickerEl.style.display === 'block') {
+            if (!pickerEl.contains(e.target) && e.target !== activeInput) {
+                closePicker();
+            }
+        }
+    });
+
+    window.addEventListener('resize', () => {
+        if (pickerEl && pickerEl.style.display === 'block') positionPicker();
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const currentPath = window.location.pathname;
     const navLinks = document.querySelectorAll('nav a');
@@ -253,9 +483,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         }
+        link.addEventListener('click', () => {
+            if (window.innerWidth <= 900) {
+                document.body.classList.remove('nav-open');
+            }
+        });
+    });
+
+    // Close mobile nav on click outside
+    document.addEventListener('click', (e) => {
+        if (document.body.classList.contains('nav-open')) {
+            const aside = document.querySelector('aside');
+            const menuBtn = document.querySelector('.menu');
+            if (aside && !aside.contains(e.target) && menuBtn && !menuBtn.contains(e.target)) {
+                document.body.classList.remove('nav-open');
+            }
+        }
     });
 
     initCustomMultiselect();
+    initJalaliDatepicker();
 });
 </script>
 </body>

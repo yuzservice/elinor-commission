@@ -1,1 +1,36 @@
-{% extends 'base.html' %}{% block title %}ورود | {{ system_settings.panel_name }}{% endblock %}{% block content %}<div class="login-wrap"><div class="login-card">{% if system_settings.logo %}<img class="login-brand-logo" src="{{ system_settings.logo.url }}" alt="لوگو">{% else %}<div class="login-logo">{{ system_settings.organization_name|slice:':1' }}</div>{% endif %}<h1>{{ system_settings.panel_name }}</h1><p>{{ system_settings.organization_name }}</p>{% if form.errors %}<div class="message error">نام کاربری یا رمز عبور صحیح نیست.</div>{% endif %}<form method="post">{% csrf_token %}<label>نام کاربری</label>{{ form.username }}<label>رمز عبور</label>{{ form.password }}<button class="primary full">ورود به سامانه</button></form><small class="hint">نسخه آزمایشی · اطلاعات ورود در README</small></div></div>{% endblock %}
+{% extends 'base.html' %}
+{% block title %}ورود | {{ system_settings.panel_name|default:'سامانه عملکرد' }}{% endblock %}
+{% block content %}
+<div class="login-wrap">
+    <div class="login-card">
+        <div class="login-logo-wrap">
+            {% if system_settings.logo %}
+            <img class="login-brand-logo" src="{{ system_settings.logo.url }}" alt="لوگو">
+            {% else %}
+            <div class="login-logo">{{ system_settings.organization_name|slice:':1'|default:'س' }}</div>
+            {% endif %}
+        </div>
+        <h1>{{ system_settings.panel_name|default:'سامانه عملکرد و پورسانت' }}</h1>
+        <p>{{ system_settings.organization_name|default:'مجموعه الینور' }}</p>
+        
+        {% if form.errors %}
+        <div class="message error" style="margin-top: 14px;">نام کاربری یا رمز عبور واردشده صحیح نیست.</div>
+        {% endif %}
+        
+        <form method="post" style="margin-top: 16px;">
+            {% csrf_token %}
+            <div class="field">
+                <label>نام کاربری</label>
+                {{ form.username }}
+            </div>
+            <div class="field">
+                <label>رمز عبور</label>
+                {{ form.password }}
+            </div>
+            <button class="primary full" style="margin-top: 14px; padding: 12px; font-size: 14px; font-weight: 700;">
+                ورود به سامانه
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -143,6 +143,7 @@
         <div><small>کد پرسنلی</small><b>{{ employee.employee_code }}</b></div>
         <div><small>نام کاربری ورود</small><b style="color: var(--green);">{{ employee.user.username }}</b></div>
         <div><small>شماره موبایل</small><b dir="ltr">{{ employee.mobile }}</b></div>
+        <div><small>شماره کارت بانکی</small><b dir="ltr" style="font-family: monospace; letter-spacing: 1px;">{% if employee.card_number %}{{ employee.card_number }}{% else %}—{% endif %}</b></div>
         <div><small>نرخ پورسانت روی لاین اصلی</small><b>{% if line_rate %}{{ line_rate.rate_per_unit|persian_int }} ریال (گرید {{ employee.commission_level.code }}){% else %}—{% endif %}</b></div>
         <div><small>شیفت پیش‌فرض</small><b>{{ employee.default_shift.title|default:'—' }} ({{ employee.standard_daily_hours|persian_digits }} ساعت)</b></div>
         <div><small>تاریخ شروع همکاری</small><b>{{ employee.start_date|jalali|default:'—' }}</b></div>

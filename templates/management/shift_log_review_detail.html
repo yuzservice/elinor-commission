@@ -143,45 +143,93 @@
 {% endif %}
 
 <!-- Review & Action Form Card -->
-<article class="card form-card" style="border: 2px solid {% if log.status == 'APPROVED' %}#86efac{% else %}var(--green, #237554){% endif %};">
+<article class="card form-card" style="border: 2px solid {% if log.status == 'APPROVED' %}#86efac{% else %}var(--green, #237554){% endif %}; border-radius: 16px;">
     <div class="card-head">
-        <h2>⚖️ ثبت تصمیم مدیر و فریز مالی</h2>
-    </div>
-    
-    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 14px 18px; margin-bottom: 18px;">
-        <p style="margin: 0; font-size: 13px; color: #166534; line-height: 1.6;">
-            🔒 <strong>قانون فریز مالی:</strong> به محض زدن دکمه <strong>«تأیید کارکرد»</strong>، پورسانت روز کارمند به مبلغ <strong>{{ calc.total_commission|persian_int }} ریال</strong> به حساب کاربری وی واریز و برای همیشه فریز می‌شود. هرگونه تغییر در ضرایب یا قوانین آینده، این محاسبات تاریخی را تغییر نخواهد داد.
-        </p>
+        <h2>⚖️ ثبت تصمیم مدیر</h2>
     </div>
 
-    <form method="post">
+    <form method="post" id="review-action-form">
         {% csrf_token %}
-        <div class="field" style="margin-bottom: 16px;">
-            <label style="font-size: 13.5px; font-weight: 700; margin-bottom: 8px; display: block;">تصمیم نهایی مدیر:</label>
-            <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-                {% for radio in form.action %}
-                <label style="display: flex; align-items: center; gap: 6px; padding: 10px 18px; border-radius: 10px; border: 1.5px solid var(--line); background: #fff; cursor: pointer; font-weight: 600;">
-                    {{ radio.tag }}
-                    <span>{{ radio.choice_label }}</span>
-                </label>
-                {% endfor %}
-            </div>
-            {% for error in form.action.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        <div class="review-decision-grid">
+            <label class="decision-card approve-card" id="approve-card-label">
+                <input type="radio" name="action" value="APPROVED" {% if form.action.value != 'REJECTED' %}checked{% endif %} id="action-approve" style="display:none">
+                <div class="decision-icon">✅</div>
+                <div class="decision-text">
+                    <strong>تأیید کارکرد شیفت</strong>
+                    <small>واریز قطعی {{ calc.total_commission|persian_int }} ریال به کیف پول کارمند</small>
+                </div>
+            </label>
+            <label class="decision-card reject-card" id="reject-card-label">
+                <input type="radio" name="action" value="REJECTED" {% if form.action.value == 'REJECTED' %}checked{% endif %} id="action-reject" style="display:none">
+                <div class="decision-icon">❌</div>
+                <div class="decision-text">
+                    <strong>رد کارکرد شیفت</strong>
+                    <small>عدم تأیید و لزوم درج توضیح برای پرسنل</small>
+                </div>
+            </label>
         </div>
+        {% for error in form.action.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
 
-        <div class="field" style="margin-bottom: 18px;">
-            <label style="font-size: 13px; font-weight: 600; margin-bottom: 6px; display: block;">
-                یادداشت یا بازخورد برای کارمند <small style="color: var(--muted); font-weight: 400;">(در صورت رد کارکرد، نوشتن دلیل الزامی است)</small>:
+        <div id="reject-note-container" class="field" style="margin-top: 18px; display: none;">
+            <label style="font-size: 13px; font-weight: 700; margin-bottom: 6px; display: block; color: #b91c1c;">
+                ⚠️ علت رد کارکرد برای پرسنل (الزامی):
             </label>
             {{ form.manager_note }}
             {% for error in form.manager_note.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
         </div>
 
-        <button class="primary" style="padding: 12px 28px; font-size: 14px; font-weight: 700;">
-            ثبت تصمیم و اعمال فریز مالی
-        </button>
+        <div style="margin-top: 22px;">
+            <button id="submit-review-btn" class="primary" style="padding: 12px 30px; font-size: 14px; font-weight: 700; border-radius: 10px;">
+                ✅ ثبت و تأیید نهایی کارکرد
+            </button>
+        </div>
     </form>
 </article>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const radioApprove = document.getElementById('action-approve');
+    const radioReject = document.getElementById('action-reject');
+    const cardApprove = document.getElementById('approve-card-label');
+    const cardReject = document.getElementById('reject-card-label');
+    const noteContainer = document.getElementById('reject-note-container');
+    const noteTextarea = noteContainer ? noteContainer.querySelector('textarea') : null;
+    const submitBtn = document.getElementById('submit-review-btn');
+
+    function syncDecision() {
+        if (!radioApprove || !radioReject) return;
+        if (radioReject.checked) {
+            cardReject.classList.add('selected');
+            cardApprove.classList.remove('selected');
+            if (noteContainer) noteContainer.style.display = 'block';
+            if (noteTextarea) noteTextarea.required = true;
+            if (submitBtn) {
+                submitBtn.style.background = '#dc2626';
+                submitBtn.style.color = '#fff';
+                submitBtn.style.borderColor = '#dc2626';
+                submitBtn.textContent = '❌ ثبت رد کارکرد';
+            }
+        } else {
+            cardApprove.classList.add('selected');
+            cardReject.classList.remove('selected');
+            if (noteContainer) noteContainer.style.display = 'none';
+            if (noteTextarea) noteTextarea.required = false;
+            if (submitBtn) {
+                submitBtn.style.background = 'var(--green, #237554)';
+                submitBtn.style.color = '#fff';
+                submitBtn.style.borderColor = 'transparent';
+                submitBtn.textContent = '✅ ثبت و تأیید نهایی کارکرد';
+            }
+        }
+    }
+
+    if (cardApprove && cardReject) {
+        cardApprove.addEventListener('click', () => { radioApprove.checked = true; syncDecision(); });
+        cardReject.addEventListener('click', () => { radioReject.checked = true; syncDecision(); if (noteTextarea) noteTextarea.focus(); });
+        syncDecision();
+    }
+});
+</script>
 
 {% if log.status == 'APPROVED' or log.is_frozen %}
 <article class="card" style="margin-top:20px; border: 1.5px solid #fde047; background: #fefce8;">

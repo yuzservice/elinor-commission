@@ -33,6 +33,7 @@ from .forms import (
     JalaliDateField,
     LineShiftPerformanceForm,
     ManagerPasswordResetForm,
+    ProfileCardForm,
     ProfilePhotoForm,
     ShiftForm,
     ShiftLogReviewForm,
@@ -1563,7 +1564,13 @@ def profile(request):
     employee = getattr(request.user, "employee", None)
     if not employee:
         raise PermissionDenied("پروفایل کارمند تعریف نشده است.")
-    return render(request, "profile/detail.html", {"employee": employee})
+    card_form = ProfileCardForm(request.POST or None, instance=employee)
+    if request.method == "POST" and "save_card" in request.POST:
+        if card_form.is_valid():
+            card_form.save()
+            messages.success(request, "شماره کارت بانکی با موفقیت ذخیره شد.")
+            return redirect("profile")
+    return render(request, "profile/detail.html", {"employee": employee, "card_form": card_form})
 
 @login_required
 def profile_photo(request):

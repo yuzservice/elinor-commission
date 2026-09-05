@@ -140,10 +140,13 @@ class DailyShiftLogForm(forms.ModelForm):
         if not self.is_bound and not self.instance.pk:
             self.fields["date"].initial = jdatetime.date.fromgregorian(date=timezone.localdate()).strftime("%Y/%m/%d")
             if employee:
-                if employee.default_shift:
-                    self.fields["shift"].initial = employee.default_shift
+                target_shift = employee.default_shift or Shift.objects.filter(is_active=True).first()
+                if target_shift:
+                    self.initial["shift"] = target_shift.pk
+                    self.fields["shift"].initial = target_shift.pk
                 if employee.primary_department:
-                    self.fields["main_department"].initial = employee.primary_department
+                    self.initial["main_department"] = employee.primary_department_id
+                    self.fields["main_department"].initial = employee.primary_department_id
 
 
 class SupportLineIntervalForm(forms.ModelForm):
@@ -296,6 +299,7 @@ class EmployeeBaseForm(forms.ModelForm):
             "first_name",
             "last_name",
             "mobile",
+            "card_number",
             "default_shift",
             "standard_daily_hours",
             "primary_department",
@@ -308,6 +312,7 @@ class EmployeeBaseForm(forms.ModelForm):
         widgets = {
             "departments": forms.SelectMultiple(attrs={"class": "custom-multiselect"}),
             "standard_daily_hours": forms.NumberInput(attrs={"step": "0.5", "min": "1", "inputmode": "decimal"}),
+            "card_number": forms.TextInput(attrs={"placeholder": "۶۰۳۷-xxxx-xxxx-xxxx", "dir": "ltr", "inputmode": "numeric"}),
         }
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -315,8 +320,22 @@ class EmployeeBaseForm(forms.ModelForm):
         self.fields["primary_department"].label = "لاین اصلی"
         self.fields["departments"].label = "لاین‌های مجاز (حضور اصلی و کمکی)"
         self.fields["departments"].help_text = "لاین‌هایی که کارمند مجاز به حضور در آن‌ها به عنوان لاین اصلی یا کمکی است را انتخاب کنید."
+        self.fields["card_number"].label = "شماره کارت بانکی"
+        self.fields["card_number"].help_text = "شماره کارت ۱۶ رقمی جهت تسویه و واریز پورسانت"
+        self.fields["card_number"].required = False
         if not self.is_bound and self.instance.pk and self.instance.start_date:
             self.initial["start_date"] = jdatetime.date.fromgregorian(date=self.instance.start_date).strftime("%Y/%m/%d")
+
+    def clean_card_number(self):
+        val = self.cleaned_data.get("card_number", "").strip().translate(PERSIAN_DIGITS)
+        cleaned = val.replace("-", "").replace(" ", "")
+        if cleaned and not cleaned.isdigit():
+            raise forms.ValidationError("شماره کارت فقط باید شامل ارقام عددی باشد.")
+        if cleaned and len(cleaned) != 16:
+            raise forms.ValidationError("شماره کارت بانکی باید دقیقاً ۱۶ رقم باشد.")
+        if len(cleaned) == 16:
+            return f"{cleaned[:4]}-{cleaned[4:8]}-{cleaned[8:12]}-{cleaned[12:]}"
+        return val
     def clean(self):
         data = super().clean()
         primary = data.get("primary_department")
@@ -348,6 +367,7 @@ class EmployeeCreateForm(EmployeeBaseForm):
             "username",
             "initial_password",
             "mobile",
+            "card_number",
             "start_date",
             "default_shift",
             "standard_daily_hours",
@@ -386,6 +406,7 @@ class EmployeeEditForm(EmployeeBaseForm):
             "last_name",
             "username",
             "mobile",
+            "card_number",
             "default_shift",
             "standard_daily_hours",
             "primary_department",
@@ -445,3 +466,28 @@ class BrandingForm(forms.ModelForm):
             if ext not in ["ico", "png", "svg", "jpg", "jpeg", "webp"]:
                 raise forms.ValidationError("فرمت فایل فاوآیکون باید یکی از موارد ICO, PNG, SVG یا JPG باشد.")
         return file
+
+class ProfileCardForm(forms.ModelForm):
+    class Meta:
+        model = Employee
+        fields = ["card_number"]
+        widgets = {
+            "card_number": forms.TextInput(attrs={
+                "placeholder": "مثال: ۶۰۳۷۹۹۱۸۱۲۳۴۵۶۷۸",
+                "dir": "ltr",
+                "maxlength": "24",
+                "inputmode": "numeric",
+                "style": "font-family: monospace; letter-spacing: 2px; font-size: 16px; font-weight: bold; text-align: center;",
+            })
+        }
+
+    def clean_card_number(self):
+        val = self.cleaned_data.get("card_number", "").strip().translate(PERSIAN_DIGITS)
+        cleaned = val.replace("-", "").replace(" ", "")
+        if cleaned and not cleaned.isdigit():
+            raise forms.ValidationError("شماره کارت فقط باید شامل ارقام عددی باشد.")
+        if cleaned and len(cleaned) != 16:
+            raise forms.ValidationError("شماره کارت بانکی باید دقیقاً ۱۶ رقم باشد.")
+        if len(cleaned) == 16:
+            return f"{cleaned[:4]}-{cleaned[4:8]}-{cleaned[8:12]}-{cleaned[12:]}"
+        return val

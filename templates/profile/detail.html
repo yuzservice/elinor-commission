@@ -1,1 +1,67 @@
-{% extends 'base.html' %}{% load persian %}{% block title %}پروفایل من{% endblock %}{% block content %}<div class="page-head"><div><p class="eyebrow">حساب شخصی</p><h1>پروفایل من</h1></div><div><a class="secondary" href="{% url 'profile_password' %}">تغییر رمز</a> <a class="primary" href="{% url 'profile_photo' %}">تغییر عکس</a></div></div><div class="profile-hero card"><div class="profile-main">{% if employee.profile_photo %}<img class="profile-photo" src="{{ employee.profile_photo.url }}" alt="">{% else %}<div class="profile-photo fallback">{{ employee.first_name|slice:':1' }}</div>{% endif %}<div><h1>{{ employee.full_name }}</h1><p>{{ employee.employee_code }} · {{ employee.mobile }}</p></div></div></div><article class="card info-grid"><div><span>بخش اصلی</span><b>{{ employee.primary_department|default:'—' }}</b></div><div><span>Level</span><b>{{ employee.commission_level.code }}</b></div><div><span>تاریخ شروع</span><b>{{ employee.start_date|jalali }}</b></div><div><span>وضعیت</span><b>{% if employee.is_active %}فعال{% else %}غیرفعال{% endif %}</b></div></article>{% endblock %}
+{% extends 'base.html' %}
+{% load persian %}
+{% block title %}پروفایل من{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div>
+        <p class="eyebrow">حساب شخصی</p>
+        <h1>پروفایل من</h1>
+    </div>
+    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <a class="secondary" href="{% url 'profile_password' %}">🔑 تغییر رمز عبور</a>
+        <a class="primary" href="{% url 'profile_photo' %}">📷 تغییر عکس</a>
+    </div>
+</div>
+
+<div class="profile-hero card" style="border-radius: 16px; margin-bottom: 20px;">
+    <div class="profile-main">
+        {% if employee.profile_photo %}
+        <img class="profile-photo" src="{{ employee.profile_photo.url }}" alt="" style="width: 72px; height: 72px; border-radius: 18px; object-fit: cover;">
+        {% else %}
+        <div class="profile-photo fallback" style="width: 72px; height: 72px; border-radius: 18px; font-size: 28px;">
+            {{ employee.first_name|slice:':1' }}
+        </div>
+        {% endif %}
+        <div>
+            <h1 style="font-size: 22px; margin-bottom: 4px;">{{ employee.full_name }}</h1>
+            <p style="margin: 0; color: var(--muted); font-size: 13px;">
+                کد پرسنلی: <b>{{ employee.employee_code }}</b> · موبایل: <b dir="ltr">{{ employee.mobile }}</b>
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- بخش شماره کارت بانکی -->
+<article class="card" style="border-radius: 16px; margin-bottom: 20px;">
+    <div class="card-head">
+        <div>
+            <h2>💳 شماره کارت بانکی (جهت واریز و تسویه پورسانت)</h2>
+            <p>پورسانت‌های تأییدشده دوره‌ای شما به این شماره کارت واریز می‌گردد.</p>
+        </div>
+    </div>
+    <form method="post" style="max-width: 480px;">
+        {% csrf_token %}
+        <div class="field" style="margin-bottom: 14px;">
+            <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px;">
+                شماره کارت ۱۶ رقمی:
+            </label>
+            {{ card_form.card_number }}
+            {% for error in card_form.card_number.errors %}
+            <small class="field-error">{{ error }}</small>
+            {% endfor %}
+        </div>
+        <button type="submit" name="save_card" class="primary" style="padding: 9px 22px; font-weight: 700;">
+            💾 ذخیره شماره کارت
+        </button>
+    </form>
+</article>
+
+<article class="card info-grid" style="border-radius: 16px;">
+    <div><span>بخش / لاین اصلی</span><b>{{ employee.primary_department|default:'—' }}</b></div>
+    <div><span>گرید پورسانت</span><b>گرید {{ employee.commission_level.code }}</b></div>
+    <div><span>شیفت کاری پیش‌فرض</span><b>{{ employee.default_shift.title|default:'—' }} ({{ employee.standard_daily_hours|persian_digits }} ساعت)</b></div>
+    <div><span>تاریخ شروع همکاری</span><b>{{ employee.start_date|jalali|default:'—' }}</b></div>
+    <div><span>وضعیت حساب</span><b>{% if employee.is_active %}<span class="status approved">فعال</span>{% else %}<span class="status rejected">غیرفعال</span>{% endif %}</b></div>
+    <div><span>نام کاربری ورود</span><b>{{ employee.user.username }}</b></div>
+</article>
+{% endblock %}

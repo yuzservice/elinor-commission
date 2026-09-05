@@ -870,6 +870,12 @@ class EmployeePermissionTests(BaseEmployeeTest):
         self.assertEqual(superuser.employee.role, Employee.Role.MANAGER)
     def test_employee_can_access_own_profile(self):
         self.client.force_login(self.employee_user); response=self.client.get(reverse("profile")); self.assertEqual(response.status_code,200); self.assertContains(response,self.employee.full_name)
+    def test_employee_can_save_bank_card(self):
+        self.client.force_login(self.employee_user)
+        response = self.client.post(reverse("profile"), {"card_number": "6037-9918-1234-5678", "save_card": "1"})
+        self.assertEqual(response.status_code, 302)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.card_number, "6037-9918-1234-5678")
     def test_employee_cannot_change_own_level(self): self.client.force_login(self.employee_user); self.assertEqual(self.client.post(reverse("management_employee_edit",args=[self.employee.pk]),{}).status_code,403)
     def test_branding_only_manager(self):
         self.client.force_login(self.employee_user); self.assertEqual(self.client.get(reverse("branding_settings")).status_code,403)

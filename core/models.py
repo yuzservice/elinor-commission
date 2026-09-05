@@ -80,6 +80,7 @@ class Employee(models.Model):
     first_name = models.CharField("نام", max_length=75)
     last_name = models.CharField("نام خانوادگی", max_length=75)
     mobile = models.CharField("شماره موبایل", max_length=11, unique=True, validators=[RegexValidator(r"^09\d{9}$", "شماره موبایل باید ۱۱ رقم و با 09 شروع شود.")])
+    card_number = models.CharField("شماره کارت بانکی", max_length=24, blank=True, default="", help_text="شماره کارت ۱۶ رقمی جهت واریز و تسویه پورسانت")
     profile_photo = models.ImageField("عکس پروفایل", upload_to="profiles/%Y/%m/", blank=True)
     role = models.CharField("نقش", max_length=12, choices=Role.choices, default=Role.EMPLOYEE)
     commission_level = models.ForeignKey(CommissionLevel, on_delete=models.PROTECT, related_name="employees")
