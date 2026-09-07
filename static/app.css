@@ -64,8 +64,7 @@ aside {
   display: flex;
   flex-direction: column;
   z-index: 50;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
 }
 
@@ -110,9 +109,14 @@ nav {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  flex: 1 1 auto;
+  flex: 1 1 0%;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
   padding-right: 2px;
   padding-left: 2px;
   margin-bottom: 8px;
@@ -120,17 +124,18 @@ nav {
 
 /* Scrollbar for Nav */
 nav::-webkit-scrollbar {
-  width: 4px;
+  width: 5px;
 }
 nav::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
 }
 nav::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.2);
   border-radius: 4px;
 }
 nav::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .nav-group-title {
@@ -169,7 +174,7 @@ nav a:hover {
 .sidebar-nav .nav-home,
 .sidebar-nav .nav-profile { font-weight: 700; padding: 10px 11px; }
 .sidebar-nav .nav-home { background: rgba(255,255,255,.08); color: #fff; }
-.nav-section { border: 1px solid rgba(255,255,255,.07); border-radius: 10px; overflow: hidden; }
+.nav-section { border: 1px solid rgba(255,255,255,.07); border-radius: 10px; overflow: hidden; flex-shrink: 0; }
 .nav-section summary { list-style: none; cursor: pointer; padding: 10px 11px; display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; color: rgba(255,255,255,.82); user-select: none; }
 .nav-section summary::-webkit-details-marker { display: none; }
 .nav-section summary i { font-style: normal; margin-right: auto; transition: transform .2s; opacity: .55; }
@@ -1563,6 +1568,7 @@ dd {
     z-index: 45;
     opacity: 0;
     pointer-events: none;
+    cursor: pointer;
     transition: opacity 0.25s ease-in-out;
   }
   .nav-open .sidebar-backdrop {
@@ -1649,116 +1655,231 @@ dd {
 
 /* Jalali Datepicker Popup */
 .jalali-datepicker-popup {
-  position: absolute;
-  z-index: 1000;
-  width: 290px;
-  background: #fff;
-  border: 1px solid var(--line, #e5eae7);
+  position: fixed;
+  z-index: 99999;
+  width: 300px;
+  background: #ffffff;
+  border: 1px solid #d9e0dc;
   border-radius: 16px;
-  box-shadow: 0 12px 36px rgba(23, 33, 29, 0.18);
-  padding: 14px;
+  box-shadow: 0 16px 40px rgba(23, 33, 29, 0.22);
+  padding: 16px;
   direction: rtl;
   user-select: none;
   font-family: inherit;
   animation: jdpFadeIn 0.15s ease-out;
+  box-sizing: border-box;
 }
+
 @keyframes jdpFadeIn {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
 .jdp-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
-  padding-bottom: 8px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--line, #e5eae7);
 }
+
+.jdp-nav-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .jdp-title {
   font-weight: 800;
-  font-size: 14px;
+  font-size: 14.5px;
   color: var(--ink, #17211d);
   display: flex;
+  align-items: center;
   gap: 6px;
 }
+
 .jdp-btn {
   background: var(--bg, #f5f7f5);
   border: 1px solid var(--line, #e5eae7);
   border-radius: 8px;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
   cursor: pointer;
   font-weight: 700;
-  font-size: 14px;
+  font-size: 13px;
+  line-height: 1;
   color: var(--ink, #17211d);
   transition: all 0.15s;
+  padding: 0;
 }
+
 .jdp-btn:hover {
   background: var(--green2, #dff4e9);
   color: var(--green, #237554);
   border-color: var(--green, #237554);
 }
+
 .jdp-weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   text-align: center;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--muted, #718078);
   margin-bottom: 8px;
 }
+
+.jdp-weekdays span {
+  padding: 4px 0;
+}
+
+.jdp-weekdays .jdp-friday {
+  color: var(--red, #b53a3a);
+}
+
 .jdp-days {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 4px;
 }
+
 .jdp-day {
   height: 34px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 !important;
+  margin: 0 !important;
   display: grid;
   place-items: center;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
-  border-radius: 9px;
+  border-radius: 8px;
   cursor: pointer;
   color: var(--ink, #17211d);
   transition: all 0.12s;
 }
+
+.jdp-day.jdp-empty,
+.jdp-day.empty {
+  cursor: default !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
 .jdp-day:not(.empty):hover {
   background: var(--green2, #dff4e9);
   color: var(--green, #237554);
 }
+
+.jdp-day.friday {
+  color: var(--red, #b53a3a);
+}
+
 .jdp-day.today {
   border: 1.5px solid var(--green, #237554);
   color: var(--green, #237554);
+  font-weight: 700;
 }
+
 .jdp-day.selected {
   background: var(--green, #237554) !important;
-  color: #fff !important;
+  color: #ffffff !important;
   font-weight: 800;
+  box-shadow: 0 2px 8px rgba(35, 117, 84, 0.3);
 }
+
 .jdp-footer {
   display: flex;
   justify-content: space-between;
-  margin-top: 10px;
-  padding-top: 8px;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 10px;
   border-top: 1px solid var(--line, #e5eae7);
+  gap: 6px;
 }
+
 .jdp-footer-btn {
   background: transparent;
   border: 0;
   font: inherit;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 700;
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 5px 8px;
   border-radius: 6px;
   color: var(--green, #237554);
+  transition: background 0.15s;
 }
+
 .jdp-footer-btn:hover {
   background: var(--green2, #dff4e9);
 }
+
+.jdp-footer-btn.jdp-clear {
+  color: var(--red, #b53a3a);
+}
+
+.jdp-footer-btn.jdp-clear:hover {
+  background: #fde5e5;
+}
+
 .jdp-footer-btn.jdp-close {
   color: var(--muted, #718078);
+}
+
+.jdp-footer-btn.jdp-close:hover {
+  background: var(--bg, #f5f7f5);
+}
+
+/* Datepicker input wrapper with calendar icon */
+.datepicker-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.datepicker-input-wrap input {
+  padding-left: 38px !important;
+}
+
+.datepicker-icon-btn {
+  position: absolute;
+  left: 8px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+  color: var(--muted, #718078);
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.datepicker-icon-btn:hover {
+  color: var(--green, #237554);
+  background: var(--green2, #dff4e9);
+}
+
+/* Date Filter Form (used in commission report) */
+.date-filter-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.date-filter-form .datepicker-input-wrap {
+  width: 220px;
 }

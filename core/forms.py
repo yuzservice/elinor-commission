@@ -9,6 +9,7 @@ from django.db.models import Q
 import jdatetime
 from PIL import Image, UnidentifiedImageError
 from .models import (
+    CommissionLevel,
     DailyShiftLog,
     Department,
     DepartmentMonthlyTarget,
@@ -247,6 +248,39 @@ class DepartmentMonthlyTargetForm(forms.ModelForm):
             raise forms.ValidationError("فرمت ماه شمسی باید به‌صورت ۱۴۰۵/۰۶ باشد.")
         return ym
 
+class CommissionLevelForm(forms.ModelForm):
+    class Meta:
+        model = CommissionLevel
+        fields = ["code", "performance_rate", "violation_rate", "morning_rate"]
+        widgets = {
+            "code": forms.TextInput(attrs={"placeholder": "مثال: A یا B", "maxlength": "1", "style": "text-transform: uppercase; text-align: center; font-weight: 800; font-size: 16px;"}),
+            "performance_rate": forms.NumberInput(attrs={"min": "0", "inputmode": "numeric"}),
+            "violation_rate": forms.NumberInput(attrs={"min": "0", "inputmode": "numeric"}),
+            "morning_rate": forms.NumberInput(attrs={"step": "0.05", "min": "0.1", "inputmode": "decimal"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["code"].label = "کد سطح / گرید"
+        self.fields["code"].help_text = "کد یک‌حرفی گرید پرسنلی (مثلاً A، B، C یا D)"
+        self.fields["performance_rate"].label = "نرخ عملکرد پایه (ریال به ازای هر کالا)"
+        self.fields["performance_rate"].help_text = "مبلغ پایه پورسانت برای لاین‌هایی که ضریب اختصاصی ندارند"
+        self.fields["violation_rate"].label = "نرخ جریمه تخلفات (ریال به ازای هر امتیاز)"
+        self.fields["violation_rate"].help_text = "مبلغ کسر از پورسانت به ازای هر امتیاز منفی انضباطی"
+        self.fields["morning_rate"].label = "ضریب شیفت صبح"
+        self.fields["morning_rate"].help_text = "ضریب عملکرد برای شیفت صبح (پیش‌فرض ۱.۰۰)"
+
+    def clean_code(self):
+        code = self.cleaned_data.get("code", "").strip().upper()
+        if not code:
+            raise forms.ValidationError("کد گرید الزامی است.")
+        qs = CommissionLevel.objects.filter(code__iexact=code)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError("گریدی با این کد قبلاً ثبت شده است.")
+        return code
+
 class DepartmentForm(forms.ModelForm):
     class Meta:
         model = Department
@@ -302,7 +336,7 @@ class EmployeeBaseForm(forms.ModelForm):
             "card_number",
             "default_shift",
             "standard_daily_hours",
-            "primary_department",
+            "primary_departments",
             "commission_level",
             "departments",
             "start_date",
@@ -310,6 +344,7 @@ class EmployeeBaseForm(forms.ModelForm):
             "is_active",
         ]
         widgets = {
+            "primary_departments": forms.SelectMultiple(attrs={"class": "custom-multiselect"}),
             "departments": forms.SelectMultiple(attrs={"class": "custom-multiselect"}),
             "standard_daily_hours": forms.NumberInput(attrs={"step": "0.5", "min": "1", "inputmode": "decimal"}),
             "card_number": forms.TextInput(attrs={"placeholder": "۶۰۳۷-xxxx-xxxx-xxxx", "dir": "ltr", "inputmode": "numeric"}),
@@ -317,7 +352,8 @@ class EmployeeBaseForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["commission_level"].label = "گرید پورسانت"
-        self.fields["primary_department"].label = "لاین اصلی"
+        self.fields["primary_departments"].label = "لاین‌های اصلی"
+        self.fields["primary_departments"].help_text = "یک یا چند لاین را به عنوان لاین اصلی انتخاب کنید."
         self.fields["departments"].label = "لاین‌های مجاز (حضور اصلی و کمکی)"
         self.fields["departments"].help_text = "لاین‌هایی که کارمند مجاز به حضور در آن‌ها به عنوان لاین اصلی یا کمکی است را انتخاب کنید."
         self.fields["card_number"].label = "شماره کارت بانکی"
@@ -338,18 +374,12 @@ class EmployeeBaseForm(forms.ModelForm):
         return val
     def clean(self):
         data = super().clean()
-        primary = data.get("primary_department")
+        primary_depts = data.get("primary_departments")
+        if primary_depts:
+            data["primary_department"] = primary_depts.first()
         departments = data.get("departments")
-        if departments is not None:
-            if primary and primary not in departments:
-                # اگر کاربر تیک لاین اصلی قبلی را برداشته ولی دراپ‌داون بالا را تغییر نداده:
-                if self.instance.pk and self.instance.primary_department_id == getattr(primary, "pk", None):
-                    new_primary = departments.first() if hasattr(departments, "first") else (departments[0] if departments else None)
-                    data["primary_department"] = new_primary
-                else:
-                    data["departments"] = departments | Department.objects.filter(pk=primary.pk)
-            elif not primary and departments.exists():
-                data["primary_department"] = departments.first()
+        if departments is not None and primary_depts:
+            data["departments"] = departments | primary_depts
         return data
 
 class EmployeeCreateForm(EmployeeBaseForm):
@@ -371,7 +401,7 @@ class EmployeeCreateForm(EmployeeBaseForm):
             "start_date",
             "default_shift",
             "standard_daily_hours",
-            "primary_department",
+            "primary_departments",
             "commission_level",
             "departments",
             "profile_photo",
@@ -409,7 +439,7 @@ class EmployeeEditForm(EmployeeBaseForm):
             "card_number",
             "default_shift",
             "standard_daily_hours",
-            "primary_department",
+            "primary_departments",
             "commission_level",
             "start_date",
             "profile_photo",

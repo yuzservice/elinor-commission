@@ -35,7 +35,7 @@
                 </label>
             </div>
             {% else %}
-            <div class="field {% if field.name == 'departments' %}span-2 field-departments-chips{% endif %}">
+            <div class="field {% if field.name == 'departments' or field.name == 'primary_departments' %}span-2 field-departments-chips{% endif %}">
                 <label>{{ field.label }}{% if field.field.required %}<em>*</em>{% endif %}</label>
                 {{ field }}
                 {% if field.help_text %}<small class="help">{{ field.help_text|safe }}</small>{% endif %}

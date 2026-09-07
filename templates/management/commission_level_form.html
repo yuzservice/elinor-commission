@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% load persian %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="admin-page-head">
+    <div>
+        <span class="admin-kicker">تعاریف پایه · سطوح پورسانت</span>
+        <h1>{{ title }}</h1>
+        <p>کد گرید، نرخ پایه پورسانت، نرخ جریمه تخلفات و ضریب شیفت صبح</p>
+    </div>
+    <a class="secondary" href="{% url 'management_commission_levels' %}">بازگشت به فهرست گریدها</a>
+</div>
+
+<article class="card form-card admin-form-card" style="max-width: 620px; border-radius: 16px;">
+    <form method="post">
+        {% csrf_token %}
+        <div class="form-grid" style="grid-template-columns: 1fr;">
+            {% for field in form %}
+            <div class="field">
+                <label>{{ field.label }}{% if field.field.required %}<em>*</em>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<small class="help">{{ field.help_text|safe }}</small>{% endif %}
+                {% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+
+        {% for error in form.non_field_errors %}
+        <div class="message error">{{ error }}</div>
+        {% endfor %}
+
+        <div class="form-actions" style="margin-top: 24px; display: flex; gap: 10px;">
+            <button class="primary" type="submit">{{ submit }}</button>
+            <a class="secondary" href="{% url 'management_commission_levels' %}">انصراف</a>
+        </div>
+    </form>
+</article>
+
+{% if level and level.employees.count == 0 %}
+<article class="card file-danger" style="margin-top: 24px; border: 1px solid #fecaca; background: #fffafa; border-radius: 16px; max-width: 620px;">
+    <div class="card-head">
+        <div>
+            <h2 style="color: #b42318; margin: 0 0 4px;">حذف گرید «سطح {{ level.code }}»</h2>
+            <p style="color: #991b1b; margin: 0; font-size: 13px;">این گرید هیچ کارمندی ندارد و می‌توانید آن را حذف کنید.</p>
+        </div>
+    </div>
+    <form method="post" action="{% url 'management_commission_level_delete' level.pk %}" onsubmit="return confirm('گرید «سطح {{ level.code }}» حذف شود؟');">
+        {% csrf_token %}
+        <button type="submit" class="secondary danger-action" style="color: #b42318; border-color: #ef4444; font-weight: 700;">
+            حذف این گرید
+        </button>
+    </form>
+</article>
+{% endif %}
+{% endblock %}

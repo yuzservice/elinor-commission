@@ -1,4 +1,5 @@
 from decimal import Decimal
+from django.core.exceptions import ValidationError
 from django.db.models import DecimalField, Sum
 from django.db.models.functions import Coalesce
 from django.db import transaction
@@ -80,9 +81,11 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
     employee = shift_log.employee
     level = employee.commission_level
 
-    # تمام کارکردهای همان تاریخ و شیفت برای تسهیم ساعات
+    # تمام کارکردهای همان تاریخ و شیفت برای تسهیم ساعات (به جز کارکردهای ردشده)
     sibling_logs = list(
-        DailyShiftLog.objects.filter(date=date, shift=shift).select_related(
+        DailyShiftLog.objects.filter(date=date, shift=shift).exclude(
+            status=DailyShiftLog.Status.REJECTED
+        ).select_related(
             "employee", "main_department"
         ).prefetch_related("support_departments", "support_intervals__department")
     )
@@ -103,8 +106,19 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
     # محاسبه ساعات کل حضور پرسنل در هر لاین در این شیفت
     dept_total_hours = {}
     for log in sibling_logs:
-        if log.main_department_id:
-            dept_total_hours[log.main_department_id] = dept_total_hours.get(log.main_department_id, Decimal("0.0")) + (log.main_hours or Decimal("0.0"))
+        log_emp = log.employee
+        log_main_h = log.main_hours
+        if (log_main_h is None or log_main_h <= Decimal("0.0")) and log.shift:
+            log_main_h = max(Decimal("0.0"), (log.shift.standard_hours or Decimal("6.0")) - (log.support_hours or Decimal("0.0")))
+
+        # تمام لاین‌های اصلی کارمند در شیفت منظور می‌شوند
+        p_depts = log_emp.get_primary_departments() if hasattr(log_emp, "get_primary_departments") else []
+        if not p_depts and log.main_department:
+            p_depts = [log.main_department]
+
+        for p_dept in p_depts:
+            if log_main_h > Decimal("0.0"):
+                dept_total_hours[p_dept.pk] = dept_total_hours.get(p_dept.pk, Decimal("0.0")) + log_main_h
 
         for department_id, hours in support_hours_by_department(log).items():
             dept_total_hours[department_id] = dept_total_hours.get(department_id, Decimal("0.0")) + hours
@@ -141,7 +155,22 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
             "has_performance_recorded": perf is not None,
         }
 
-    main_info = compute_line(shift_log.main_department, shift_log.main_hours)
+    shift_log_main_h = shift_log.main_hours
+    if (shift_log_main_h is None or shift_log_main_h <= Decimal("0.0")) and shift_log.shift:
+        shift_log_main_h = max(Decimal("0.0"), (shift_log.shift.standard_hours or Decimal("6.0")) - (shift_log.support_hours or Decimal("0.0")))
+
+    # محاسبه برای تمام لاین‌های اصلی کارمند
+    emp_p_depts = employee.get_primary_departments() if hasattr(employee, "get_primary_departments") else []
+    if not emp_p_depts and shift_log.main_department:
+        emp_p_depts = [shift_log.main_department]
+
+    primary_infos = []
+    for p_dept in emp_p_depts:
+        info = compute_line(p_dept, shift_log_main_h)
+        if info:
+            primary_infos.append(info)
+
+    main_info = primary_infos[0] if primary_infos else None
 
     support_infos = []
     if shift_log.has_support_line and (shift_log.support_hours or Decimal("0.0")) > Decimal("0.0"):
@@ -156,9 +185,9 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
     total_units_share = Decimal("0.0")
     total_commission = 0
 
-    if main_info:
-        total_units_share += Decimal(str(main_info["share_units"]))
-        total_commission += main_info["commission"]
+    for p_info in primary_infos:
+        total_units_share += Decimal(str(p_info["share_units"]))
+        total_commission += p_info["commission"]
 
     for s_info in support_infos:
         total_units_share += Decimal(str(s_info["share_units"]))
@@ -166,6 +195,7 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
 
     return {
         "shift_log": shift_log,
+        "primary_infos": primary_infos,
         "main_info": main_info,
         "support_infos": support_infos,
         "support_info": support_infos[0] if len(support_infos) == 1 else None,
@@ -174,9 +204,86 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
         "is_frozen": False,
     }
 
+def check_shift_completion(date, shift):
+    """بررسی پیش‌شرط مرحله اول: همه کارمندان موظف این شیفت باید تعیین تکلیف شده باشند."""
+    expected_employees = list(Employee.objects.filter(
+        is_active=True,
+        role=Employee.Role.EMPLOYEE,
+        default_shift=shift,
+    ))
+    if not expected_employees:
+        return
+
+    logged_emp_ids = set(DailyShiftLog.objects.filter(
+        date=date, shift=shift
+    ).values_list("employee_id", flat=True))
+
+    missing = [emp for emp in expected_employees if emp.pk not in logged_emp_ids]
+    if missing:
+        missing_names = "، ".join(emp.full_name for emp in missing)
+        raise ValidationError(
+            f"تأیید نهایی امکان‌پذیر نیست: هنوز تمام کارمندان این شیفت تعیین تکلیف نشده‌اند. پرسنل ثبت‌نشده: {missing_names} (باید کارکرد ثبت شود یا مرخصی رد گردد)."
+        )
+
+def sync_shift_logs_for_performance(date, shift, exclude_log_id=None):
+    """به‌روزرسانی خودکار سهم کالا و پورسانت تمام کارکردهای تأییدشده شیفت پس از تغییر ساعات یا ثبت فروش لاین."""
+    qs = DailyShiftLog.objects.filter(date=date, shift=shift, status=DailyShiftLog.Status.APPROVED)
+    if exclude_log_id:
+        qs = qs.exclude(pk=exclude_log_id)
+
+    for other_log in qs:
+        c = calculate_single_shift_log(other_log, force_dynamic=True)
+        other_log.frozen_main_share_units = Decimal(str(c["main_info"]["share_units"])) if c.get("main_info") else Decimal("0.0")
+        other_log.frozen_support_share_units = sum(Decimal(str(s["share_units"])) for s in c.get("support_infos", []))
+        other_log.frozen_total_units_share = Decimal(str(c["total_units_share"]))
+        other_log.frozen_commission_amount = c["total_commission"]
+
+        s_main = None
+        if c.get("main_info"):
+            m = c["main_info"]
+            s_main = {
+                "department_id": m["department"].pk,
+                "department_name": m["department"].name,
+                "hours": float(m["hours"]),
+                "total_dept_hours": float(m["total_dept_hours"]),
+                "total_sold_units": m["total_sold_units"],
+                "share_units": float(m["share_units"]),
+                "rate_per_unit": m["rate_per_unit"],
+                "commission": m["commission"],
+            }
+        s_supp = []
+        for s in c.get("support_infos", []):
+            s_supp.append({
+                "department_id": s["department"].pk,
+                "department_name": s["department"].name,
+                "hours": float(s["hours"]),
+                "total_dept_hours": float(s["total_dept_hours"]),
+                "total_sold_units": s["total_sold_units"],
+                "share_units": float(s["share_units"]),
+                "rate_per_unit": s["rate_per_unit"],
+                "commission": s["commission"],
+            })
+        other_log.frozen_snapshot_data = {
+            "main_info": s_main,
+            "support_infos": s_supp,
+            "total_units_share": float(c["total_units_share"]),
+            "total_commission": c["total_commission"],
+            "frozen_at": timezone.now().isoformat(),
+            "actor": "system_sync",
+        }
+        other_log.save(update_fields=[
+            "frozen_main_share_units",
+            "frozen_support_share_units",
+            "frozen_total_units_share",
+            "frozen_commission_amount",
+            "frozen_snapshot_data",
+        ])
+
 @transaction.atomic
 def approve_shift_log(shift_log, actor, manager_note=""):
     """تأیید کارکرد روزانه شیفت و فریز کردن قطعی محاسبات سهم فروش و پورسانت."""
+    check_shift_completion(shift_log.date, shift_log.shift)
+
     calc = calculate_single_shift_log(shift_log, force_dynamic=True)
 
     shift_log.status = DailyShiftLog.Status.APPROVED

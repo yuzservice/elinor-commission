@@ -8,9 +8,9 @@
         <h1>کارنامه پورسانت من</h1>
         <p>دوره: از {{ start|jalali }} تا {{ end|jalali }} · گرید فعلی: <strong>سطح {{ employee.commission_level.code }}</strong></p>
     </div>
-    <form method="get" class="filters" style="margin-bottom: 0;">
-        <input name="date" value="{{ filters.date }}" placeholder="انتخاب تاریخ ماه (۱۴۰۵/۰۶/۰۱)" class="jalali-date">
-        <button class="primary">مشاهده دوره</button>
+    <form method="get" class="date-filter-form" style="margin-bottom: 0;">
+        <input name="date" value="{{ filters.date }}" placeholder="انتخاب تاریخ ماه (۱۴۰۵/۰۶/۰۱)" class="jalali-date" autocomplete="off">
+        <button class="primary" type="submit">مشاهده دوره</button>
     </form>
 </div>
 
@@ -59,7 +59,18 @@
                     <td><b>{{ d.shift_log.date|jalali }}</b></td>
                     <td>{{ d.shift_log.shift.title }}</td>
                     <td>
-                        {% if d.main_info %}
+                        {% if d.primary_infos %}
+                            {% for p in d.primary_infos %}
+                            <div style="margin-bottom: 4px; padding-bottom: 4px; {% if not forloop.last %}border-bottom: 1px dashed #eef1ef;{% endif %}">
+                                <b>{{ p.department.name }}</b>:
+                                {{ p.hours }}h از {{ p.total_dept_hours }}h
+                                · فروش کل: <strong>{{ p.total_sold_units }}</strong>
+                                · سهم شما: <strong style="color: var(--green, #237554);">{{ p.share_units }}</strong>
+                                · نرخ: {{ p.rate_per_unit|persian_int }}
+                                → <strong>{{ p.commission|persian_int }} ریال</strong>
+                            </div>
+                            {% endfor %}
+                        {% elif d.main_info %}
                         <div>
                             <b>{{ d.main_info.department.name }}</b>:
                             {{ d.main_info.hours }}h از {{ d.main_info.total_dept_hours }}h

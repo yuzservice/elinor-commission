@@ -2,41 +2,134 @@
 {% load persian %}
 {% block title %}پرونده {{ employee.full_name }}{% endblock %}
 {% block content %}
-<div class="admin-page-head">
-    <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
-        {% if employee.profile_photo %}
-        <img class="profile-photo" src="{{ employee.profile_photo.url }}" alt="" style="width: 64px; height: 64px; border-radius: 16px; object-fit: cover; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
-        {% else %}
-        <div class="avatar" style="width: 64px; height: 64px; border-radius: 16px; font-size: 26px; background: var(--green2); color: var(--green); box-shadow: 0 4px 12px rgba(35,117,84,0.12);">
-            {{ employee.first_name|slice:':1' }}
+<div class="admin-page-head employee-profile-header" style="background: linear-gradient(135deg, #ffffff 0%, #f7fbf9 100%); border: 1px solid var(--line, #e5eae7); border-radius: 20px; padding: 22px 26px; box-shadow: 0 6px 24px rgba(23, 33, 29, 0.04); margin-bottom: 24px;">
+    <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
+        <!-- آواتار با آیکون مداد ویرایش مستقیم روی عکس -->
+        <div style="position: relative; width: 76px; height: 76px; flex-shrink: 0;">
+            {% if employee.profile_photo %}
+            <img class="profile-photo" src="{{ employee.profile_photo.url }}" alt="{{ employee.full_name }}" style="width: 76px; height: 76px; border-radius: 22px; object-fit: cover; box-shadow: 0 6px 18px rgba(0,0,0,0.12); border: 2.5px solid #fff;">
+            {% else %}
+            <div class="avatar" style="width: 76px; height: 76px; border-radius: 22px; font-size: 30px; font-weight: 800; background: linear-gradient(135deg, #dff4e9 0%, #c4ebd7 100%); color: var(--green, #237554); box-shadow: 0 6px 18px rgba(35,117,84,0.15); border: 2.5px solid #fff;">
+                {{ employee.first_name|slice:':1' }}
+            </div>
+            {% endif %}
+            <button type="button" id="header-avatar-edit-trigger" title="تغییر یا حذف عکس پروفایل" style="position: absolute; bottom: -4px; left: -4px; width: 28px; height: 28px; background: var(--green, #237554); color: #fff; border-radius: 50%; display: grid; place-items: center; cursor: pointer; border: 2px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.22); font-size: 13px; padding: 0; line-height: 1;">
+                ✏️
+            </button>
         </div>
-        {% endif %}
-        <div>
-            <span class="admin-kicker">پرونده پرسنلی · کد: {{ employee.employee_code }}</span>
-            <h1 style="margin: 2px 0 6px;">{{ employee.full_name }}</h1>
-            <p style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0;">
-                <span class="file-status {% if employee.is_active %}is-active{% else %}is-inactive{% endif %}">
-                    {% if employee.is_active %}● فعال{% else %}○ غیرفعال{% endif %}
+
+        <div style="flex: 1; min-width: 240px;">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <span class="admin-kicker" style="font-size: 11.5px; letter-spacing: 0.5px;">پرونده پرسنلی · کد: {{ employee.employee_code }}</span>
+                <span class="file-status {% if employee.is_active %}is-active{% else %}is-inactive{% endif %}" style="font-size: 11px; padding: 2px 8px;">
+                    {% if employee.is_active %}● فعال در سامانه{% else %}○ غیرفعال{% endif %}
                 </span>
-                <span class="badge" style="background: var(--green2); color: var(--green); font-weight: 700;">
-                    گرید {{ employee.commission_level.code }}
+            </div>
+            <h1 style="margin: 4px 0 8px; font-size: 25px; font-weight: 900; letter-spacing: -0.5px; color: var(--ink, #17211d);">
+                {{ employee.full_name }}
+            </h1>
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <!-- مدال و گرید شیک و برجسته -->
+                <div class="grade-medal-badge" style="display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1.5px solid #f59e0b; color: #92400e; padding: 4px 12px; border-radius: 99px; font-size: 12.5px; font-weight: 800; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.22);">
+                    <span style="font-size: 15px;">🎖️</span>
+                    <span>گرید {{ employee.commission_level.code }}</span>
+                </div>
+
+                <!-- لاین(های) اصلی -->
+                {% for dept in employee.get_primary_departments %}
+                <span class="badge" style="background: #eef2f6; border: 1px solid #d0d7de; color: #1f2937; font-weight: 600; font-size: 11.5px; padding: 5px 11px; border-radius: 8px;">
+                    👔 لاین اصلی: <b>{{ dept.name }}</b>
                 </span>
-                <span class="badge" style="background: #f1f5f3; color: var(--ink);">
-                    {{ employee.primary_department|default:'بدون لاین اصلی' }}
-                </span>
+                {% empty %}
+                <span class="badge" style="background: #f3f4f6; color: var(--muted); font-size: 11.5px;">بدون لاین اصلی</span>
+                {% endfor %}
+
                 {% if employee.default_shift %}
-                <span class="badge" style="background: #f1f5f3; color: var(--ink);">
-                    {{ employee.default_shift.title }}
+                <span class="badge" style="background: var(--green2, #dff4e9); color: var(--green, #237554); font-weight: 600; font-size: 11.5px; padding: 5px 11px; border-radius: 8px;">
+                    ⏰ {{ employee.default_shift.title }} ({{ employee.standard_daily_hours|persian_digits }} ساعت)
                 </span>
                 {% endif %}
-            </p>
+            </div>
         </div>
     </div>
     <div class="head-actions">
-        <a class="secondary" href="{% url 'management_employees' %}">بازگشت به فهرست پرسنل</a>
-        <a class="secondary" href="{% url 'management_employee_password' employee.pk %}">🔑 تغییر رمز عبور</a>
+        <a class="secondary" href="{% url 'management_employees' %}">بازگشت به پرسنل</a>
+        <a class="secondary" href="{% url 'management_employee_password' employee.pk %}">🔑 تغییر رمز</a>
     </div>
 </div>
+
+<!-- فرم پاپ‌آپ مخفی تغییر یا حذف عکس از هدر -->
+<form id="header-avatar-form" method="post" action="{% url 'management_employee_photo' employee.pk %}" enctype="multipart/form-data" style="display: none;">
+    {% csrf_token %}
+    <input type="file" name="profile_photo" id="header-avatar-file-input" accept="image/*">
+    <input type="hidden" name="profile_photo-clear" id="header-avatar-clear-input" value="">
+</form>
+
+<div id="header-avatar-modal" style="display: none; position: fixed; inset: 0; z-index: 100000; background: rgba(0,0,0,0.45); backdrop-filter: blur(2px); align-items: center; justify-content: center;">
+    <div style="background: #fff; border-radius: 18px; padding: 22px; width: min(340px, 90vw); box-shadow: 0 16px 40px rgba(0,0,0,0.2); direction: rtl; text-align: center;">
+        <h3 style="margin: 0 0 6px; font-size: 16px;">مدیریت تصویر پرسنلی</h3>
+        <p style="margin: 0 0 18px; color: var(--muted); font-size: 12.5px;">انتخاب تصویر جدید یا حذف تصویر پرسنل</p>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+            <button type="button" id="modal-btn-upload" class="primary" style="width: 100%; padding: 10px; font-size: 13px;">📷 بارگذاری تصویر جدید</button>
+            {% if employee.profile_photo %}
+            <button type="button" id="modal-btn-delete" class="secondary" style="width: 100%; padding: 10px; font-size: 13px; color: #b42318; border-color: #fca5a5;">🗑️ حذف تصویر (بدون عکس)</button>
+            {% endif %}
+            <button type="button" id="modal-btn-cancel" class="secondary" style="width: 100%; padding: 8px; font-size: 12px; margin-top: 4px;">بستن</button>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const triggerBtn = document.getElementById('header-avatar-edit-trigger');
+    const modal = document.getElementById('header-avatar-modal');
+    const btnCancel = document.getElementById('modal-btn-cancel');
+    const btnUpload = document.getElementById('modal-btn-upload');
+    const btnDelete = document.getElementById('modal-btn-delete');
+    const fileInput = document.getElementById('header-avatar-file-input');
+    const clearInput = document.getElementById('header-avatar-clear-input');
+    const form = document.getElementById('header-avatar-form');
+
+    if (triggerBtn && modal) {
+        triggerBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            modal.style.display = 'flex';
+        });
+
+        if (btnCancel) {
+            btnCancel.addEventListener('click', function() {
+                modal.style.display = 'none';
+            });
+        }
+
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) modal.style.display = 'none';
+        });
+
+        if (btnUpload && fileInput) {
+            btnUpload.addEventListener('click', function() {
+                fileInput.click();
+            });
+            fileInput.addEventListener('change', function() {
+                if (fileInput.files && fileInput.files.length > 0) {
+                    modal.style.display = 'none';
+                    form.submit();
+                }
+            });
+        }
+
+        if (btnDelete && clearInput && form) {
+            btnDelete.addEventListener('click', function() {
+                if (confirm('عکس پروفایل کارمند حذف شود؟')) {
+                    clearInput.value = 'true';
+                    modal.style.display = 'none';
+                    form.submit();
+                }
+            });
+        }
+    }
+});
+</script>
 
 <nav class="control-tabs file-tabs" aria-label="بخش‌های پرونده">
     <a class="{% if tab == 'summary' %}active{% endif %}" href="?tab=summary">
@@ -276,49 +369,124 @@
 </article>
 
 {% elif tab == 'edit' %}
-<article class="card form-card wide admin-form-card file-edit-card" style="border-radius: 16px;">
-    <div class="card-head">
+<article class="card form-card wide admin-form-card file-edit-card" style="border-radius: 16px; max-width: 900px;">
+    <div class="card-head" style="margin-bottom: 20px; border-bottom: 1px solid var(--line); padding-bottom: 14px;">
         <div>
-            <h2>✏️ ویرایش مشخصات پرسنل</h2>
-            <p>تغییر نام، شماره تماس، گرید، شیفت پیش‌فرض و لاین‌های کاری</p>
+            <h2 style="font-size: 20px;">✏️ ویرایش مشخصات پرسنل</h2>
+            <p>مشخصات فردی، شیفت کاری و لاین‌های پرونده «{{ employee.full_name }}»</p>
         </div>
         <a class="secondary" href="{% url 'management_employee_password' employee.pk %}">🔑 بازنشانی رمز عبور</a>
     </div>
     <form method="post" action="{% url 'management_employee_edit' employee.pk %}" enctype="multipart/form-data">
         {% csrf_token %}
-        <div class="form-grid">
-            {% for field in form %}
-            {% if field.name == 'is_active' %}
-            <div class="field span-2 switch-field-card">
-                <div class="switch-info">
-                    <label for="{{ field.id_for_label }}">
-                        وضعیت حساب کارمند: فعال
-                    </label>
-                    <small>
-                        در صورت فعال بودن، کارمند می‌تواند وارد سامانه شود و کارکرد روزانه خود را ثبت نماید.
-                    </small>
+
+        <!-- بخش ۱: اطلاعات فردی و حساب کاربری -->
+        <fieldset style="border: 1px solid var(--line, #e5eae7); border-radius: 14px; padding: 18px 20px; margin-bottom: 20px; background: #fff;">
+            <legend style="font-weight: 800; font-size: 13.5px; color: var(--green, #237554); padding: 0 10px;">
+                👤 ۱. مشخصات فردی و حساب کاربری
+            </legend>
+            <div class="form-grid">
+                <div class="field">
+                    <label>نام<em>*</em></label>
+                    {{ form.first_name }}
+                    {% for error in form.first_name.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
                 </div>
-                <label class="toggle-switch">
-                    {{ field }}
-                    <span class="toggle-slider"></span>
-                </label>
+                <div class="field">
+                    <label>نام خانوادگی<em>*</em></label>
+                    {{ form.last_name }}
+                    {% for error in form.last_name.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                </div>
+                <div class="field">
+                    <label>نام کاربری (جهت ورود به سامانه)<em>*</em></label>
+                    {{ form.username }}
+                    <small class="help">نام کاربری انگلیسی جهت لاگین</small>
+                    {% for error in form.username.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                </div>
+                <div class="field">
+                    <label>شماره موبایل<em>*</em></label>
+                    {{ form.mobile }}
+                    {% for error in form.mobile.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                </div>
+                <div class="field span-2">
+                    <label>شماره کارت بانکی (جهت واریز و تسویه پورسانت)</label>
+                    {{ form.card_number }}
+                    <small class="help">شماره کارت ۱۶ رقمی بانکی</small>
+                    {% for error in form.card_number.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                </div>
             </div>
-            {% else %}
-            <div class="field {% if field.name == 'departments' %}span-2 field-departments-chips{% endif %}">
-                <label>{{ field.label }}{% if field.field.required %}<em>*</em>{% endif %}</label>
-                {{ field }}
-                {% if field.help_text %}<small class="help">{{ field.help_text|safe }}</small>{% endif %}
-                {% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </fieldset>
+
+        <!-- بخش ۲: شیفت کاری، زمان‌بندی و گرید -->
+        <fieldset style="border: 1px solid var(--line, #e5eae7); border-radius: 14px; padding: 18px 20px; margin-bottom: 20px; background: #fff;">
+            <legend style="font-weight: 800; font-size: 13.5px; color: var(--green, #237554); padding: 0 10px;">
+                ⏰ ۲. تنظیمات شیفت، زمان‌بندی و گرید
+            </legend>
+            <div class="form-grid">
+                <div class="field">
+                    <label>شیفت کاری پیش‌فرض</label>
+                    {{ form.default_shift }}
+                    {% for error in form.default_shift.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                </div>
+                <div class="field">
+                    <label>ساعت کاری روزانه استاندارد<em>*</em></label>
+                    {{ form.standard_daily_hours }}
+                    <small class="help">طول استاندارد شیفت موظف (ساعات مازاد اضافه کاری حساب می‌شود)</small>
+                    {% for error in form.standard_daily_hours.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                </div>
+                <div class="field">
+                    <label>تاریخ شروع همکاری</label>
+                    {{ form.start_date }}
+                    {% for error in form.start_date.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                </div>
+                <div class="field">
+                    <label>گرید پورسانت<em>*</em></label>
+                    {{ form.commission_level }}
+                    <small class="help">ضریب و سطح دریافتی پورسانت پرسنل</small>
+                    {% for error in form.commission_level.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                </div>
+                <div class="field span-2 switch-field-card" style="margin: 8px 0 0;">
+                    <div class="switch-info">
+                        <label for="{{ form.is_active.id_for_label }}">
+                            وضعیت حساب کارمند: فعال
+                        </label>
+                        <small>
+                            در صورت فعال بودن، کارمند می‌تواند وارد سامانه شود و کارکرد روزانه ثبت نماید.
+                        </small>
+                    </div>
+                    <label class="toggle-switch">
+                        {{ form.is_active }}
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
             </div>
-            {% endif %}
-            {% endfor %}
-        </div>
+        </fieldset>
+
+        <!-- بخش ۳: لاین‌های کاری -->
+        <fieldset style="border: 1px solid var(--line, #e5eae7); border-radius: 14px; padding: 18px 20px; margin-bottom: 20px; background: #fff;">
+            <legend style="font-weight: 800; font-size: 13.5px; color: var(--green, #237554); padding: 0 10px;">
+                👔 ۳. تخصیص لاین‌های کاری (اصلی و کمکی)
+            </legend>
+            <div class="field field-departments-chips">
+                <label>لاین‌های اصلی (مسئولیت و حضور موظف پرسنل)<em>*</em></label>
+                {{ form.primary_departments }}
+                <small class="help">یک یا چند لاین اصلی را انتخاب کنید (سهم فروش بر این اساس تسهیم می‌شود).</small>
+                {% for error in form.primary_departments.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+            <div class="field field-departments-chips" style="margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line);">
+                <label>لاین‌های مجاز (حضور اصلی و کمکی)</label>
+                {{ form.departments }}
+                <small class="help">لاین‌هایی که کارمند مجاز به حضور در آن‌ها به عنوان لاین اصلی یا کمکی است.</small>
+                {% for error in form.departments.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+        </fieldset>
+
         {% for error in form.non_field_errors %}
         <div class="message error">{{ error }}</div>
         {% endfor %}
-        <div class="form-actions">
-            <button class="primary" type="submit" style="padding: 11px 26px; font-weight: 700;">ذخیره تغییرات پرونده</button>
-            <a class="secondary" href="{% url 'management_employee_password' employee.pk %}">تغییر رمز ورود</a>
+
+        <div class="form-actions" style="display: flex; gap: 10px; margin-top: 24px;">
+            <button class="primary" type="submit" style="padding: 12px 30px; font-weight: 700; font-size: 14px;">💾 ذخیره تغییرات پرونده</button>
+            <a class="secondary" href="{% url 'management_employee_password' employee.pk %}" style="padding: 12px 20px;">🔑 تغییر رمز ورود</a>
         </div>
     </form>
 </article>

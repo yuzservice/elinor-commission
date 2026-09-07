@@ -96,9 +96,41 @@
 <script>
 document.addEventListener('DOMContentLoaded',()=>{
   const dateInput=document.getElementById('id_date'), custom=document.getElementById('custom-date-container');
-  document.querySelectorAll('.date-pill[data-date]').forEach(btn=>btn.addEventListener('click',()=>{dateInput.value=btn.dataset.date;custom.style.display='none';syncDates()}));
-  document.getElementById('toggle-custom-date').addEventListener('click',()=>{custom.style.display=custom.style.display==='none'?'block':'none';if(custom.style.display==='block')dateInput.focus()});
-  function syncDates(){document.querySelectorAll('.date-pill[data-date]').forEach(btn=>btn.classList.toggle('active',btn.dataset.date===dateInput.value))} syncDates();
+  document.querySelectorAll('.date-pill[data-date]').forEach(btn=>btn.addEventListener('click',()=>{
+    dateInput.value=btn.dataset.date;
+    dateInput.dispatchEvent(new Event('change', { bubbles: true }));
+    custom.style.display='none';
+    syncDates();
+  }));
+  document.getElementById('toggle-custom-date').addEventListener('click',()=>{
+    custom.style.display='block';
+    dateInput.focus();
+    dateInput.click();
+  });
+  dateInput.addEventListener('change', syncDates);
+  dateInput.addEventListener('input', syncDates);
+
+  function syncDates(){
+    const val = dateInput.value ? dateInput.value.trim() : '';
+    let matched = false;
+    document.querySelectorAll('.date-pill[data-date]').forEach(btn=>{
+      const isMatch = (btn.dataset.date === val);
+      btn.classList.toggle('active', isMatch);
+      if (isMatch) matched = true;
+    });
+    const toggleBtn = document.getElementById('toggle-custom-date');
+    if (toggleBtn) {
+      if (!matched && val) {
+        toggleBtn.classList.add('active');
+        toggleBtn.innerHTML = `✏️ تاریخ: <strong>${val}</strong>`;
+        custom.style.display = 'block';
+      } else {
+        toggleBtn.classList.remove('active');
+        toggleBtn.innerHTML = '✏️ تاریخ دیگر…';
+      }
+    }
+  }
+  syncDates();
 
   const list=document.getElementById('interval-list'), totalForms=document.getElementById('id_support-TOTAL_FORMS');
   function bindRemove(card){card.querySelector('.remove-interval').addEventListener('click',()=>{const del=card.querySelector('input[name$="-DELETE"]');if(del&&card.querySelector('input[name$="-id"]')?.value){del.checked=true;card.style.display='none'}else card.remove();updateSummary()});card.querySelectorAll('select,input[type="time"]').forEach(x=>x.addEventListener('change',updateSummary))}

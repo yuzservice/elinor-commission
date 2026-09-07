@@ -100,6 +100,7 @@ class Employee(models.Model):
         validators=[MinValueValidator(Decimal("1.0")), MaxValueValidator(Decimal("24.0"))]
     )
     primary_department = models.ForeignKey(Department, on_delete=models.PROTECT, null=True, blank=True, related_name="primary_employees", verbose_name="بخش اصلی")
+    primary_departments = models.ManyToManyField(Department, blank=True, related_name="multi_primary_employees", verbose_name="لاین‌های اصلی")
     departments = models.ManyToManyField(Department, blank=True, related_name="employees")
     start_date = models.DateField("تاریخ شروع", null=True, blank=True)
     is_active = models.BooleanField("فعال", default=True)
@@ -109,6 +110,16 @@ class Employee(models.Model):
         ordering = ["last_name", "first_name", "employee_code"]
     @property
     def full_name(self): return f"{self.first_name} {self.last_name}".strip()
+    def get_primary_departments(self):
+        try:
+            depts = list(self.primary_departments.all())
+            if depts:
+                return depts
+        except Exception:
+            pass
+        if self.primary_department_id:
+            return [self.primary_department]
+        return []
     def __str__(self): return self.full_name
     @property
     def can_review(self): return self.role == self.Role.MANAGER
@@ -300,6 +311,12 @@ class DailyShiftLog(models.Model):
         if depts:
             return "، ".join(d.name for d in depts)
         return "—"
+
+    @property
+    def overtime_hours(self):
+        standard = (self.shift.standard_hours or Decimal("6.0")) if self.shift else Decimal("6.0")
+        total = self.total_hours or Decimal("0.0")
+        return max(Decimal("0.0"), total - standard)
 
     def save(self, *args, **kwargs):
         if not self.has_support_line:

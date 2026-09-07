@@ -61,6 +61,7 @@
             <summary><span>⚙</span> تعاریف و تنظیمات <i>⌄</i></summary>
             <div>
                 <a href="{% url 'management_employees' %}">👥 مدیریت کارکنان</a>
+                <a href="{% url 'management_commission_levels' %}">🎖️ گریدهای پرسنل</a>
                 <a href="{% url 'management_departments' %}">👔 لاین‌ها (بخش‌ها)</a>
                 <a href="{% url 'management_violation_rules' %}">⚠️ قوانین تخلفات</a>
                 <a href="{% url 'management_shifts' %}">⏰ شیفت‌های کاری</a>
@@ -85,7 +86,7 @@
 <main class="{% if not user.is_authenticated %}auth-main{% endif %}">
     {% if user.is_authenticated %}
     <header>
-        <button class="menu" onclick="document.body.classList.toggle('nav-open')">☰</button>
+        <button class="menu" type="button" onclick="event.stopPropagation(); document.body.classList.toggle('nav-open')">☰</button>
         <div>
             <strong>{{ user.employee.full_name }}</strong>
             <small>{{ user.employee.get_role_display }} · سطح {{ user.employee.level.code }}</small>
@@ -242,6 +243,16 @@ function initJalaliDatepicker() {
     const monthNames = ["فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"];
     const weekDays = ["ش", "ی", "د", "س", "چ", "پ", "ج"];
 
+    function toPersianDigits(str) {
+        const p = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
+        return String(str).replace(/[0-9]/g, w => p[+w]);
+    }
+
+    function toEnglishDigits(str) {
+        const p = {'۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9'};
+        return String(str).replace(/[۰-۹]/g, w => p[w]);
+    }
+
     function g2j(gy, gm, gd) {
         var g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
         var jy = (gy <= 1600) ? 0 : 979;
@@ -275,7 +286,7 @@ function initJalaliDatepicker() {
         gy += 4 * Math.floor(days / 1461);
         days %= 1461;
         if (days > 365) {
-            jy += Math.floor((days - 1) / 365);
+            gy += Math.floor((days - 1) / 365);
             days = (days - 1) % 365;
         }
         var gd = days + 1;
@@ -317,62 +328,92 @@ function initJalaliDatepicker() {
         const firstDayG = j2g(viewYear, viewMonth, 1);
         const startWeekDay = (firstDayG.getDay() + 1) % 7;
 
-        let curVal = activeInput.value.trim();
+        let curVal = toEnglishDigits(activeInput.value.trim());
         let selY = 0, selM = 0, selD = 0;
-        if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(curVal)) {
-            const parts = curVal.split('/').map(Number);
-            selY = parts[0]; selM = parts[1]; selD = parts[2];
+        const m = curVal.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+        if (m) {
+            selY = Number(m[1]);
+            selM = Number(m[2]);
+            selD = Number(m[3]);
         }
 
         let html = `
             <div class="jdp-header">
-                <button type="button" class="jdp-btn jdp-next">&lt;</button>
+                <div class="jdp-nav-group">
+                    <button type="button" class="jdp-btn jdp-prev-year" title="یک سال قبل">»</button>
+                    <button type="button" class="jdp-btn jdp-prev-month" title="ماه قبل">›</button>
+                </div>
                 <div class="jdp-title">
                     <span class="jdp-month">${monthNames[viewMonth - 1]}</span>
-                    <span class="jdp-year">${viewYear}</span>
+                    <span class="jdp-year">${toPersianDigits(viewYear)}</span>
                 </div>
-                <button type="button" class="jdp-btn jdp-prev">&gt;</button>
+                <div class="jdp-nav-group">
+                    <button type="button" class="jdp-btn jdp-next-month" title="ماه بعد">‹</button>
+                    <button type="button" class="jdp-btn jdp-next-year" title="یک سال بعد">«</button>
+                </div>
             </div>
             <div class="jdp-weekdays">
-                ${weekDays.map(w => `<span>${w}</span>`).join('')}
+                <span>ش</span>
+                <span>ی</span>
+                <span>د</span>
+                <span>س</span>
+                <span>چ</span>
+                <span>پ</span>
+                <span class="jdp-friday">ج</span>
             </div>
             <div class="jdp-days">
         `;
 
         for (let i = 0; i < startWeekDay; i++) {
-            html += `<span class="jdp-day empty"></span>`;
+            html += `<span class="jdp-day jdp-empty"></span>`;
         }
 
         for (let d = 1; d <= daysInMonth; d++) {
             const isToday = (viewYear === todayJ.jy && viewMonth === todayJ.jm && d === todayJ.jd);
             const isSelected = (viewYear === selY && viewMonth === selM && d === selD);
+            const colIndex = (startWeekDay + d - 1) % 7;
+            const isFriday = (colIndex === 6);
             let cls = 'jdp-day';
             if (isToday) cls += ' today';
             if (isSelected) cls += ' selected';
-            html += `<span class="${cls}" data-day="${d}">${d}</span>`;
+            if (isFriday && !isSelected) cls += ' friday';
+            html += `<span class="${cls}" data-day="${d}">${toPersianDigits(d)}</span>`;
         }
 
         html += `
             </div>
             <div class="jdp-footer">
-                <button type="button" class="jdp-footer-btn jdp-today">امروز</button>
+                <button type="button" class="jdp-footer-btn jdp-today">امروز (${toPersianDigits(todayJ.jd)} ${monthNames[todayJ.jm - 1]})</button>
+                <button type="button" class="jdp-footer-btn jdp-clear">پاک کردن</button>
                 <button type="button" class="jdp-footer-btn jdp-close">بستن</button>
             </div>
         `;
 
         pickerEl.innerHTML = html;
 
-        pickerEl.querySelector('.jdp-prev').onclick = (e) => {
+        pickerEl.querySelector('.jdp-prev-year').onclick = (e) => {
+            e.stopPropagation();
+            viewYear--;
+            renderCalendar();
+        };
+
+        pickerEl.querySelector('.jdp-prev-month').onclick = (e) => {
             e.stopPropagation();
             viewMonth--;
             if (viewMonth < 1) { viewMonth = 12; viewYear--; }
             renderCalendar();
         };
 
-        pickerEl.querySelector('.jdp-next').onclick = (e) => {
+        pickerEl.querySelector('.jdp-next-month').onclick = (e) => {
             e.stopPropagation();
             viewMonth++;
             if (viewMonth > 12) { viewMonth = 1; viewYear++; }
+            renderCalendar();
+        };
+
+        pickerEl.querySelector('.jdp-next-year').onclick = (e) => {
+            e.stopPropagation();
+            viewYear++;
             renderCalendar();
         };
 
@@ -399,6 +440,14 @@ function initJalaliDatepicker() {
             closePicker();
         };
 
+        pickerEl.querySelector('.jdp-clear').onclick = (e) => {
+            e.stopPropagation();
+            activeInput.value = '';
+            activeInput.dispatchEvent(new Event('input', { bubbles: true }));
+            activeInput.dispatchEvent(new Event('change', { bubbles: true }));
+            closePicker();
+        };
+
         pickerEl.querySelector('.jdp-close').onclick = (e) => {
             e.stopPropagation();
             closePicker();
@@ -408,33 +457,39 @@ function initJalaliDatepicker() {
     function positionPicker() {
         if (!activeInput || !pickerEl) return;
         const rect = activeInput.getBoundingClientRect();
-        const popupWidth = 290;
-        let left = rect.left;
-        let top = rect.bottom + window.scrollY + 6;
+        const popupWidth = 300;
+        const popupHeight = pickerEl.offsetHeight || 330;
 
-        if (left + popupWidth > window.innerWidth) {
-            left = window.innerWidth - popupWidth - 16;
+        let left = rect.right - popupWidth;
+        if (left < 12) left = 12;
+        if (left + popupWidth > window.innerWidth - 12) {
+            left = window.innerWidth - popupWidth - 12;
         }
-        if (left < 10) left = 10;
 
+        let top = rect.bottom + 6;
+        if (top + popupHeight > window.innerHeight - 12 && rect.top > popupHeight + 12) {
+            top = rect.top - popupHeight - 6;
+        }
+
+        pickerEl.style.position = 'fixed';
         pickerEl.style.top = `${top}px`;
         pickerEl.style.left = `${left}px`;
     }
 
     function openPicker(input) {
         activeInput = input;
-        let curVal = input.value.trim();
-        if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(curVal)) {
-            const parts = curVal.split('/').map(Number);
-            viewYear = parts[0];
-            viewMonth = parts[1];
+        let curVal = toEnglishDigits(input.value.trim());
+        const m = curVal.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+        if (m) {
+            viewYear = Number(m[1]);
+            viewMonth = Number(m[2]);
         } else {
             viewYear = todayJ.jy;
             viewMonth = todayJ.jm;
         }
         renderCalendar();
-        positionPicker();
         pickerEl.style.display = 'block';
+        positionPicker();
     }
 
     function closePicker() {
@@ -447,6 +502,25 @@ function initJalaliDatepicker() {
         inp.dataset.jdpInit = "true";
         inp.setAttribute('autocomplete', 'off');
 
+        if (!inp.parentElement.classList.contains('datepicker-input-wrap')) {
+            const wrap = document.createElement('div');
+            wrap.className = 'datepicker-input-wrap';
+            inp.parentNode.insertBefore(wrap, inp);
+            wrap.appendChild(inp);
+            const iconBtn = document.createElement('button');
+            iconBtn.type = 'button';
+            iconBtn.className = 'datepicker-icon-btn';
+            iconBtn.title = 'انتخاب از تقویم شمسی';
+            iconBtn.innerHTML = '📅';
+            iconBtn.tabIndex = -1;
+            iconBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openPicker(inp);
+            });
+            wrap.appendChild(iconBtn);
+        }
+
         inp.addEventListener('focus', () => openPicker(inp));
         inp.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -456,7 +530,7 @@ function initJalaliDatepicker() {
 
     document.addEventListener('click', (e) => {
         if (pickerEl && pickerEl.style.display === 'block') {
-            if (!pickerEl.contains(e.target) && e.target !== activeInput) {
+            if (!pickerEl.contains(e.target) && e.target !== activeInput && !e.target.closest('.datepicker-icon-btn')) {
                 closePicker();
             }
         }
@@ -465,6 +539,10 @@ function initJalaliDatepicker() {
     window.addEventListener('resize', () => {
         if (pickerEl && pickerEl.style.display === 'block') positionPicker();
     });
+
+    window.addEventListener('scroll', () => {
+        if (pickerEl && pickerEl.style.display === 'block') positionPicker();
+    }, true);
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -490,13 +568,33 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Close mobile nav on click outside
+    // Close mobile nav on click outside or backdrop
+    function closeSidebar() {
+        document.body.classList.remove('nav-open');
+    }
+
+    const backdrop = document.getElementById('sidebarBackdrop');
+    if (backdrop) {
+        backdrop.addEventListener('click', closeSidebar);
+        backdrop.addEventListener('touchstart', closeSidebar, { passive: true });
+    }
+
     document.addEventListener('click', (e) => {
         if (document.body.classList.contains('nav-open')) {
             const aside = document.querySelector('aside');
             const menuBtn = document.querySelector('.menu');
-            if (aside && !aside.contains(e.target) && menuBtn && !menuBtn.contains(e.target)) {
-                document.body.classList.remove('nav-open');
+            if (aside && !aside.contains(e.target) && (!menuBtn || !menuBtn.contains(e.target))) {
+                closeSidebar();
+            }
+        }
+    });
+
+    document.addEventListener('touchend', (e) => {
+        if (document.body.classList.contains('nav-open')) {
+            const aside = document.querySelector('aside');
+            const menuBtn = document.querySelector('.menu');
+            if (aside && !aside.contains(e.target) && (!menuBtn || !menuBtn.contains(e.target))) {
+                closeSidebar();
             }
         }
     });

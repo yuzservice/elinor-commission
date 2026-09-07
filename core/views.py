@@ -25,6 +25,7 @@ import jdatetime
 from .decorators import get_or_create_manager_employee, manager_required, reviewer_required
 from .forms import (
     BrandingForm,
+    CommissionLevelForm,
     DailyShiftLogForm,
     SupportLineIntervalFormSet,
     DepartmentForm,
@@ -63,6 +64,7 @@ from .services import (
     employee_metrics,
     reject_shift_log,
     revert_shift_log_to_pending,
+    sync_shift_logs_for_performance,
 )
 
 def health(request):
@@ -485,12 +487,17 @@ def management_shift_log_review_detail(request, pk):
         action = form.cleaned_data["action"]
         note = form.cleaned_data.get("manager_note", "")
         if action == "APPROVED":
-            approve_shift_log(log, request.user, note)
-            messages.success(request, f"کارکرد روز {log.date} کارمند {log.employee.full_name} با موفقیت تأیید شد و پورسانت به مبلغ {log.frozen_commission_amount:,} ریال قطعی و واریز گردید.")
+            try:
+                approve_shift_log(log, request.user, note)
+                messages.success(request, f"کارکرد روز {log.date} کارمند {log.employee.full_name} با موفقیت تأیید شد و پورسانت به مبلغ {log.frozen_commission_amount:,} ریال قطعی و واریز گردید.")
+                return redirect("management_shift_log_reviews")
+            except ValidationError as exc:
+                err_msg = exc.message if hasattr(exc, "message") else (exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc))
+                messages.error(request, err_msg)
         else:
             reject_shift_log(log, request.user, note)
             messages.warning(request, f"کارکرد روز {log.date} کارمند {log.employee.full_name} رد شد.")
-        return redirect("management_shift_log_reviews")
+            return redirect("management_shift_log_reviews")
 
     return render(
         request,
@@ -508,8 +515,12 @@ def management_shift_log_review_detail(request, pk):
 def management_shift_log_quick_approve(request, pk):
     """تأیید سریع تک‌کلیکه کارکرد پرسنل از لیست."""
     log = get_object_or_404(DailyShiftLog, pk=pk)
-    approve_shift_log(log, request.user, "تأیید سریع توسط مدیر")
-    messages.success(request, f"کارکرد {log.employee.full_name} در تاریخ {log.date} تأیید و واریز شد.")
+    try:
+        approve_shift_log(log, request.user, "تأیید سریع توسط مدیر")
+        messages.success(request, f"کارکرد {log.employee.full_name} در تاریخ {log.date} تأیید و واریز شد.")
+    except ValidationError as exc:
+        err_msg = exc.message if hasattr(exc, "message") else (exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc))
+        messages.error(request, err_msg)
     next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("management_shift_log_reviews")
     return redirect(next_url)
 
@@ -582,6 +593,7 @@ def management_line_performance_create(request):
                 obj = form.save(commit=False)
                 obj.recorded_by = request.user
                 obj.save()
+                sync_shift_logs_for_performance(obj.date, obj.shift)
                 audit(
                     actor=request.user,
                     action="line_performance.created",
@@ -609,6 +621,7 @@ def management_line_performance_edit(request, pk):
         try:
             with transaction.atomic():
                 item = form.save()
+                sync_shift_logs_for_performance(item.date, item.shift)
                 new = line_performance_snapshot(item)
                 audit(
                     actor=request.user,
@@ -696,6 +709,7 @@ def management_line_performance_batch(request):
                         instance=rec,
                         new_values=line_performance_snapshot(rec),
                     )
+        sync_shift_logs_for_performance(selected_date, selected_shift)
         messages.success(request, "عملکرد فروش لاین‌ها با موفقیت ذخیره شد.")
         jalali_str = jdatetime.date.fromgregorian(date=selected_date).strftime("%Y/%m/%d")
         shift_param = selected_shift.pk if selected_shift else ""
@@ -1062,6 +1076,66 @@ def management_shift_delete(request, pk):
 # ==========================================
 # Departments Management (غیرقابل حذف)
 # ==========================================
+
+# ==========================================
+# Commission Levels (سطوح و گریدهای پرسنل)
+# ==========================================
+
+@login_required
+@manager_required
+def management_commission_levels(request):
+    """فهرست گریدهای پرسنل و تعداد کارکنان هر گرید."""
+    levels = CommissionLevel.objects.annotate(employee_count=Count("employees")).order_by("code")
+    return render(
+        request,
+        "management/commission_level_list.html",
+        {"levels": levels},
+    )
+
+@login_required
+@manager_required
+def management_commission_level_create(request):
+    """ایجاد سطح یا گرید جدید."""
+    form = CommissionLevelForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        level = form.save()
+        messages.success(request, f"گرید «سطح {level.code}» با موفقیت ایجاد شد.")
+        return redirect("management_commission_levels")
+    return render(
+        request,
+        "management/commission_level_form.html",
+        {"form": form, "title": "تعریف گرید پرسنلی جدید", "submit": "ایجاد گرید"},
+    )
+
+@login_required
+@manager_required
+def management_commission_level_edit(request, pk):
+    """ویرایش مشخصات و ضرایب گرید."""
+    level = get_object_or_404(CommissionLevel, pk=pk)
+    form = CommissionLevelForm(request.POST or None, instance=level)
+    if request.method == "POST" and form.is_valid():
+        item = form.save()
+        messages.success(request, f"گرید «سطح {item.code}» با موفقیت به‌روزرسانی شد.")
+        return redirect("management_commission_levels")
+    return render(
+        request,
+        "management/commission_level_form.html",
+        {"form": form, "title": f"ویرایش گرید سطح {level.code}", "level": level, "submit": "ذخیره تغییرات"},
+    )
+
+@login_required
+@manager_required
+@require_POST
+def management_commission_level_delete(request, pk):
+    """حذف گرید در صورت عدم انتساب به کارمندان."""
+    level = get_object_or_404(CommissionLevel, pk=pk)
+    if level.employees.exists():
+        messages.error(request, f"امکان حذف گرید «سطح {level.code}» وجود ندارد زیرا {level.employees.count()} کارمند در این گرید قرار دارند.")
+    else:
+        code = level.code
+        level.delete()
+        messages.success(request, f"گرید «سطح {code}» با موفقیت حذف شد.")
+    return redirect("management_commission_levels")
 
 @login_required
 @manager_required
@@ -1451,6 +1525,24 @@ def management_employee_edit(request, pk):
         messages.success(request, "اطلاعات کارمند و نام کاربری به‌روزرسانی شد.")
         return redirect(_employee_file_url(obj.pk, "edit"))
     return render(request, "management/employee_detail.html", _employee_file_context(employee, "edit", form))
+
+@login_required
+@manager_required
+@require_POST
+def management_employee_photo(request, pk):
+    """مدیریت سریع تصویر پرسنل (آپلود تصویر جدید یا حذف تصویر) از هدر پرونده کارمند."""
+    employee = get_object_or_404(Employee, pk=pk)
+    if "profile_photo-clear" in request.POST and request.POST["profile_photo-clear"] == "true":
+        if employee.profile_photo:
+            employee.profile_photo.delete(save=False)
+            employee.profile_photo = None
+            employee.save(update_fields=["profile_photo", "updated_at"])
+            messages.success(request, f"عکس پروفایل «{employee.full_name}» حذف شد.")
+    elif "profile_photo" in request.FILES:
+        employee.profile_photo = request.FILES["profile_photo"]
+        employee.save(update_fields=["profile_photo", "updated_at"])
+        messages.success(request, f"عکس پروفایل «{employee.full_name}» با موفقیت به‌روزرسانی شد.")
+    return redirect(_employee_file_url(pk, "edit"))
 
 @login_required
 @manager_required
