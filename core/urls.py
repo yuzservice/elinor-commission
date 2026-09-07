@@ -66,10 +66,6 @@ urlpatterns = [
     path("management/departments/<int:pk>/edit/", views.management_department_edit, name="management_department_edit"),
     path("management/departments/<int:pk>/delete/", views.management_department_delete, name="management_department_delete"),
     path("management/departments/<int:pk>/", views.management_department_detail, name="management_department_detail"),
-    path("management/commission-levels/", views.management_commission_levels, name="management_commission_levels"),
-    path("management/commission-levels/create/", views.management_commission_level_create, name="management_commission_level_create"),
-    path("management/commission-levels/<int:pk>/edit/", views.management_commission_level_edit, name="management_commission_level_edit"),
-    path("management/commission-levels/<int:pk>/delete/", views.management_commission_level_delete, name="management_commission_level_delete"),
 
     # Profile
     path("profile/", views.profile, name="profile"),

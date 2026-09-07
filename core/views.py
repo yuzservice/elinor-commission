@@ -25,7 +25,6 @@ import jdatetime
 from .decorators import get_or_create_manager_employee, manager_required, reviewer_required
 from .forms import (
     BrandingForm,
-    CommissionLevelForm,
     DailyShiftLogForm,
     SupportLineIntervalFormSet,
     DepartmentForm,
@@ -1077,66 +1076,6 @@ def management_shift_delete(request, pk):
 # Departments Management (غیرقابل حذف)
 # ==========================================
 
-# ==========================================
-# Commission Levels (سطوح و گریدهای پرسنل)
-# ==========================================
-
-@login_required
-@manager_required
-def management_commission_levels(request):
-    """فهرست گریدهای پرسنل و تعداد کارکنان هر گرید."""
-    levels = CommissionLevel.objects.annotate(employee_count=Count("employees")).order_by("code")
-    return render(
-        request,
-        "management/commission_level_list.html",
-        {"levels": levels},
-    )
-
-@login_required
-@manager_required
-def management_commission_level_create(request):
-    """ایجاد سطح یا گرید جدید."""
-    form = CommissionLevelForm(request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        level = form.save()
-        messages.success(request, f"گرید «سطح {level.code}» با موفقیت ایجاد شد.")
-        return redirect("management_commission_levels")
-    return render(
-        request,
-        "management/commission_level_form.html",
-        {"form": form, "title": "تعریف گرید پرسنلی جدید", "submit": "ایجاد گرید"},
-    )
-
-@login_required
-@manager_required
-def management_commission_level_edit(request, pk):
-    """ویرایش مشخصات و ضرایب گرید."""
-    level = get_object_or_404(CommissionLevel, pk=pk)
-    form = CommissionLevelForm(request.POST or None, instance=level)
-    if request.method == "POST" and form.is_valid():
-        item = form.save()
-        messages.success(request, f"گرید «سطح {item.code}» با موفقیت به‌روزرسانی شد.")
-        return redirect("management_commission_levels")
-    return render(
-        request,
-        "management/commission_level_form.html",
-        {"form": form, "title": f"ویرایش گرید سطح {level.code}", "level": level, "submit": "ذخیره تغییرات"},
-    )
-
-@login_required
-@manager_required
-@require_POST
-def management_commission_level_delete(request, pk):
-    """حذف گرید در صورت عدم انتساب به کارمندان."""
-    level = get_object_or_404(CommissionLevel, pk=pk)
-    if level.employees.exists():
-        messages.error(request, f"امکان حذف گرید «سطح {level.code}» وجود ندارد زیرا {level.employees.count()} کارمند در این گرید قرار دارند.")
-    else:
-        code = level.code
-        level.delete()
-        messages.success(request, f"گرید «سطح {code}» با موفقیت حذف شد.")
-    return redirect("management_commission_levels")
-
 @login_required
 @manager_required
 def management_departments(request):
@@ -1193,6 +1132,28 @@ def management_department_detail(request, pk):
                                 department=department, commission_level=level,
                                 defaults={"rate_per_unit": value, "is_active": True},
                             )
+
+                    new_code = request.POST.get("new_level_code", "").strip().upper()
+                    new_rate_raw = request.POST.get("new_level_rate", "").strip()
+                    if new_code:
+                        if not new_rate_raw:
+                            raise ValueError(f"برای گرید جدید «{new_code}»، ورود مبلغ ضریب پورسانت الزامی است.")
+                        new_rate = int(new_rate_raw)
+                        if new_rate < 0:
+                            raise ValueError("ضریب پورسانت نمی‌تواند منفی باشد.")
+                        new_level, _ = CommissionLevel.objects.get_or_create(
+                            code=new_code,
+                            defaults={
+                                "performance_rate": new_rate,
+                                "violation_rate": 0,
+                                "morning_rate": Decimal("1.0"),
+                            },
+                        )
+                        LineCommissionRate.objects.update_or_create(
+                            department=department,
+                            commission_level=new_level,
+                            defaults={"rate_per_unit": new_rate, "is_active": True},
+                        )
                     action = "department.rates_updated"
                 elif section == "target":
                     target = target or LineTarget(department=department)

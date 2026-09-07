@@ -3,7 +3,63 @@
 <nav class="control-tabs"><a href="#overview">خلاصه عملکرد</a><a href="#base">اطلاعات پایه</a><a href="#rates">ضرایب پورسانت</a><a href="#targets">تارگت‌ها</a><a href="#violations">قوانین تخلف</a><a href="#history">تاریخچه</a></nav>
 <section id="overview" class="admin-stat-grid"><article><span class="stat-icon green">▦</span><div><small>وضعیت لاین</small><strong>{% if department.is_active %}فعال{% else %}غیرفعال{% endif %}</strong></div></article><article><span class="stat-icon blue">↗</span><div><small>فروش ماه جاری</small><strong>{{ performance_units }}</strong><span>کالا</span></div></article><article><span class="stat-icon gold">◎</span><div><small>پیشرفت تارگت بعدی</small><strong>{% if target_result %}{{ target_result.progress_percent }}٪{% else %}—{% endif %}</strong></div></article><article><span class="stat-icon rose">⚠</span><div><small>قوانین تخلف مرتبط</small><strong>{{ rules|length }}</strong><span>قانون</span></div></article></section>
 <article class="card control-section" id="base"><div class="card-head"><h2>اطلاعات پایه لاین</h2></div><div class="detail-pairs"><div><small>نام لاین</small><b>{{ department.name }}</b></div><div><small>وضعیت</small><b>{% if department.is_active %}فعال{% else %}غیرفعال{% endif %}</b></div><div><small>پرسنل اصلی</small><b>{{ department.primary_employees.count }} نفر</b></div></div></article>
-<article class="card control-section" id="rates"><div class="card-head"><div><h2>ضرایب پورسانت لاین</h2><p>نرخ هر کالا برای هر گرید؛ داده‌های موجود بدون کپی استفاده می‌شوند.</p></div></div><form method="post">{% csrf_token %}<input type="hidden" name="section" value="rates"><div class="compact-fields">{% for row in rate_rows %}<div class="field"><label>گرید {{ row.level.code }} <small>پیش‌فرض {{ row.level.performance_rate }}</small></label><input type="number" min="0" name="rate_{{ row.level.pk }}" value="{% if row.rate %}{{ row.rate.rate_per_unit }}{% else %}{{ row.level.performance_rate }}{% endif %}"></div>{% endfor %}</div><button class="primary" type="submit">ذخیره ضرایب</button></form></article>
+<article class="card control-section" id="rates">
+    <div class="card-head">
+        <div>
+            <h2>ضرایب پورسانت لاین</h2>
+            <p>مبلغ ریالی پورسانت به ازای هر کالای فروخته‌شده برای هر گرید در لاین «{{ department.name }}»</p>
+        </div>
+    </div>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="section" value="rates">
+
+        <div class="compact-fields" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px;">
+            {% for row in rate_rows %}
+            <div class="field" style="background: var(--bg, #f8faf9); padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line, #e5eae7); margin-bottom: 0;">
+                <label style="display: flex; justify-content: space-between; align-items: center; font-weight: 700; margin-bottom: 6px;">
+                    <span class="badge" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); color: #92400e; font-weight: 800; border: 1px solid #f59e0b; padding: 2px 8px;">🎖️ گرید {{ row.level.code }}</span>
+                    <small style="color: var(--muted); font-size: 11px;">نرخ پایه: {{ row.level.performance_rate }}</small>
+                </label>
+                <div style="position: relative; display: flex; align-items: center;">
+                    <input type="number" min="0" name="rate_{{ row.level.pk }}" value="{% if row.rate %}{{ row.rate.rate_per_unit }}{% else %}{{ row.level.performance_rate }}{% endif %}" style="padding-left: 42px; font-weight: 700;">
+                    <span style="position: absolute; left: 10px; font-size: 11px; color: var(--muted); pointer-events: none;">ریال</span>
+                </div>
+            </div>
+            {% empty %}
+            <p class="empty" style="grid-column: 1 / -1; padding: 14px !important;">هنوز هیچ گریدی در سامانه تعریف نشده است. از کادر زیر اولین گرید را بسازید.</p>
+            {% endfor %}
+        </div>
+
+        <!-- کادر افزودن گرید جدید به این لاین -->
+        <div style="margin-top: 18px; padding: 16px 18px; background: #fff; border-radius: 14px; border: 1.5px dashed var(--green, #237554);">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+                <span style="font-size: 16px;">✨</span>
+                <strong style="font-size: 13.5px; color: var(--green, #237554);">افزودن گرید جدید به این لاین</strong>
+            </div>
+            <div style="display: grid; grid-template-columns: 140px 1fr; gap: 14px; align-items: end;">
+                <div class="field" style="margin-bottom: 0;">
+                    <label style="font-size: 12px; font-weight: 700;">کد / نام گرید</label>
+                    <input type="text" name="new_level_code" placeholder="مثلاً B یا C" maxlength="2" style="text-transform: uppercase; text-align: center; font-weight: 800; font-size: 15px;">
+                </div>
+                <div class="field" style="margin-bottom: 0;">
+                    <label style="font-size: 12px; font-weight: 700;">ضریب پورسانت در این لاین (ریال به ازای هر کالا)</label>
+                    <div style="position: relative; display: flex; align-items: center;">
+                        <input type="number" min="0" name="new_level_rate" placeholder="مثال: ۱۵۰۰ یا ۲۰۰۰" style="padding-left: 42px;">
+                        <span style="position: absolute; left: 10px; font-size: 11px; color: var(--muted); pointer-events: none;">ریال</span>
+                    </div>
+                </div>
+            </div>
+            <small style="color: var(--muted); display: block; margin-top: 8px; font-size: 11.5px; line-height: 1.5;">
+                💡 با وارد کردن نام گرید (مثلاً B) و ضریب آن، این گرید ایجاد شده و ضریب اختصاصی‌اش برای لاین «{{ department.name }}» ثبت می‌گردد.
+            </small>
+        </div>
+
+        <div style="margin-top: 18px;">
+            <button class="primary" type="submit" style="padding: 10px 24px; font-weight: 700;">💾 ذخیره ضرایب لاین</button>
+        </div>
+    </form>
+</article>
 <article class="card control-section" id="targets"><div class="card-head"><div><h2>تارگت‌های لاین</h2><p>سه سطح موجود برنزی، نقره‌ای و طلایی</p></div></div><form method="post">{% csrf_token %}<input type="hidden" name="section" value="target"><div class="target-level-grid"><fieldset><legend>🥉 برنزی</legend><label>تعداد کالا<input type="number" min="1" name="bronze_units" value="{{ target.bronze_units }}"></label><label>پاداش (ریال)<input type="number" min="0" name="bronze_reward" value="{{ target.bronze_reward }}"></label></fieldset><fieldset><legend>🥈 نقره‌ای</legend><label>تعداد کالا<input type="number" min="1" name="silver_units" value="{{ target.silver_units }}"></label><label>پاداش (ریال)<input type="number" min="0" name="silver_reward" value="{{ target.silver_reward }}"></label></fieldset><fieldset><legend>🥇 طلایی</legend><label>تعداد کالا<input type="number" min="1" name="gold_units" value="{{ target.gold_units }}"></label><label>پاداش (ریال)<input type="number" min="0" name="gold_reward" value="{{ target.gold_reward }}"></label></fieldset></div><label class="toggle-row"><input type="checkbox" name="is_active" {% if target.is_active %}checked{% endif %}><span><b>تارگت فعال باشد</b><small>در خلاصه عملکرد و محاسبات فعلی نمایش داده می‌شود.</small></span></label><button class="primary" type="submit">ذخیره تارگت‌ها</button></form></article>
 <article class="card control-section" id="violations"><div class="card-head"><div><h2>قوانین تخلف مرتبط</h2><p>قوانین سراسری یا اختصاص‌یافته به این لاین؛ فرمول مالی جدیدی اعمال نشده است.</p></div><a class="secondary" href="{% url 'management_violation_rules' %}">مدیریت قوانین</a></div><div class="rule-chips">{% for rule in rules %}<a href="{% url 'management_violation_rule_edit' rule.pk %}"><b>{{ rule.title }}</b><small>{{ rule.first_points }} / {{ rule.second_points }} / {{ rule.third_points }} امتیاز · {{ rule.get_recurrence_window_display }}</small></a>{% empty %}<p class="empty">قانون مرتبطی تعریف نشده است.</p>{% endfor %}</div></article>
 <article class="card control-section" id="history"><div class="card-head"><h2>تاریچه تغییرات مهم</h2></div><div class="history-list">{% for item in history %}<div><b>{{ item.action }}</b><span>{{ item.created_at|date:'Y/m/d H:i' }} · {{ item.actor|default:'سیستم' }}</span></div>{% empty %}<p class="empty">هنوز تغییری برای این لاین ثبت نشده است.</p>{% endfor %}</div></article>
