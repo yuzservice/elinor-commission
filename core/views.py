@@ -91,13 +91,16 @@ def employee_dashboard(request):
     emp = request.user.employee
     start, end = month_range()
     metrics = employee_metrics(emp, start, end)
-    recent_shift_logs = emp.shift_logs.select_related("shift", "main_department").prefetch_related("support_departments")[:6]
+    today = timezone.localdate()
+    today_log = emp.shift_logs.filter(date=today).select_related("shift", "main_department", "overtime_department").first()
+    recent_shift_logs = emp.shift_logs.select_related("shift", "main_department", "overtime_department").prefetch_related("support_departments")[:6]
     return render(
         request,
         "core/employee_dashboard.html",
         {
             "employee": emp,
             "metrics": metrics,
+            "today_log": today_log,
             "recent_shift_logs": recent_shift_logs,
             "start": start,
         },
@@ -107,27 +110,83 @@ def employee_dashboard(request):
 @reviewer_required
 def manager_dashboard(request):
     start, end = month_range()
+    today = timezone.localdate()
+    yesterday = today - timedelta(days=1)
+
     employees = supervised_employees(request.user.employee).select_related("commission_level", "primary_department")
     rows = [{"employee": e, **employee_metrics(e, start, end)} for e in employees]
+    rows.sort(key=lambda r: r.get("total_sales_units_share", 0), reverse=True)
 
-    pending_shift_logs = DailyShiftLog.objects.filter(status=DailyShiftLog.Status.PENDING).select_related("employee", "shift", "main_department")
-    today_shift_logs = DailyShiftLog.objects.filter(date=timezone.localdate()).select_related("employee", "shift", "main_department")
-    today_performances = LineShiftPerformance.objects.filter(date=timezone.localdate()).select_related("shift", "department")
+    pending_shift_logs = DailyShiftLog.objects.filter(status=DailyShiftLog.Status.PENDING)
+    pending_count = pending_shift_logs.count()
+
+    # جلسات شیفت نیازمند توجه (امروز و دیروز با وضعیت در انتظار یا بدون فروش ثبت‌شده)
+    recent_session_keys = list(
+        DailyShiftLog.objects.filter(date__in=[today, yesterday])
+        .values_list("date", "shift_id")
+        .distinct()
+        .order_by("-date", "shift_id")
+    )
+    all_shifts = {s.pk: s for s in Shift.objects.all()}
+    active_departments = list(Department.objects.filter(is_active=True))
+    total_active_lines = len(active_departments)
+
+    attention_sessions = []
+    for s_date, s_shift_id in recent_session_keys:
+        s_shift = all_shifts.get(s_shift_id)
+        if not s_shift:
+            continue
+        s_logs = list(DailyShiftLog.objects.filter(date=s_date, shift_id=s_shift_id))
+        s_perfs = list(LineShiftPerformance.objects.filter(date=s_date, shift_id=s_shift_id))
+        has_pending = any(l.status == DailyShiftLog.Status.PENDING for l in s_logs)
+        no_perf = len(s_perfs) == 0 and any(not getattr(l.main_department, "is_cashier", False) for l in s_logs)
+        if has_pending or no_perf:
+            attention_sessions.append({
+                "date": s_date,
+                "date_jalali": jdatetime.date.fromgregorian(date=s_date).strftime("%Y/%m/%d"),
+                "shift": s_shift,
+                "logs_count": len(s_logs),
+                "has_pending": has_pending,
+                "no_perf": no_perf,
+                "total_sold": sum(p.sold_units for p in s_perfs),
+            })
+
+    # نمای زنده شیفت‌های امروز
+    today_shifts_overview = []
+    for s in Shift.objects.filter(is_active=True).order_by("sort_order"):
+        s_logs = list(DailyShiftLog.objects.filter(date=today, shift=s))
+        s_perfs = list(LineShiftPerformance.objects.filter(date=today, shift=s))
+        today_shifts_overview.append({
+            "shift": s,
+            "logs_count": len(s_logs),
+            "approved_count": sum(1 for l in s_logs if l.status == DailyShiftLog.Status.APPROVED),
+            "pending_count": sum(1 for l in s_logs if l.status == DailyShiftLog.Status.PENDING),
+            "total_sold": sum(p.sold_units for p in s_perfs),
+            "lines_recorded": len(s_perfs),
+            "is_complete": len(s_perfs) >= total_active_lines,
+        })
+
+    month_performances = LineShiftPerformance.objects.filter(date__range=(start, end))
+    total_store_sold_month = month_performances.aggregate(total=Sum("sold_units"))["total"] or 0
+    total_commission = sum(r.get("commission", 0) for r in rows)
+    total_wallet_balance = sum(r.get("wallet_balance", 0) for r in rows)
+    total_score = sum(r.get("total_sales_units_share", 0) for r in rows)
 
     return render(
         request,
         "core/manager_dashboard.html",
         {
             "rows": rows,
-            "pending_shift_logs": pending_shift_logs[:6],
-            "pending_shift_logs_count": pending_shift_logs.count(),
-            "today_shift_logs": today_shift_logs[:6],
-            "today_shift_logs_count": today_shift_logs.count(),
-            "today_performances": today_performances[:6],
-            "today_performances_count": today_performances.count(),
-            "total_score": sum(r.get("score", 0) for r in rows),
-            "total_commission": sum(r.get("commission", 0) for r in rows),
-            "total_wallet_balance": sum(r.get("wallet_balance", 0) for r in rows),
+            "pending_count": pending_count,
+            "attention_sessions": attention_sessions[:4],
+            "today_shifts_overview": today_shifts_overview,
+            "total_store_sold_month": total_store_sold_month,
+            "total_score": total_score,
+            "total_commission": total_commission,
+            "total_wallet_balance": total_wallet_balance,
+            "active_employees_count": len(employees),
+            "start": start,
+            "end": end,
         },
     )
 
@@ -146,6 +205,10 @@ def shift_log_snapshot(obj):
         "has_support_line": obj.has_support_line,
         "support_departments": supp_names,
         "support_hours": str(obj.support_hours),
+        "has_overtime": obj.has_overtime,
+        "overtime_hours": str(obj.overtime_hours or Decimal("0.0")),
+        "overtime_department": obj.overtime_department.name if obj.overtime_department else "",
+        "invoice_count": obj.invoice_count,
         "total_hours": str(obj.total_hours),
         "status": obj.status,
         "is_frozen": obj.is_frozen,
@@ -265,6 +328,7 @@ def shift_log_create(request):
             "submit": "✅ ثبت نهایی کارکرد",
             "date_pills": date_pills,
             "standard_hours": employee.standard_daily_hours or Decimal("6.0"),
+            "cashier_department_ids": list(Department.objects.filter(is_cashier=True).values_list("pk", flat=True)),
         },
     )
 
@@ -393,6 +457,7 @@ def shift_log_edit(request, pk):
             "submit": "💾 ذخیره تغییرات کارکرد",
             "date_pills": date_pills,
             "standard_hours": employee.standard_daily_hours or Decimal("6.0"),
+            "cashier_department_ids": list(Department.objects.filter(is_cashier=True).values_list("pk", flat=True)),
         },
     )
 
@@ -411,55 +476,139 @@ def management_shift_log_reviews(request):
     emp_val = request.GET.get("employee", "")
     q = request.GET.get("q", "").strip()
 
-    qs = DailyShiftLog.objects.select_related(
+    base_qs = DailyShiftLog.objects.select_related(
         "employee", "shift", "main_department", "reviewed_by"
     ).prefetch_related("support_departments", "support_intervals__department")
 
-    if status_filter in {"PENDING", "APPROVED", "REJECTED"}:
-        qs = qs.filter(status=status_filter)
-
+    filtered_qs = base_qs
+    if date_val:
+        try:
+            filtered_qs = filtered_qs.filter(date=JalaliDateField().clean(date_val))
+        except ValidationError:
+            pass
+    if shift_val:
+        filtered_qs = filtered_qs.filter(shift_id=shift_val)
+    if dept_val:
+        filtered_qs = filtered_qs.filter(Q(main_department_id=dept_val) | Q(support_departments__id=dept_val)).distinct()
+    if emp_val:
+        filtered_qs = filtered_qs.filter(employee_id=emp_val)
     if q:
-        qs = qs.filter(
+        filtered_qs = filtered_qs.filter(
             Q(employee__first_name__icontains=q)
             | Q(employee__last_name__icontains=q)
             | Q(employee__employee_code__icontains=q)
             | Q(employee_note__icontains=q)
         )
-    if date_val:
-        try:
-            qs = qs.filter(date=JalaliDateField().clean(date_val))
-        except ValidationError:
-            pass
-    if shift_val:
-        qs = qs.filter(shift_id=shift_val)
-    if dept_val:
-        qs = qs.filter(Q(main_department_id=dept_val) | Q(support_departments__id=dept_val)).distinct()
-    if emp_val:
-        qs = qs.filter(employee_id=emp_val)
 
-    # Calculate pending count for badge
+    # استخراج جلسات شیفت (تاریخ، شیفت) یکتا
+    session_keys = list(
+        filtered_qs.values_list("date", "shift_id")
+        .distinct()
+        .order_by("-date", "shift_id")
+    )
+
+    all_shifts = {s.pk: s for s in Shift.objects.all()}
+    active_employees = list(Employee.objects.filter(is_active=True, role=Employee.Role.EMPLOYEE).select_related("default_shift"))
+
+    session_cards = []
+    for s_date, s_shift_id in session_keys:
+        s_shift = all_shifts.get(s_shift_id)
+        if not s_shift:
+            continue
+
+        logs = list(
+            base_qs.filter(date=s_date, shift_id=s_shift_id)
+            .select_related("employee", "main_department")
+            .prefetch_related("support_departments", "support_intervals__department")
+        )
+
+        expected = [e for e in active_employees if e.default_shift_id == s_shift_id]
+        logged_emp_ids = {l.employee_id for l in logs}
+        missing = [e for e in expected if e.pk not in logged_emp_ids]
+
+        performances = list(
+            LineShiftPerformance.objects.filter(date=s_date, shift_id=s_shift_id).select_related("department")
+        )
+        total_sold = sum(p.sold_units for p in performances)
+
+        log_rows = []
+        session_total_comm = 0
+        all_approved = True
+        any_pending = False
+        any_rejected = False
+
+        for log in logs:
+            calc = calculate_single_shift_log(log)
+            log_rows.append({"log": log, "calc": calc})
+            session_total_comm += calc["total_commission"]
+            if log.status == DailyShiftLog.Status.PENDING:
+                any_pending = True
+            elif log.status == DailyShiftLog.Status.REJECTED:
+                any_rejected = True
+            if log.status != DailyShiftLog.Status.APPROVED:
+                all_approved = False
+
+        if all_approved and logs:
+            session_status = "APPROVED"
+            status_badge = "✅ تأیید و فریز شده"
+            status_class = "approved"
+        elif missing:
+            session_status = "INCOMPLETE"
+            status_badge = f"⏳ ثبت‌نشده ({len(missing)} نفر باقی‌مانده)"
+            status_class = "pending"
+        elif not performances:
+            session_status = "NO_SALES"
+            status_badge = "⚠️ فروش لاین‌ها ثبت نشده"
+            status_class = "rejected"
+        else:
+            session_status = "READY"
+            status_badge = "✨ آماده تأیید نهایی مدیر"
+            status_class = "approved"
+
+        if status_filter == "PENDING" and not any_pending:
+            continue
+        if status_filter == "APPROVED" and not all_approved:
+            continue
+        if status_filter == "REJECTED" and not any_rejected:
+            continue
+
+        session_cards.append({
+            "date": s_date,
+            "date_jalali": jdatetime.date.fromgregorian(date=s_date).strftime("%Y/%m/%d"),
+            "shift": s_shift,
+            "logs": logs,
+            "log_rows": log_rows,
+            "expected_count": len(expected),
+            "logged_count": len(logs),
+            "missing_employees": missing,
+            "missing_names": "، ".join(e.full_name for e in missing),
+            "is_complete": len(missing) == 0,
+            "performances": performances,
+            "has_performance": len(performances) > 0,
+            "total_sold": total_sold,
+            "total_commission": session_total_comm,
+            "session_status": session_status,
+            "status_badge": status_badge,
+            "status_class": status_class,
+            "can_approve": (len(missing) == 0 and any_pending and len(performances) > 0),
+            "any_pending": any_pending,
+            "all_approved": all_approved,
+        })
+
+    paginator = Paginator(session_cards, 10)
+    page_num = request.GET.get("page")
+    page = paginator.get_page(page_num)
+
     pending_count = DailyShiftLog.objects.filter(status=DailyShiftLog.Status.PENDING).count()
     approved_count = DailyShiftLog.objects.filter(status=DailyShiftLog.Status.APPROVED).count()
     rejected_count = DailyShiftLog.objects.filter(status=DailyShiftLog.Status.REJECTED).count()
-
-    paginator = Paginator(qs, 25)
-    page = paginator.get_page(request.GET.get("page"))
-
-    # Attach calculated metrics for each shift log in page
-    log_rows = []
-    for log in page:
-        calc = calculate_single_shift_log(log)
-        log_rows.append({
-            "log": log,
-            "calc": calc,
-        })
 
     return render(
         request,
         "management/shift_log_review_list.html",
         {
             "page": page,
-            "log_rows": log_rows,
+            "session_cards": page.object_list,
             "status_filter": status_filter,
             "pending_count": pending_count,
             "approved_count": approved_count,
@@ -470,6 +619,54 @@ def management_shift_log_reviews(request):
             "filters": request.GET,
         },
     )
+
+@login_required
+@manager_required
+@require_POST
+def management_shift_session_approve(request):
+    """تأیید یکجای تمام کارکردهای پرسنل یک جلسه شیفت پس از تکمیل حضور و فروش."""
+    date_str = request.POST.get("date")
+    shift_id = request.POST.get("shift_id")
+    if not date_str or not shift_id:
+        messages.error(request, "اطلاعات تاریخ و شیفت نامعتبر است.")
+        return redirect("management_shift_log_reviews")
+
+    try:
+        target_date = JalaliDateField().clean(date_str)
+    except ValidationError:
+        messages.error(request, "فرمت تاریخ نامعتبر است.")
+        return redirect("management_shift_log_reviews")
+
+    target_shift = get_object_or_404(Shift, pk=shift_id)
+
+    try:
+        check_shift_completion(target_date, target_shift)
+    except ValidationError as exc:
+        err_msg = exc.message if hasattr(exc, "message") else (exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc))
+        messages.error(request, err_msg)
+        return redirect("management_shift_log_reviews")
+
+    logs = DailyShiftLog.objects.filter(
+        date=target_date, shift=target_shift, status=DailyShiftLog.Status.PENDING
+    )
+    if not logs.exists():
+        messages.info(request, "هیچ کارکرد در انتظار تأییدی برای این شیفت وجود ندارد.")
+        return redirect("management_shift_log_reviews")
+
+    count = 0
+    total_comm = 0
+    with transaction.atomic():
+        for log in logs:
+            approved = approve_shift_log(log, request.user, "تأیید یکجای شیفت توسط مدیر")
+            count += 1
+            total_comm += approved.frozen_commission_amount
+
+    j_date = jdatetime.date.fromgregorian(date=target_date).strftime("%Y/%m/%d")
+    messages.success(
+        request,
+        f"جلسه شیفت «{target_shift.title}» در تاریخ {j_date} با موفقیت برای {count} کارمند تأیید شد و مجموع پورسانت قطعی به مبلغ {total_comm:,} ریال واریز گردید."
+    )
+    return redirect("management_shift_log_reviews")
 
 @login_required
 @manager_required
@@ -556,9 +753,9 @@ def delete_with_audit(*, request, obj, action, description, old_values=None):
 @manager_required
 def management_line_performances(request):
     qs = LineShiftPerformance.objects.select_related("shift", "department", "recorded_by")
-    date_val = request.GET.get("date", "")
-    shift_val = request.GET.get("shift", "")
-    dept_val = request.GET.get("department", "")
+    date_val = request.GET.get("date", "").strip()
+    shift_val = request.GET.get("shift", "").strip()
+    dept_val = request.GET.get("department", "").strip()
 
     if date_val:
         try:
@@ -570,14 +767,79 @@ def management_line_performances(request):
     if dept_val:
         qs = qs.filter(department_id=dept_val)
 
-    page = Paginator(qs, 25).get_page(request.GET.get("page"))
+    # جلسات یکتای شیفت (تاریخ، شیفت) مرتب‌شده از جدیدترین به قدیمی‌ترین
+    session_keys = list(
+        qs.values_list("date", "shift_id")
+        .distinct()
+        .order_by("-date", "shift__sort_order", "shift_id")
+    )
+
+    paginator = Paginator(session_keys, 10)
+    page_num = request.GET.get("page")
+    page = paginator.get_page(page_num)
+
+    all_shifts = {s.pk: s for s in Shift.objects.all()}
+    active_departments = list(Department.objects.filter(is_active=True))
+    total_active_lines = len(active_departments)
+
+    current_page_keys = page.object_list
+    if current_page_keys:
+        page_dates = {k[0] for k in current_page_keys}
+        page_shift_ids = {k[1] for k in current_page_keys}
+        performances_for_page = list(
+            qs.filter(date__in=page_dates, shift_id__in=page_shift_ids)
+            .select_related("shift", "department", "recorded_by")
+            .order_by("department__name")
+        )
+    else:
+        performances_for_page = []
+
+    today = timezone.localdate()
+    yesterday = today - timedelta(days=1)
+
+    session_cards = []
+    for s_date, s_shift_id in current_page_keys:
+        s_shift = all_shifts.get(s_shift_id)
+        if not s_shift:
+            continue
+
+        items = [
+            p for p in performances_for_page
+            if p.date == s_date and p.shift_id == s_shift_id
+        ]
+        if not items:
+            continue
+
+        total_sold = sum(p.sold_units for p in items)
+        j_date = jdatetime.date.fromgregorian(date=s_date).strftime("%Y/%m/%d")
+        is_complete = (len(items) >= total_active_lines) if not dept_val else True
+
+        session_cards.append({
+            "date": s_date,
+            "date_jalali": j_date,
+            "shift": s_shift,
+            "items": items,
+            "lines_count": len(items),
+            "total_active_lines": total_active_lines,
+            "is_complete": is_complete,
+            "total_sold": total_sold,
+            "is_recent": s_date in (today, yesterday),
+        })
+
+    total_records = qs.count()
+    total_sold_all = qs.aggregate(total=Sum("sold_units"))["total"] or 0
+
     return render(
         request,
         "management/line_performance_list.html",
         {
             "page": page,
+            "session_cards": session_cards,
+            "total_sessions": len(session_keys),
+            "total_records": total_records,
+            "total_sold_all": total_sold_all,
             "shifts": Shift.objects.filter(is_active=True),
-            "departments": Department.objects.filter(is_active=True),
+            "departments": active_departments,
             "filters": request.GET,
         },
     )

@@ -793,6 +793,86 @@ class LineCommissionEngineTests(BaseEmployeeTest):
         self.assertEqual(m2["gross_sales_commission"], 24000)
         self.assertEqual(m2["commission"], 24000)
 
+    def test_overtime_sharing_with_target_evening_shift(self):
+        # Emp1: 6h Pants (main) in Morning shift + 2h Overtime (16:00 to 18:00) in Pants
+        from datetime import time
+        log1 = DailyShiftLog.objects.create(
+            employee=self.employee,
+            date=date(2026, 8, 30),
+            shift=self.shift_morning,
+            main_department=self.dept_pants,
+            main_hours=Decimal("6.0"),
+            has_overtime=True,
+            overtime_start_time=time(16, 0),
+            overtime_end_time=time(18, 0),
+            overtime_department=self.dept_pants,
+        )
+
+        # Emp2: 6h Pants in Morning shift
+        DailyShiftLog.objects.create(
+            employee=self.emp2,
+            date=date(2026, 8, 30),
+            shift=self.shift_morning,
+            main_department=self.dept_pants,
+            main_hours=Decimal("6.0"),
+        )
+
+        # Evening shift employee: 6h Pants in Evening shift
+        user_eve = User.objects.create_user("eve_user", "eve@test.com", "pass")
+        emp_eve = Employee.objects.create(
+            user=user_eve,
+            employee_code="EVE01",
+            first_name="نسترن",
+            last_name="عصری",
+            mobile="09129998877",
+            commission_level=self.level_a,
+            primary_department=self.dept_pants,
+            default_shift=self.shift_evening,
+        )
+        DailyShiftLog.objects.create(
+            employee=emp_eve,
+            date=date(2026, 8, 30),
+            shift=self.shift_evening,
+            main_department=self.dept_pants,
+            main_hours=Decimal("6.0"),
+        )
+
+        # Morning performance: 60 sold units in Pants
+        LineShiftPerformance.objects.create(
+            date=date(2026, 8, 30),
+            shift=self.shift_morning,
+            department=self.dept_pants,
+            sold_units=60,
+            recorded_by=self.manager_user,
+        )
+
+        # Evening performance: 40 sold units in Pants
+        LineShiftPerformance.objects.create(
+            date=date(2026, 8, 30),
+            shift=self.shift_evening,
+            department=self.dept_pants,
+            sold_units=40,
+            recorded_by=self.manager_user,
+        )
+
+        # Check metrics for Emp1 (Fatemeh equivalent)
+        # Morning: 6 / (6+6) * 60 = 30 units
+        # Overtime in Evening: 2 / (6 + 2) * 40 = 10 units
+        # Total for Emp1: 30 + 10 = 40 units
+        c1 = calculate_single_shift_log(log1)
+        self.assertEqual(c1["total_units_share"], Decimal("40.0"))
+        self.assertIsNotNone(c1["overtime_info"])
+        self.assertEqual(c1["overtime_info"]["share_units"], Decimal("10.0"))
+        self.assertEqual(c1["main_info"]["share_units"], Decimal("30.0"))
+
+        # Check metrics for Emp2 (Mahsa equivalent - Morning only): 30 units
+        m2 = employee_metrics(self.emp2, date(2026, 8, 30), date(2026, 8, 30))
+        self.assertEqual(m2["total_sales_units_share"], Decimal("30.0"))
+
+        # Check metrics for emp_eve (Evening only): 6 / 8 * 40 = 30 units
+        m_eve = employee_metrics(emp_eve, date(2026, 8, 30), date(2026, 8, 30))
+        self.assertEqual(m_eve["total_sales_units_share"], Decimal("30.0"))
+
     def test_manager_can_update_rates_and_targets_from_department_detail(self):
         self.client.force_login(self.manager_user)
         response = self.client.get(reverse("management_line_rates"))

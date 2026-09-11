@@ -107,6 +107,13 @@
                         {% else %}
                             <span style="color: #888;">—</span>
                         {% endif %}
+                        {% if d.overtime_info %}
+                        <div style="margin-top: 6px; padding: 4px 8px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; font-size: 11.5px; color: #166534;">
+                            ⚡ <b>اضافه‌کاری:</b> {{ d.overtime_info.hours }}h در {{ d.overtime_info.department_name }} (شیفت {{ d.overtime_info.target_shift_title }})
+                            · سهم: <strong>{{ d.overtime_info.share_units }}</strong>
+                            → <strong>{{ d.overtime_info.commission|persian_int }} ریال</strong>
+                        </div>
+                        {% endif %}
                     </td>
                     <td><strong style="color: var(--green, #237554);">{{ d.total_units_share }}</strong></td>
                     <td><strong>{{ d.total_commission|persian_int }} ریال</strong></td>

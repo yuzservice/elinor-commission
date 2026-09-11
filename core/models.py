@@ -7,6 +7,7 @@ from django.db import models
 
 class Department(models.Model):
     name = models.CharField("نام بخش", max_length=100, unique=True)
+    is_cashier = models.BooleanField("لاین صندوقدار (ثبت مستقیم فاکتور)", default=False)
     is_active = models.BooleanField("فعال", default=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     updated_at = models.DateTimeField(auto_now=True, null=True)
@@ -251,6 +252,25 @@ class DailyShiftLog(models.Model):
         blank=True,
         validators=[MinValueValidator(Decimal("0.0")), MaxValueValidator(Decimal("24.0"))]
     )
+    has_overtime = models.BooleanField("ثبت اضافه‌کاری", default=False)
+    overtime_start_time = models.TimeField("ساعت شروع اضافه‌کاری", null=True, blank=True)
+    overtime_end_time = models.TimeField("ساعت پایان اضافه‌کاری", null=True, blank=True)
+    overtime_department = models.ForeignKey(
+        Department,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="overtime_shift_logs",
+        verbose_name="لاین اضافه‌کاری"
+    )
+    overtime_hours = models.DecimalField(
+        "ساعت اضافه‌کاری",
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("0.0"),
+        validators=[MinValueValidator(Decimal("0.0")), MaxValueValidator(Decimal("24.0"))]
+    )
+    invoice_count = models.PositiveIntegerField("تعداد فاکتورهای صادرشده", null=True, blank=True)
     total_hours = models.DecimalField(
         "مجموع ساعت کار",
         max_digits=5,
@@ -282,6 +302,9 @@ class DailyShiftLog(models.Model):
     frozen_support_share_units = models.DecimalField(
         "سهم فریز شده لاین‌های کمکی (کالا)", max_digits=10, decimal_places=2, default=Decimal("0.0")
     )
+    frozen_overtime_share_units = models.DecimalField(
+        "سهم فریز شده اضافه‌کاری (کالا)", max_digits=10, decimal_places=2, default=Decimal("0.0")
+    )
     frozen_total_units_share = models.DecimalField(
         "مجموع سهم فریز شده کالا", max_digits=10, decimal_places=2, default=Decimal("0.0")
     )
@@ -312,33 +335,64 @@ class DailyShiftLog(models.Model):
             return "، ".join(d.name for d in depts)
         return "—"
 
-    @property
-    def overtime_hours(self):
-        standard = (self.shift.standard_hours or Decimal("6.0")) if self.shift else Decimal("6.0")
-        total = self.total_hours or Decimal("0.0")
-        return max(Decimal("0.0"), total - standard)
+    def compute_overtime_hours(self):
+        if not self.has_overtime or not self.overtime_start_time or not self.overtime_end_time:
+            return Decimal("0.0")
+        s_m = self.overtime_start_time.hour * 60 + self.overtime_start_time.minute
+        e_m = self.overtime_end_time.hour * 60 + self.overtime_end_time.minute
+        if e_m <= s_m:
+            e_m += 24 * 60
+        return Decimal(e_m - s_m) / Decimal(60)
 
     def save(self, *args, **kwargs):
         if not self.has_support_line:
             self.support_hours = Decimal("0.0")
+        if not self.has_overtime:
+            self.overtime_hours = Decimal("0.0")
+            self.overtime_start_time = None
+            self.overtime_end_time = None
+            self.overtime_department = None
+        else:
+            self.overtime_hours = self.compute_overtime_hours()
+            if not self.overtime_department_id and self.main_department_id:
+                self.overtime_department = self.main_department
+
         support_h = self.support_hours or Decimal("0.0")
-        self.total_hours = (self.main_hours or Decimal("0.0")) + support_h
+        ot_h = self.overtime_hours or Decimal("0.0")
+        self.total_hours = (self.main_hours or Decimal("0.0")) + support_h + ot_h
         super().save(*args, **kwargs)
 
     def recalculate_allocations(self, *, save=True):
         intervals = list(self.support_intervals.all())
         support_minutes = sum(item.duration_minutes for item in intervals)
-        total_minutes = int((self.shift.standard_hours or Decimal("0")) * 60)
+        total_shift_minutes = int((self.shift.standard_hours or Decimal("0")) * 60)
         self.support_hours = Decimal(support_minutes) / Decimal(60)
-        self.main_hours = Decimal(total_minutes - support_minutes) / Decimal(60)
-        self.total_hours = Decimal(total_minutes) / Decimal(60)
+        self.main_hours = Decimal(max(0, total_shift_minutes - support_minutes)) / Decimal(60)
         self.has_support_line = bool(intervals)
+
+        if not self.has_overtime:
+            self.overtime_hours = Decimal("0.0")
+            self.overtime_start_time = None
+            self.overtime_end_time = None
+            self.overtime_department = None
+        else:
+            self.overtime_hours = self.compute_overtime_hours()
+            if not self.overtime_department_id and self.main_department_id:
+                self.overtime_department = self.main_department
+
+        ot_h = self.overtime_hours or Decimal("0.0")
+        self.total_hours = self.main_hours + self.support_hours + ot_h
         if save:
             DailyShiftLog.objects.filter(pk=self.pk).update(
                 support_hours=self.support_hours,
                 main_hours=self.main_hours,
+                overtime_hours=self.overtime_hours,
                 total_hours=self.total_hours,
                 has_support_line=self.has_support_line,
+                has_overtime=self.has_overtime,
+                overtime_start_time=self.overtime_start_time,
+                overtime_end_time=self.overtime_end_time,
+                overtime_department=self.overtime_department,
             )
             self.support_departments.set({item.department_id for item in intervals})
 

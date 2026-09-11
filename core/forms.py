@@ -118,13 +118,25 @@ class DailyShiftLogForm(forms.ModelForm):
             "date",
             "shift",
             "main_department",
+            "invoice_count",
             "has_support_line",
+            "has_overtime",
+            "overtime_start_time",
+            "overtime_end_time",
+            "overtime_department",
             "employee_note",
         ]
         widgets = {
+            "invoice_count": forms.NumberInput(attrs={
+                "placeholder": "مثلاً: ۷۵",
+                "min": "0",
+                "inputmode": "numeric",
+            }),
+            "overtime_start_time": forms.TimeInput(format="%H:%M", attrs={"type": "time"}),
+            "overtime_end_time": forms.TimeInput(format="%H:%M", attrs={"type": "time"}),
             "employee_note": forms.Textarea(attrs={
                 "rows": 2,
-                "placeholder": "مثلاً: ۲ ساعت آخر شیفت رفتم اکسسوری و پیراهن چون پیک شلوغی بود..."
+                "placeholder": "مثلاً: ۲ ساعت اضافه‌کاری ماندم چون مشتری زیادی در فروشگاه بود...",
             }),
         }
 
@@ -134,9 +146,21 @@ class DailyShiftLogForm(forms.ModelForm):
 
         self.fields["shift"].queryset = Shift.objects.filter(is_active=True)
         self.fields["main_department"].queryset = Department.objects.filter(is_active=True)
+        self.fields["overtime_department"].queryset = Department.objects.filter(is_active=True)
         self.fields["shift"].label = "شیفت کاری"
         self.fields["main_department"].label = "لاین اصلی"
+        self.fields["invoice_count"].label = "تعداد فاکتورهای صادرشده"
+        self.fields["has_overtime"].label = "ثبت اضافه‌کاری"
+        self.fields["overtime_start_time"].label = "ساعت شروع اضافه‌کاری"
+        self.fields["overtime_end_time"].label = "ساعت پایان اضافه‌کاری"
+        self.fields["overtime_department"].label = "لاین اضافه‌کاری"
         self.fields["employee_note"].label = "یادداشت یا توضیح برای مدیر"
+
+        self.fields["invoice_count"].required = False
+        self.fields["has_overtime"].required = False
+        self.fields["overtime_start_time"].required = False
+        self.fields["overtime_end_time"].required = False
+        self.fields["overtime_department"].required = False
 
         if not self.is_bound and not self.instance.pk:
             self.fields["date"].initial = jdatetime.date.fromgregorian(date=timezone.localdate()).strftime("%Y/%m/%d")
@@ -148,6 +172,41 @@ class DailyShiftLogForm(forms.ModelForm):
                 if employee.primary_department:
                     self.initial["main_department"] = employee.primary_department_id
                     self.fields["main_department"].initial = employee.primary_department_id
+                    self.initial["overtime_department"] = employee.primary_department_id
+                    self.fields["overtime_department"].initial = employee.primary_department_id
+
+    def clean(self):
+        cleaned_data = super().clean()
+        main_dept = cleaned_data.get("main_department")
+        inv_count = cleaned_data.get("invoice_count")
+
+        if main_dept and getattr(main_dept, "is_cashier", False):
+            if inv_count is None:
+                raise ValidationError({"invoice_count": "برای لاین صندوقدار، وارد کردن تعداد فاکتورهای صادرشده الزامی است."})
+        else:
+            cleaned_data["invoice_count"] = None
+
+        has_ot = cleaned_data.get("has_overtime")
+        ot_start = cleaned_data.get("overtime_start_time")
+        ot_end = cleaned_data.get("overtime_end_time")
+        ot_dept = cleaned_data.get("overtime_department")
+
+        if has_ot:
+            if not ot_start or not ot_end:
+                raise ValidationError("در صورت ثبت اضافه‌کاری، ساعت شروع و پایان آن الزامی است.")
+            s_m = ot_start.hour * 60 + ot_start.minute
+            e_m = ot_end.hour * 60 + ot_end.minute
+            if e_m <= s_m:
+                e_m += 24 * 60
+            if e_m - s_m <= 0:
+                raise ValidationError("ساعت پایان اضافه‌کاری باید بعد از ساعت شروع باشد.")
+            if not ot_dept and main_dept:
+                cleaned_data["overtime_department"] = main_dept
+        else:
+            cleaned_data["overtime_start_time"] = None
+            cleaned_data["overtime_end_time"] = None
+            cleaned_data["overtime_department"] = None
+        return cleaned_data
 
 
 class SupportLineIntervalForm(forms.ModelForm):
@@ -251,7 +310,7 @@ class DepartmentMonthlyTargetForm(forms.ModelForm):
 class DepartmentForm(forms.ModelForm):
     class Meta:
         model = Department
-        fields = ["name", "is_active"]
+        fields = ["name", "is_cashier", "is_active"]
 
     def clean_name(self):
         name = " ".join(self.cleaned_data["name"].split())

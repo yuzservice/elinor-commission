@@ -120,6 +120,24 @@
                     <td><strong style="color: var(--green, #237554);">{{ s.commission|persian_int }} ریال</strong></td>
                 </tr>
                 {% endfor %}
+
+                {% if calc.overtime_info %}
+                <tr style="background: #f0fdf4;">
+                    <td><b>{{ calc.overtime_info.department_name }}</b></td>
+                    <td><span class="badge" style="background: #dcfce7; color: #15803d;">⚡ اضافه‌کاری (شیفت {{ calc.overtime_info.target_shift_title }})</span></td>
+                    <td>{{ calc.overtime_info.hours }} ساعت ({{ calc.overtime_info.start_time }} تا {{ calc.overtime_info.end_time }})</td>
+                    <td>{{ calc.overtime_info.total_dept_hours }} ساعت</td>
+                    <td>
+                        <strong>{{ calc.overtime_info.total_sold_units }} عدد</strong>
+                        {% if not calc.overtime_info.has_performance_recorded %}
+                        <small style="color: #c53030;">⚠️ فروش این لاین هنوز ثبت نشده (صفر)</small>
+                        {% endif %}
+                    </td>
+                    <td><b style="color: var(--green, #237554); font-size: 14px;">{{ calc.overtime_info.share_units }} کالا</b></td>
+                    <td>{{ calc.overtime_info.rate_per_unit|persian_int }} ریال</td>
+                    <td><strong style="color: var(--green, #237554);">{{ calc.overtime_info.commission|persian_int }} ریال</strong></td>
+                </tr>
+                {% endif %}
             </tbody>
             <tfoot>
                 <tr style="background: #f9fafb; font-weight: bold;">

@@ -1,170 +1,229 @@
 {% extends 'base.html' %}
 {% load persian %}
-{% block title %}بررسی و تأیید کارکرد پرسنل{% endblock %}
+{% block title %}بررسی و تأیید جلسات شیفت کاری{% endblock %}
 {% block content %}
 <div class="page-head">
     <div>
-        <p class="eyebrow">مدیریت و تأیید عملیات شیفت</p>
-        <h1>بررسی و تأیید کارکرد پرسنل</h1>
-        <p>بررسی کارکردهای ثبت‌شده، تسهیم ساعتی فروش لاین‌ها و واریز قطعی پورسانت روزانه</p>
+        <p class="eyebrow">مدیریت عملیات و تسهیم فروش</p>
+        <h1>بررسی و تأیید شیفت‌های کاری</h1>
+        <p>تفکیک بر اساس تاریخ و شیفت · تطبیق حضور پرسنل، تسهیم فروش لاین‌ها و واریز قطعی پورسانت</p>
+    </div>
+    <div class="head-actions">
+        <a class="secondary" href="{% url 'management_line_performance_batch' %}">🛍️ ثبت دسته‌ای فروش لاین‌ها</a>
     </div>
 </div>
 
 <!-- Tabs for Approval Status -->
 <div class="tabs" style="margin-bottom: 16px;">
     <a class="{% if status_filter == 'PENDING' %}active{% endif %}" href="?status=PENDING">
-        ⏳ در انتظار بررسی و تأیید
+        ⏳ شیفت‌های در انتظار بررسی
         <span class="badge" style="background: rgba(0,0,0,0.15); margin-right: 4px;">{{ pending_count }}</span>
     </a>
     <a class="{% if status_filter == 'APPROVED' %}active{% endif %}" href="?status=APPROVED">
-        ✅ تأییدشده و واریز نهایی
+        ✅ شیفت‌های تأیید و فریز شده
         <span class="badge" style="background: rgba(0,0,0,0.15); margin-right: 4px;">{{ approved_count }}</span>
     </a>
-    <a class="{% if status_filter == 'REJECTED' %}active{% endif %}" href="?status=REJECTED">
-        ❌ ردشده
-        <span class="badge" style="background: rgba(0,0,0,0.15); margin-right: 4px;">{{ rejected_count }}</span>
-    </a>
     <a class="{% if not status_filter %}active{% endif %}" href="?status=">
-        📋 همه موارد
+        📋 همه شیفت‌ها
     </a>
 </div>
 
 <!-- Filters -->
-<article class="card filter-card">
+<article class="card filter-card" style="margin-bottom: 20px;">
     <form method="get" class="filters">
         <input type="hidden" name="status" value="{{ status_filter }}">
         <input name="q" value="{{ filters.q }}" placeholder="جستجو نام کارمند یا کد پرسنلی">
-        <input name="date" value="{{ filters.date }}" placeholder="تاریخ (۱۴۰۵/۰۶/۰۸)" class="jalali-date">
+        <input name="date" value="{{ filters.date }}" placeholder="تاریخ شیفت (۱۴۰۵/۰۶/۱۵)" class="jalali-date">
         <select name="shift">
             <option value="">همه شیفت‌ها</option>
             {% for s in shifts %}
             <option value="{{ s.pk }}" {% if filters.shift == s.pk|stringformat:'s' %}selected{% endif %}>{{ s.title }}</option>
             {% endfor %}
         </select>
-        <select name="department">
-            <option value="">همه لاین‌ها</option>
-            {% for d in departments %}
-            <option value="{{ d.pk }}" {% if filters.department == d.pk|stringformat:'s' %}selected{% endif %}>{{ d.name }}</option>
-            {% endfor %}
-        </select>
-        <select name="employee">
-            <option value="">همه کارکنان</option>
-            {% for emp in employees %}
-            <option value="{{ emp.pk }}" {% if filters.employee == emp.pk|stringformat:'s' %}selected{% endif %}>{{ emp.full_name }}</option>
-            {% endfor %}
-        </select>
-        <button class="primary">فیلتر</button>
+        <button class="primary" type="submit">اعمال فیلتر</button>
         <a class="secondary" href="{% url 'management_shift_log_reviews' %}?status={{ status_filter }}">پاک‌کردن</a>
     </form>
 </article>
 
-<!-- Shift Logs Review Table -->
-<article class="card">
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    <th>تاریخ و شیفت</th>
-                    <th>کارمند</th>
-                    <th>لاین اصلی (ساعت)</th>
-                    <th>لاین‌های کمکی (ساعت)</th>
-                    <th>کل کارکرد</th>
-                    <th>سهم کالا</th>
-                    <th>پورسانت روز</th>
-                    <th>وضعیت</th>
-                    <th>عملیات</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in log_rows %}
-                <tr>
-                    <td>
-                        <b>{{ row.log.date|jalali }}</b>
-                        <small style="color: var(--muted);">{{ row.log.shift.title }}</small>
-                    </td>
-                    <td>
-                        <div class="person-cell">
-                            {% if row.log.employee.profile_photo %}
-                            <img src="{{ row.log.employee.profile_photo.url }}" alt="">
-                            {% else %}
-                            <span class="avatar small">{{ row.log.employee.first_name|slice:':1' }}</span>
-                            {% endif %}
-                            <div>
-                                <b>{{ row.log.employee.full_name }}</b>
-                                <small>گرید {{ row.log.employee.commission_level.code }} · کد: {{ row.log.employee.employee_code }}</small>
-                            </div>
-                        </div>
-                    </td>
-                    <td>
-                        <b>{{ row.log.main_department.name }}</b>
-                        <small>{{ row.log.main_hours }} ساعت</small>
-                    </td>
-                    <td>
-                        {% if row.log.has_support_line %}
-                        <span style="color: var(--green, #237554); font-weight: 600;">{{ row.log.support_departments_display }}</span>
-                        <small>{{ row.log.support_hours }} ساعت مجموعاً</small>
-                        {% else %}
-                        <span style="color: var(--muted);">—</span>
-                        {% endif %}
-                    </td>
-                    <td><strong>{{ row.log.total_hours }} ساعت</strong></td>
-                    <td>
-                        <span class="badge" style="background: var(--green2); color: var(--green); font-size: 12px;">
-                            {{ row.calc.total_units_share }} کالا
+<!-- Shift Sessions Cards (تفکیک بر اساس تاریخ و شیفت) -->
+<div class="shift-sessions-list" style="display: flex; flex-direction: column; gap: 24px;">
+    {% for session in session_cards %}
+    <article class="card shift-session-card" style="border-radius: 18px; padding: 0; overflow: hidden; border: 1.5px solid {% if session.session_status == 'READY' %}#86efac{% elif session.session_status == 'APPROVED' %}var(--line){% else %}#fde68a{% endif %}; box-shadow: 0 4px 20px rgba(0,0,0,0.04);">
+        <!-- هدر جلسه شیفت -->
+        <div style="background: {% if session.session_status == 'READY' %}#f0fdf4{% elif session.session_status == 'APPROVED' %}#f8faf9{% else %}#fffbeb{% endif %}; padding: 18px 22px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+            <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                <div style="width: 46px; height: 46px; border-radius: 14px; background: #fff; display: grid; place-items: center; font-size: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid var(--line);">
+                    {% if session.shift.code == 'MORNING' %}☀️{% elif session.shift.code == 'EVENING' %}🌙{% else %}⏰{% endif %}
+                </div>
+                <div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <h2 style="margin: 0; font-size: 17px; font-weight: 800;">
+                            {{ session.date_jalali }} · {{ session.shift.title }}
+                        </h2>
+                        <span class="status {{ session.status_class }}" style="font-size: 11.5px; padding: 3px 9px;">
+                            {{ session.status_badge }}
                         </span>
-                    </td>
-                    <td>
-                        <strong style="color: var(--green, #237554); font-size: 13.5px;">
-                            {{ row.calc.total_commission|persian_int }} ریال
-                        </strong>
-                        {% if row.log.is_frozen %}
-                        <small style="color: #059669;">🔒 فریز شده</small>
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if row.log.status == 'APPROVED' %}
-                        <span class="status approved">✅ تأیید و واریز شد</span>
-                        {% elif row.log.status == 'REJECTED' %}
-                        <span class="status rejected">❌ رد شد</span>
-                        {% else %}
-                        <span class="status pending">⏳ در انتظار تأیید</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <div style="display: flex; align-items: center; gap: 6px;">
-                            <a class="table-link" href="{% url 'management_shift_log_review_detail' row.log.pk %}" style="padding: 4px 8px; border-radius: 6px; background: #f0fdf4;">
-                                بررسی دقیق
-                            </a>
-                            {% if row.log.status == 'PENDING' %}
-                            <form method="post" action="{% url 'management_shift_log_quick_approve' row.log.pk %}" style="display: inline; margin: 0;">
-                                {% csrf_token %}
-                                <button class="primary" style="padding: 4px 10px; font-size: 11.5px; border-radius: 6px;" title="تأیید فوری و واریز قطعی">
-                                    تأیید فوری
-                                </button>
-                            </form>
-                            {% endif %}
-                        </div>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="9" class="empty">موردی با فیلترهای انتخابی یافت نشد.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+                    </div>
+                    <small style="color: var(--muted); font-size: 12px; margin-top: 2px; display: block;">
+                        ساعت شیفت: {{ session.shift.start_time|time:'H:i' }} تا {{ session.shift.end_time|time:'H:i' }} ({{ session.shift.standard_hours|persian_digits }} ساعت استاندارد)
+                    </small>
+                </div>
+            </div>
 
-    {% if page.paginator.num_pages > 1 %}
-    <div class="pagination">
-        {% if page.has_previous %}
-        <a href="?page={{ page.previous_page_number }}&status={{ status_filter }}">قبلی</a>
+            <!-- خلاصه آمار و دکمه‌های عملیات شیفت -->
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <div style="display: flex; gap: 8px; background: #fff; padding: 6px 14px; border-radius: 10px; border: 1px solid var(--line); font-size: 12.5px;">
+                    <span>👥 حضور: <b>{{ session.logged_count|persian_digits }} از {{ session.expected_count|persian_digits }} نفر</b></span>
+                    <span>·</span>
+                    <span>🛍️ فروش کل: <b>{{ session.total_sold|persian_digits }} کالا</b></span>
+                    <span>·</span>
+                    <span style="color: var(--green, #237554); font-weight: 700;">💰 پورسانت شیفت: {{ session.total_commission|persian_int }} ریال</span>
+                </div>
+
+                {% if session.can_approve %}
+                <!-- دکمه تأیید یکجای شیفت -->
+                <form method="post" action="{% url 'management_shift_session_approve' %}" style="margin: 0;" onsubmit="return confirm('تمامی کارکردهای این شیفت تأیید و پورسانت‌ها قطعی و فریز شوند؟');">
+                    {% csrf_token %}
+                    <input type="hidden" name="date" value="{{ session.date_jalali }}">
+                    <input type="hidden" name="shift_id" value="{{ session.shift.pk }}">
+                    <button class="primary" type="submit" style="padding: 8px 18px; font-size: 13px; font-weight: 800; background: var(--green, #237554); border-radius: 8px;">
+                        ✅ تأیید و واریز کل شیفت
+                    </button>
+                </form>
+                {% elif not session.has_performance %}
+                <a class="secondary" href="{% url 'management_line_performance_batch' %}?date={{ session.date_jalali }}&shift={{ session.shift.pk }}" style="padding: 8px 16px; font-size: 12.5px; border-radius: 8px; color: #b45309; border-color: #fcd34d;">
+                    🛍️ ثبت فروش لاین‌های این شیفت
+                </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- هشدار در صورت عدم تکمیل ثبت کارکرد پرسنل -->
+        {% if not session.is_complete %}
+        <div style="background: #fffbeb; border-bottom: 1px solid #fef3c7; color: #92400e; padding: 10px 22px; font-size: 12.5px; display: flex; align-items: center; gap: 8px;">
+            <span>⚠️</span>
+            <span>
+                <b>پرسنل موظف زیر هنوز کارکرد ثبت نکرده‌اند:</b> {{ session.missing_names }}
+                <small style="display: block; color: #b45309; margin-top: 2px;">(طبق سناریوی محاسبات، تا زمان تعیین تکلیف تمام کارمندان این شیفت، امکان تأیید نهایی وجود ندارد).</small>
+            </span>
+        </div>
         {% endif %}
-        <span>صفحه {{ page.number }} از {{ page.paginator.num_pages }}</span>
-        {% if page.has_next %}
-        <a href="?page={{ page.next_page_number }}&status={{ status_filter }}">بعدی</a>
-        {% endif %}
-    </div>
+
+        <!-- جدول پرسنل حاضر در این شیفت -->
+        <div class="table-wrap" style="padding: 0 10px 10px;">
+            <table>
+                <thead>
+                    <tr style="background: transparent;">
+                        <th>کارمند حاضر در شیفت</th>
+                        <th>لاین(های) اصلی</th>
+                        <th>لاین(های) کمکی</th>
+                        <th>ساعات حضور</th>
+                        <th>سهم کالا از شیفت</th>
+                        <th>پورسانت شیفت</th>
+                        <th>وضعیت</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in session.log_rows %}
+                    <tr>
+                        <td>
+                            <div class="person-cell">
+                                {% if row.log.employee.profile_photo %}
+                                <img src="{{ row.log.employee.profile_photo.url }}" alt="" style="width: 36px; height: 36px; border-radius: 10px; object-fit: cover;">
+                                {% else %}
+                                <span class="avatar small" style="width: 36px; height: 36px; border-radius: 10px; font-size: 16px;">{{ row.log.employee.first_name|slice:':1' }}</span>
+                                {% endif %}
+                                <div>
+                                    <b>{{ row.log.employee.full_name }}</b>
+                                    <small>گرید {{ row.log.employee.commission_level.code }} · کد {{ row.log.employee.employee_code }}</small>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            {% if row.calc.primary_infos %}
+                                {% for p in row.calc.primary_infos %}
+                                <div style="font-size: 12px; margin-bottom: 2px;">
+                                    <b>{{ p.department.name }}</b>
+                                    <small style="color: var(--muted);">({{ p.hours }}h از کل {{ p.total_dept_hours }}h)</small>
+                                </div>
+                                {% endfor %}
+                            {% elif row.log.main_department %}
+                                <b>{{ row.log.main_department.name }}</b>
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.log.has_support_line %}
+                            <span style="color: var(--green, #237554); font-weight: 600; font-size: 12.5px;">{{ row.log.support_departments_display }}</span>
+                            <small style="color: var(--muted); display: block;">{{ row.log.support_hours }} ساعت</small>
+                            {% else %}
+                            <span style="color: var(--muted);">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <strong>{{ row.log.total_hours }} ساعت</strong>
+                            {% if row.log.overtime_hours > 0 %}
+                            <small style="color: #b45309; display: block; font-weight: 700;">+ {{ row.log.overtime_hours }}h اضافه کاری</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge" style="background: var(--green2, #dff4e9); color: var(--green, #237554); font-weight: 800; font-size: 13px; padding: 4px 10px;">
+                                {{ row.calc.total_units_share }} کالا
+                            </span>
+                        </td>
+                        <td>
+                            <strong style="color: var(--green, #237554); font-size: 14px;">
+                                {{ row.calc.total_commission|persian_int }} ریال
+                            </strong>
+                            {% if row.log.is_frozen %}
+                            <small style="color: #059669; display: block; font-size: 11px;">🔒 فریز شده</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.log.status == 'APPROVED' %}
+                            <span class="status approved" style="font-size: 11px;">✅ واریز شد</span>
+                            {% elif row.log.status == 'REJECTED' %}
+                            <span class="status rejected" style="font-size: 11px;">❌ رد شد</span>
+                            {% else %}
+                            <span class="status pending" style="font-size: 11px;">⏳ در انتظار</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div style="display: flex; gap: 6px;">
+                                <a class="table-link" href="{% url 'management_shift_log_review_detail' row.log.pk %}" style="padding: 4px 8px; border-radius: 6px; background: #f0fdf4; font-size: 11.5px;">
+                                    بررسی دقیق
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="empty">هنوز کارکردی برای این شیفت ثبت نشده است.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </article>
+    {% empty %}
+    <article class="card" style="text-align: center; padding: 40px; border-radius: 16px;">
+        <p class="empty" style="font-size: 15px; color: var(--muted); margin-bottom: 12px;">هیچ جلسه شیفتی با فیلترهای انتخابی یافت نشد.</p>
+        <a class="secondary" href="{% url 'management_shift_log_reviews' %}">مشاهده همه شیفت‌ها</a>
+    </article>
+    {% endfor %}
+</div>
+
+{% if page.paginator.num_pages > 1 %}
+<div class="pagination" style="margin-top: 24px;">
+    {% if page.has_previous %}
+    <a href="?page={{ page.previous_page_number }}&status={{ status_filter }}">قبلی</a>
     {% endif %}
-</article>
+    <span>صفحه {{ page.number }} از {{ page.paginator.num_pages }}</span>
+    {% if page.has_next %}
+    <a href="?page={{ page.next_page_number }}&status={{ status_filter }}">بعدی</a>
+    {% endif %}
+</div>
+{% endif %}
 {% endblock %}

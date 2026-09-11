@@ -1,20 +1,37 @@
 {% extends 'base.html' %}
 {% load persian %}
-{% block title %}عملکرد فروش لاین‌ها{% endblock %}
+{% block title %}عملکرد فروش لاین‌ها (تفکیک شیفت و تاریخ){% endblock %}
 {% block content %}
 <div class="admin-page-head">
     <div>
         <span class="admin-kicker">مدیریت فروش و عملکرد</span>
         <h1>عملکرد فروش لاین‌ها</h1>
-        <p>ثبت و مشاهده آمار فروش روزانه لاین‌ها در هر شیفت</p>
+        <p>تفکیک بر اساس تاریخ و شیفت کاری · نظارت بر فروش لاین‌ها و ورود سریع داده‌ها</p>
     </div>
-    <div>
+    <div class="head-actions">
         <a class="primary" href="{% url 'management_line_performance_batch' %}">⚡ ثبت سریع فروش (جدولی)</a>
-        <a class="secondary" href="{% url 'management_line_performance_create' %}" style="margin-right: 8px;">+ ثبت تکی</a>
+        <a class="secondary" href="{% url 'management_line_performance_create' %}">+ ثبت تکی</a>
     </div>
 </div>
 
-<article class="card filter-card">
+<!-- خلاصه آمار عملکرد -->
+<div class="stats" style="margin-bottom: 20px; grid-template-columns: repeat(3, 1fr);">
+    <article style="border-radius: 14px;">
+        <span style="font-size: 12px; color: var(--muted);">📅 جلسات شیفت ثبت‌شده</span>
+        <strong style="font-size: 22px; margin-top: 4px;">{{ total_sessions|persian_digits }} <small style="font-size: 13px; font-weight: 500; color: var(--muted); display: inline;">شیفت</small></strong>
+    </article>
+    <article style="border-radius: 14px;">
+        <span style="font-size: 12px; color: var(--muted);">🛍️ کل کالاهای فروخته‌شده</span>
+        <strong style="font-size: 22px; margin-top: 4px; color: var(--green, #237554);">{{ total_sold_all|persian_digits }} <small style="font-size: 13px; font-weight: 500; color: var(--muted); display: inline;">کالا</small></strong>
+    </article>
+    <article style="border-radius: 14px;">
+        <span style="font-size: 12px; color: var(--muted);">📋 تعداد کل رکوردهای لاین</span>
+        <strong style="font-size: 22px; margin-top: 4px;">{{ total_records|persian_digits }} <small style="font-size: 13px; font-weight: 500; color: var(--muted); display: inline;">رکورد</small></strong>
+    </article>
+</div>
+
+<!-- فیلترها -->
+<article class="card filter-card" style="margin-bottom: 20px;">
     <form method="get" class="filters">
         <input name="date" value="{{ filters.date }}" placeholder="تاریخ (۱۴۰۵/۰۶/۰۷)" class="jalali-date">
         <select name="shift">
@@ -29,57 +46,171 @@
             <option value="{{ d.pk }}" {% if filters.department == d.pk|stringformat:'s' %}selected{% endif %}>{{ d.name }}</option>
             {% endfor %}
         </select>
-        <button class="primary">فیلتر</button>
+        <button class="primary" type="submit">اعمال فیلتر</button>
         <a class="secondary" href="{% url 'management_line_performances' %}">پاک‌کردن</a>
     </form>
 </article>
 
-<article class="card">
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    <th>تاریخ فروش</th>
-                    <th>شیفت</th>
-                    <th>لاین / بخش</th>
-                    <th>تعداد کالای فروخته‌شده</th>
-                    <th>ثبت‌کننده</th>
-                    <th>زمان ثبت</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in page %}
-                <tr>
-                    <td><b>{{ item.date|jalali }}</b></td>
-                    <td>{{ item.shift.title }}</td>
-                    <td><b>{{ item.department.name }}</b></td>
-                    <td><strong style="color: var(--green, #237554); font-size: 1.1rem;">{{ item.sold_units }}</strong> کالا</td>
-                    <td><small>{{ item.recorded_by.get_full_name|default:item.recorded_by.username }}</small></td>
-                    <td><small>{{ item.created_at|jalali }}</small></td>
-                    <td>
-                        <a class="table-link" href="{% url 'management_line_performance_edit' item.pk %}">ویرایش</a>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="7" class="empty">هنوز فروش لاینی برای این فیلترها ثبت نشده است.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+<!-- نوار ابزار بالای کارت‌های شیفت -->
+{% if session_cards %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding: 0 4px;">
+    <span style="font-size: 13px; color: var(--muted); font-weight: 500;">
+        نمایش <b>{{ session_cards|length|persian_digits }}</b> جلسه شیفت در این صفحه (از مجموع {{ total_sessions|persian_digits }} شیفت)
+    </span>
+    <div style="display: flex; gap: 8px;">
+        <button type="button" class="secondary" onclick="toggleAllSessions(true)" style="padding: 5px 11px; font-size: 12px; border-radius: 8px; cursor: pointer;">
+            📂 بازکردن همه
+        </button>
+        <button type="button" class="secondary" onclick="toggleAllSessions(false)" style="padding: 5px 11px; font-size: 12px; border-radius: 8px; cursor: pointer;">
+            📁 بستن همه
+        </button>
     </div>
+</div>
+{% endif %}
 
-    {% if page.paginator.num_pages > 1 %}
-    <div class="pagination">
-        {% if page.has_previous %}
-        <a href="?page={{ page.previous_page_number }}">قبلی</a>
-        {% endif %}
-        <span>صفحه {{ page.number }} از {{ page.paginator.num_pages }}</span>
-        {% if page.has_next %}
-        <a href="?page={{ page.next_page_number }}">بعدی</a>
-        {% endif %}
-    </div>
+<!-- کارت‌های شیفت (تفکیک بر اساس تاریخ و شیفت) -->
+<div class="shift-sessions-list" style="display: flex; flex-direction: column; gap: 18px;">
+    {% for session in session_cards %}
+    <article class="card shift-session-card" style="border-radius: 16px; padding: 0; overflow: hidden; margin-bottom: 0; border: 1.5px solid {% if session.is_complete %}#bbf7d0{% else %}#fde68a{% endif %}; box-shadow: 0 4px 16px rgba(0,0,0,0.03);">
+        <details class="shift-session-accordion" {% if session.is_recent or session_cards|length <= 4 %}open{% endif %} style="margin: 0; border: none; background: transparent;">
+            <summary style="list-style: none; cursor: pointer; padding: 16px 20px; background: {% if session.is_complete %}#f8faf9{% else %}#fffdf5{% endif %}; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid var(--line); user-select: none;">
+                <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                    <div style="width: 44px; height: 44px; border-radius: 12px; background: #fff; display: grid; place-items: center; font-size: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid var(--line);">
+                        {% if session.shift.code == 'MORNING' %}☀️{% elif session.shift.code == 'EVENING' %}🌙{% else %}⏰{% endif %}
+                    </div>
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <h2 style="margin: 0; font-size: 16.5px; font-weight: 800;">
+                                {{ session.date_jalali }} · {{ session.shift.title }}
+                            </h2>
+                            {% if session.is_complete %}
+                            <span class="status approved" style="font-size: 11px; padding: 3px 8px;">
+                                ✅ کامل ({{ session.lines_count|persian_digits }} لاین)
+                            </span>
+                            {% else %}
+                            <span class="status pending" style="font-size: 11px; padding: 3px 8px;">
+                                ⏳ {{ session.lines_count|persian_digits }} از {{ session.total_active_lines|persian_digits }} لاین
+                            </span>
+                            {% endif %}
+                            {% if session.is_recent %}
+                            <span class="badge" style="background: var(--green2, #dff4e9); color: var(--green, #237554); font-size: 10.5px; font-weight: 700;">شیفت اخیر</span>
+                            {% endif %}
+                        </div>
+                        <small style="color: var(--muted); font-size: 12px; margin-top: 3px; display: block;">
+                            ساعت شیفت: {{ session.shift.start_time|time:'H:i' }} تا {{ session.shift.end_time|time:'H:i' }} ({{ session.shift.duration_display|default:'' }})
+                        </small>
+                    </div>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;" onclick="event.stopPropagation();">
+                    <div style="background: #fff; padding: 6px 14px; border-radius: 9px; border: 1px solid var(--line); font-size: 12.5px; display: flex; align-items: center; gap: 6px;">
+                        <span>🛍️ فروش کل شیفت:</span>
+                        <b style="color: var(--green, #237554); font-size: 14.5px;">{{ session.total_sold|persian_digits }}</b>
+                        <span style="color: var(--muted); font-size: 11px;">کالا</span>
+                    </div>
+                    <a class="secondary" href="{% url 'management_line_performance_batch' %}?date={{ session.date_jalali }}&shift={{ session.shift.pk }}" style="padding: 6px 13px; font-size: 12px; border-radius: 8px; font-weight: 700; color: var(--green, #237554); border-color: #86efac; background: #f0fdf4;" title="ویرایش یا تکمیل سریع آمار فروش همه لاین‌ها در این شیفت">
+                        ⚡ ثبت سریع (جدولی)
+                    </a>
+                    <span class="accordion-arrow" style="font-size: 14px; color: var(--muted); padding: 0 4px; transition: transform 0.2s;">
+                        ▼
+                    </span>
+                </div>
+            </summary>
+
+            <!-- جدول لاین‌های ثبت‌شده در این شیفت -->
+            <div class="table-wrap" style="padding: 0 10px 10px;">
+                <table>
+                    <thead>
+                        <tr style="background: transparent;">
+                            <th style="width: 28%;">لاین / بخش</th>
+                            <th style="width: 22%;">تعداد کالای فروخته‌شده</th>
+                            <th style="width: 25%;">ثبت‌کننده</th>
+                            <th style="width: 15%;">زمان ثبت</th>
+                            <th style="width: 10%; text-align: left;">عملیات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in session.items %}
+                        <tr>
+                            <td>
+                                <strong style="font-size: 14px; color: var(--ink);">{{ item.department.name }}</strong>
+                            </td>
+                            <td>
+                                <span class="badge" style="background: var(--green2, #dff4e9); color: var(--green, #237554); font-weight: 800; font-size: 13.5px; padding: 4px 12px; border-radius: 8px;">
+                                    {{ item.sold_units|persian_digits }} کالا
+                                </span>
+                            </td>
+                            <td>
+                                <small style="font-size: 12px; color: var(--ink);">
+                                    {{ item.recorded_by.get_full_name|default:item.recorded_by.username }}
+                                </small>
+                            </td>
+                            <td>
+                                <small style="color: var(--muted); font-size: 11.5px;">
+                                    {{ item.created_at|jalali }}
+                                </small>
+                            </td>
+                            <td style="text-align: left;">
+                                <div style="display: inline-flex; gap: 8px; align-items: center;">
+                                    <a class="table-link" href="{% url 'management_line_performance_edit' item.pk %}" style="padding: 4px 9px; border-radius: 6px; background: #f0fdf4; font-size: 12px;">
+                                        ویرایش
+                                    </a>
+                                    <form method="post" action="{% url 'management_line_performance_delete' item.pk %}" style="margin: 0; display: inline;" onsubmit="return confirm('آیا از حذف عملکرد لاین «{{ item.department.name }}» در این شیفت اطمینان دارید؟');">
+                                        {% csrf_token %}
+                                        <button type="submit" style="background: none; border: none; color: var(--red, #b53a3a); cursor: pointer; font-size: 11.5px; padding: 4px 6px; font-weight: 600;">
+                                            حذف
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="empty">هیچ لاینی در این شیفت ثبت نشده است.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </details>
+    </article>
+    {% empty %}
+    <article class="card" style="text-align: center; padding: 48px 20px; border-radius: 16px;">
+        <div style="font-size: 44px; margin-bottom: 12px;">🛍️</div>
+        <h3 style="margin: 0 0 8px; font-size: 17px; font-weight: 800;">هنوز فروش لاینی با فیلترهای انتخابی ثبت نشده است</h3>
+        <p style="color: var(--muted); font-size: 13px; margin: 0 0 18px;">می‌توانید فیلترها را تغییر داده یا از دکمه ثبت سریع برای ورود آمار فروش استفاده کنید.</p>
+        <div style="display: flex; justify-content: center; gap: 10px;">
+            <a class="primary" href="{% url 'management_line_performance_batch' %}">⚡ ثبت سریع فروش (جدولی)</a>
+            <a class="secondary" href="{% url 'management_line_performances' %}">مشاهده همه فروش‌ها</a>
+        </div>
+    </article>
+    {% endfor %}
+</div>
+
+<!-- صفحه‌بندی -->
+{% if page.paginator.num_pages > 1 %}
+<div class="pagination" style="margin-top: 24px;">
+    {% if page.has_previous %}
+    <a href="?page={{ page.previous_page_number }}&date={{ filters.date }}&shift={{ filters.shift }}&department={{ filters.department }}">قبلی</a>
     {% endif %}
-</article>
+    <span>صفحه {{ page.number|persian_digits }} از {{ page.paginator.num_pages|persian_digits }} (مجموع {{ total_sessions|persian_digits }} شیفت کاری)</span>
+    {% if page.has_next %}
+    <a href="?page={{ page.next_page_number }}&date={{ filters.date }}&shift={{ filters.shift }}&department={{ filters.department }}">بعدی</a>
+    {% endif %}
+</div>
+{% endif %}
+
+<style>
+details.shift-session-accordion summary::-webkit-details-marker { display: none; }
+details.shift-session-accordion[open] summary .accordion-arrow { transform: rotate(180deg); }
+details.shift-session-accordion summary:hover { background: #f0fdf4 !important; }
+</style>
+
+<script>
+function toggleAllSessions(open) {
+    document.querySelectorAll('details.shift-session-accordion').forEach(el => {
+        el.open = open;
+    });
+}
+</script>
 {% endblock %}
