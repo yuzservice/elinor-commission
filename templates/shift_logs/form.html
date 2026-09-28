@@ -353,12 +353,22 @@ document.addEventListener('DOMContentLoaded', () => {
       wrap.className = 'field';
       wrap.style.marginBottom = '0';
       const val = activityValues[String(def.id)] ?? '';
-      wrap.innerHTML = `
-        <label style="font-weight:600;font-size:13px;display:block;margin-bottom:6px;">
-          ${def.title} <small style="color:var(--muted);font-weight:500;">(${def.unit_label} · ×${def.unit_multiplier})</small>
-        </label>
-        <input type="number" min="0" step="1" name="activity_${def.id}" value="${val}" inputmode="numeric" placeholder="۰">
-      `;
+      if (def.count_method === 'CHECKMARK') {
+        const checked = Number(val) > 0 ? 'checked' : '';
+        wrap.innerHTML = `
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-weight:600;font-size:13.5px;padding:10px 12px;background:#fff;border-radius:10px;border:1px solid #bfdbfe;">
+            <input type="checkbox" name="activity_${def.id}" value="1" ${checked} style="margin-top:3px;width:18px;height:18px;">
+            <span>${def.title}<small style="display:block;color:var(--muted);font-weight:500;margin-top:4px;">انجام دادم · ×${def.unit_multiplier} واحد عملکرد</small></span>
+          </label>
+        `;
+      } else {
+        wrap.innerHTML = `
+          <label style="font-weight:600;font-size:13px;display:block;margin-bottom:6px;">
+            ${def.title} <small style="color:var(--muted);font-weight:500;">(${def.unit_label} · ×${def.unit_multiplier})</small>
+          </label>
+          <input type="number" min="0" step="1" name="activity_${def.id}" value="${val}" inputmode="numeric" placeholder="۰">
+        `;
+      }
       activitiesFields.appendChild(wrap);
     });
   }

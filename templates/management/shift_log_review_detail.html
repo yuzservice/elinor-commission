@@ -101,7 +101,7 @@
                         {% if calc.main_info.activity_details %}
                         <div style="font-size:12.5px;line-height:1.6;">
                             {% for act in calc.main_info.activity_details %}
-                            <div><b>{{ act.title }}:</b> {{ act.quantity }} × {{ act.unit_multiplier }} = {{ act.performance_units }} واحد</div>
+                            <div><b>{{ act.title }}:</b> {% if act.count_method == 'CHECKMARK' %}{% if act.quantity %}✓ انجام{% else %}—{% endif %}{% else %}{{ act.quantity }} × {{ act.unit_multiplier }}{% endif %} = {{ act.performance_units }} واحد</div>
                             {% endfor %}
                         </div>
                         {% else %}

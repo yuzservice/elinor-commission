@@ -501,6 +501,10 @@ class LineCommissionRate(models.Model):
 class LineActivityType(models.Model):
     """تعریف فعالیت‌های عملیاتی لاین (انبار، صندوق و ...) با ضریب تبدیل به واحد عملکرد."""
 
+    class CountMethod(models.TextChoices):
+        QUANTITY = "QUANTITY", "ورود عدد"
+        CHECKMARK = "CHECKMARK", "تیک انجام‌شده"
+
     department = models.ForeignKey(
         Department,
         on_delete=models.CASCADE,
@@ -509,6 +513,12 @@ class LineActivityType(models.Model):
     )
     title = models.CharField("نام فعالیت", max_length=120)
     unit_label = models.CharField("واحد شمارش", max_length=50, default="عدد")
+    count_method = models.CharField(
+        "نحوه ثبت در کارکرد",
+        max_length=20,
+        choices=CountMethod.choices,
+        default=CountMethod.QUANTITY,
+    )
     unit_multiplier = models.DecimalField(
         "ضریب تبدیل به واحد عملکرد",
         max_digits=10,

@@ -135,6 +135,7 @@ def activity_performance_for_shift_log(shift_log, department):
             "activity_type_id": entry.activity_type_id,
             "title": entry.activity_type.title,
             "unit_label": entry.activity_type.unit_label,
+            "count_method": entry.activity_type.count_method,
             "quantity": entry.quantity,
             "unit_multiplier": multiplier,
             "performance_units": round(units, 2),
@@ -154,16 +155,20 @@ def save_shift_log_activity_entries(*, shift_log, post_data):
 
     any_positive = False
     for activity_type in activity_types:
-        raw = (post_data.get(f"activity_{activity_type.pk}") or "").strip()
-        if raw == "":
-            quantity = 0
+        if activity_type.count_method == LineActivityType.CountMethod.CHECKMARK:
+            raw_checked = post_data.get(f"activity_{activity_type.pk}")
+            quantity = 1 if raw_checked in ("on", "1", "true", True) else 0
         else:
-            try:
-                quantity = int(raw)
-            except (TypeError, ValueError) as exc:
-                raise ValidationError({f"activity_{activity_type.pk}": "مقدار فعالیت باید عدد صحیح باشد."}) from exc
-        if quantity < 0:
-            raise ValidationError({f"activity_{activity_type.pk}": "مقدار فعالیت نمی‌تواند منفی باشد."})
+            raw = (post_data.get(f"activity_{activity_type.pk}") or "").strip()
+            if raw == "":
+                quantity = 0
+            else:
+                try:
+                    quantity = int(raw)
+                except (TypeError, ValueError) as exc:
+                    raise ValidationError({f"activity_{activity_type.pk}": "مقدار فعالیت باید عدد صحیح باشد."}) from exc
+            if quantity < 0:
+                raise ValidationError({f"activity_{activity_type.pk}": "مقدار فعالیت نمی‌تواند منفی باشد."})
         if quantity > 0:
             any_positive = True
         ShiftLogActivityEntry.objects.update_or_create(
@@ -180,7 +185,7 @@ def save_shift_log_activity_entries(*, shift_log, post_data):
     ).delete()
 
     if not any_positive:
-        raise ValidationError("برای لاین انتخاب‌شده حداقل یک فعالیت با مقدار بیشتر از صفر ثبت کنید.")
+        raise ValidationError("برای لاین انتخاب‌شده حداقل یک فعالیت را ثبت کنید (عدد یا تیک انجام‌شده).")
 
 
 def serialize_main_info_snapshot(main_info):
@@ -192,6 +197,7 @@ def serialize_main_info_snapshot(main_info):
             "activity_type_id": row.get("activity_type_id"),
             "title": row.get("title"),
             "unit_label": row.get("unit_label"),
+            "count_method": row.get("count_method", LineActivityType.CountMethod.QUANTITY),
             "quantity": row.get("quantity"),
             "unit_multiplier": float(row.get("unit_multiplier", 0)),
             "performance_units": float(row.get("performance_units", 0)),

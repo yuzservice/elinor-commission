@@ -977,6 +977,41 @@ class LineCommissionEngineTests(BaseEmployeeTest):
         self.assertEqual(calc["main_info"]["share_units"], Decimal("40.0"))
         self.assertEqual(calc["total_commission"], 40000)
 
+    def test_checkmark_activity_counts_as_one_unit_when_done(self):
+        dept = Department.objects.create(name="لاین تیک")
+        LineCommissionRate.objects.create(
+            department=dept,
+            commission_level=self.level_a,
+            rate_per_unit=500,
+        )
+        daily_task = LineActivityType.objects.create(
+            department=dept,
+            title="بستن صندوق",
+            count_method=LineActivityType.CountMethod.CHECKMARK,
+            unit_multiplier=Decimal("3.0"),
+        )
+        self.employee.primary_department = dept
+        self.employee.save(update_fields=["primary_department"])
+
+        log = DailyShiftLog.objects.create(
+            employee=self.employee,
+            date=date(2026, 9, 2),
+            shift=self.shift_morning,
+            main_department=dept,
+            main_hours=Decimal("6.0"),
+        )
+        ShiftLogActivityEntry.objects.create(
+            shift_log=log,
+            activity_type=daily_task,
+            quantity=1,
+            unit_multiplier_snapshot=daily_task.unit_multiplier,
+        )
+
+        calc = calculate_single_shift_log(log)
+        self.assertEqual(calc["main_info"]["share_units"], Decimal("3.0"))
+        self.assertEqual(calc["total_commission"], 1500)
+        self.assertEqual(calc["main_info"]["activity_details"][0]["count_method"], "CHECKMARK")
+
 class CommissionTests(BaseEmployeeTest):
     def test_violation_is_deduction(self):
         rule=ViolationRule.objects.create(code="V1",title="تست",first_points=2,second_points=4,third_points=8)
