@@ -7,7 +7,6 @@ from django.db import models
 
 class Department(models.Model):
     name = models.CharField("نام بخش", max_length=100, unique=True)
-    is_cashier = models.BooleanField("لاین صندوقدار (ثبت مستقیم فاکتور)", default=False)
     is_active = models.BooleanField("فعال", default=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     updated_at = models.DateTimeField(auto_now=True, null=True)
@@ -270,7 +269,6 @@ class DailyShiftLog(models.Model):
         default=Decimal("0.0"),
         validators=[MinValueValidator(Decimal("0.0")), MaxValueValidator(Decimal("24.0"))]
     )
-    invoice_count = models.PositiveIntegerField("تعداد فاکتورهای صادرشده", null=True, blank=True)
     total_hours = models.DecimalField(
         "مجموع ساعت کار",
         max_digits=5,

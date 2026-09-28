@@ -62,7 +62,9 @@ from .services import (
     audit,
     calculate_single_shift_log,
     change_employee_level,
+    count_active_departments_needing_shift_sales,
     department_has_line_activities,
+    departments_needing_performance_for_logs,
     employee_metrics,
     reject_shift_log,
     revert_shift_log_to_pending,
@@ -132,18 +134,23 @@ def manager_dashboard(request):
         .order_by("-date", "shift_id")
     )
     all_shifts = {s.pk: s for s in Shift.objects.all()}
-    active_departments = list(Department.objects.filter(is_active=True))
-    total_active_lines = len(active_departments)
+    lines_needing_shift_sales = count_active_departments_needing_shift_sales()
 
     attention_sessions = []
     for s_date, s_shift_id in recent_session_keys:
         s_shift = all_shifts.get(s_shift_id)
         if not s_shift:
             continue
-        s_logs = list(DailyShiftLog.objects.filter(date=s_date, shift_id=s_shift_id))
+        s_logs = list(
+            DailyShiftLog.objects.filter(date=s_date, shift_id=s_shift_id).select_related(
+                "main_department"
+            ).prefetch_related("support_departments")
+        )
         s_perfs = list(LineShiftPerformance.objects.filter(date=s_date, shift_id=s_shift_id))
         has_pending = any(l.status == DailyShiftLog.Status.PENDING for l in s_logs)
-        no_perf = len(s_perfs) == 0 and any(not getattr(l.main_department, "is_cashier", False) for l in s_logs)
+        needed_perf = departments_needing_performance_for_logs(s_logs)
+        perf_dept_ids = {p.department_id for p in s_perfs}
+        no_perf = bool(needed_perf - perf_dept_ids)
         if has_pending or no_perf:
             attention_sessions.append({
                 "date": s_date,
@@ -167,7 +174,7 @@ def manager_dashboard(request):
             "pending_count": sum(1 for l in s_logs if l.status == DailyShiftLog.Status.PENDING),
             "total_sold": sum(p.sold_units for p in s_perfs),
             "lines_recorded": len(s_perfs),
-            "is_complete": len(s_perfs) >= total_active_lines,
+            "is_complete": len(s_perfs) >= lines_needing_shift_sales,
         })
 
     month_performances = LineShiftPerformance.objects.filter(date__range=(start, end))
@@ -213,7 +220,6 @@ def shift_log_snapshot(obj):
         "has_overtime": obj.has_overtime,
         "overtime_hours": str(obj.overtime_hours or Decimal("0.0")),
         "overtime_department": obj.overtime_department.name if obj.overtime_department else "",
-        "invoice_count": obj.invoice_count,
         "total_hours": str(obj.total_hours),
         "status": obj.status,
         "is_frozen": obj.is_frozen,
@@ -375,7 +381,6 @@ def shift_log_create(request):
             "submit": "✅ ثبت نهایی کارکرد",
             "date_pills": date_pills,
             "standard_hours": employee.standard_daily_hours or Decimal("6.0"),
-            "cashier_department_ids": list(Department.objects.filter(is_cashier=True).values_list("pk", flat=True)),
             "line_activities_by_department": line_activities_by_department(),
             "activity_values": shift_log_activity_values(),
         },
@@ -512,7 +517,6 @@ def shift_log_edit(request, pk):
             "submit": "💾 ذخیره تغییرات کارکرد",
             "date_pills": date_pills,
             "standard_hours": employee.standard_daily_hours or Decimal("6.0"),
-            "cashier_department_ids": list(Department.objects.filter(is_cashier=True).values_list("pk", flat=True)),
             "line_activities_by_department": line_activities_by_department(),
             "activity_values": shift_log_activity_values(log),
         },
@@ -587,6 +591,9 @@ def management_shift_log_reviews(request):
             LineShiftPerformance.objects.filter(date=s_date, shift_id=s_shift_id).select_related("department")
         )
         total_sold = sum(p.sold_units for p in performances)
+        needed_perf_dept_ids = departments_needing_performance_for_logs(logs)
+        perf_dept_ids = {p.department_id for p in performances}
+        has_required_performance = not (needed_perf_dept_ids - perf_dept_ids)
 
         log_rows = []
         session_total_comm = 0
@@ -613,7 +620,7 @@ def management_shift_log_reviews(request):
             session_status = "INCOMPLETE"
             status_badge = f"⏳ ثبت‌نشده ({len(missing)} نفر باقی‌مانده)"
             status_class = "pending"
-        elif not performances:
+        elif not has_required_performance:
             session_status = "NO_SALES"
             status_badge = "⚠️ فروش لاین‌ها ثبت نشده"
             status_class = "rejected"
@@ -647,7 +654,7 @@ def management_shift_log_reviews(request):
             "session_status": session_status,
             "status_badge": status_badge,
             "status_class": status_class,
-            "can_approve": (len(missing) == 0 and any_pending and len(performances) > 0),
+            "can_approve": (len(missing) == 0 and any_pending and has_required_performance),
             "any_pending": any_pending,
             "all_approved": all_approved,
         })
@@ -836,8 +843,7 @@ def management_line_performances(request):
     page = paginator.get_page(page_num)
 
     all_shifts = {s.pk: s for s in Shift.objects.all()}
-    active_departments = list(Department.objects.filter(is_active=True))
-    total_active_lines = len(active_departments)
+    lines_needing_shift_sales = count_active_departments_needing_shift_sales()
 
     current_page_keys = page.object_list
     if current_page_keys:
@@ -869,7 +875,7 @@ def management_line_performances(request):
 
         total_sold = sum(p.sold_units for p in items)
         j_date = jdatetime.date.fromgregorian(date=s_date).strftime("%Y/%m/%d")
-        is_complete = (len(items) >= total_active_lines) if not dept_val else True
+        is_complete = (len(items) >= lines_needing_shift_sales) if not dept_val else True
 
         session_cards.append({
             "date": s_date,
@@ -877,7 +883,7 @@ def management_line_performances(request):
             "shift": s_shift,
             "items": items,
             "lines_count": len(items),
-            "total_active_lines": total_active_lines,
+            "total_active_lines": lines_needing_shift_sales,
             "is_complete": is_complete,
             "total_sold": total_sold,
             "is_recent": s_date in (today, yesterday),

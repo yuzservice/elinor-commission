@@ -94,13 +94,11 @@
     <div><span>کارمند</span><b>{{ log.employee.full_name }} ({{ log.employee.employee_code }})</b></div>
     <div><span>تاریخ ثبت</span><b>{{ log.date|jalali }}</b></div>
     <div><span>شیفت</span><b>{{ log.shift.title }}</b></div>
-    <div><span>لاین اصلی</span><b>{{ log.main_department.name }}{% if log.main_department.is_cashier %} (صندوقدار){% endif %}</b></div>
+    <div><span>لاین اصلی</span><b>{{ log.main_department.name }}</b></div>
     {% if calc.main_info.activity_details %}
     {% for act in calc.main_info.activity_details %}
     <div><span>{{ act.title }}</span><b>{{ act.quantity|persian_digits }} {{ act.unit_label }} → {{ act.performance_units }} واحد عملکرد</b></div>
     {% endfor %}
-    {% elif log.main_department.is_cashier and log.invoice_count %}
-    <div><span>تعداد فاکتورهای صادرشده</span><b style="color: var(--green, #237554); font-size: 15px;">{{ log.invoice_count|persian_digits|default:'۰' }} فاکتور</b></div>
     {% endif %}
     <div><span>ساعت در لاین اصلی</span><b>{{ log.main_hours }} ساعت</b></div>
     <div><span>حضور در لاین کمکی</span><b>{% if log.has_support_line %}بله ({{ log.support_hours }} ساعت){% else %}خیر{% endif %}</b></div>

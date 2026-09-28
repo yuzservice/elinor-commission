@@ -52,21 +52,6 @@
       <div id="line-activities-fields" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;"></div>
     </div>
 
-    <!-- فیلد اختصاصی لاین صندوقدار (فقط وقتی فعالیت تعریف نشده) -->
-    <div id="cashier-invoices-wrap" style="display:none;margin-top:16px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:14px;padding:16px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-        <div>
-          <label for="id_invoice_count" style="font-weight:700;font-size:13.5px;color:#166534;display:block;margin-bottom:4px;">
-            🧾 تعداد فاکتورهای صادرشده در این شیفت <em>*</em>
-          </label>
-          <small style="color:#15803d;font-size:12px;">در لاین صندوقدار، پورسانت مستقیماً بر مبنای تعداد فاکتورهای صادرشده شما محاسبه می‌شود و نیازی به تقسیم سهم فروش لاین نیست.</small>
-        </div>
-        <div style="max-width:180px;width:100%;">
-          {{ form.invoice_count }}
-          {% for error in form.invoice_count.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-        </div>
-      </div>
-    </div>
   </section>
 
   <!-- بخش ۲: بازه‌های کمکی -->
@@ -352,13 +337,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('id_has_support_line').checked = (support > 0);
   }
 
-  const cashierDeptIds = {{ cashier_department_ids|default:"[]" }};
   const lineActivitiesByDept = JSON.parse(document.getElementById('line-activities-data').textContent);
   const activityValues = JSON.parse(document.getElementById('activity-values-data').textContent);
-  const cashierWrap = document.getElementById('cashier-invoices-wrap');
   const activitiesWrap = document.getElementById('line-activities-wrap');
   const activitiesFields = document.getElementById('line-activities-fields');
-  const invoiceInput = document.getElementById('id_invoice_count');
 
   function renderLineActivities() {
     const deptId = String(mainDept.value || '');
@@ -379,17 +361,9 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
       activitiesFields.appendChild(wrap);
     });
-    const isCashier = cashierDeptIds.includes(Number(deptId));
-    if (cashierWrap) {
-      cashierWrap.style.display = (isCashier && !hasActivities) ? 'block' : 'none';
-    }
-    if (invoiceInput) {
-      invoiceInput.required = isCashier && !hasActivities;
-      if (hasActivities) invoiceInput.value = '';
-    }
   }
 
-  function checkCashier() {
+  function refreshLineActivities() {
     renderLineActivities();
   }
 
@@ -399,11 +373,11 @@ document.addEventListener('DOMContentLoaded', () => {
       otDept.value = mainDept.value;
     }
     mainDept.dataset.lastMain = mainDept.value;
-    checkCashier();
+    refreshLineActivities();
     updateSummary();
   });
 
-  checkCashier();
+  refreshLineActivities();
   updateSummary();
 });
 </script>

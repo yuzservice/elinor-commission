@@ -92,6 +92,31 @@ def department_has_line_activities(department):
     return LineActivityType.objects.filter(department=department, is_active=True).exists()
 
 
+def department_needs_shift_sales_performance(department):
+    """لاین‌های با فعالیت تعریف‌شده به ثبت فروش شیفت توسط مدیر نیاز ندارند."""
+    return department is not None and not department_has_line_activities(department)
+
+
+def departments_needing_performance_for_logs(logs):
+    needed = set()
+    for log in logs:
+        if department_needs_shift_sales_performance(log.main_department):
+            needed.add(log.main_department_id)
+        for department in log.support_departments.all():
+            if department_needs_shift_sales_performance(department):
+                needed.add(department.pk)
+    return needed
+
+
+def count_active_departments_needing_shift_sales():
+    return (
+        Department.objects.filter(is_active=True)
+        .exclude(line_activity_types__is_active=True)
+        .distinct()
+        .count()
+    )
+
+
 def activity_performance_for_shift_log(shift_log, department):
     """جمع واحد عملکرد از فعالیت‌های ثبت‌شده روی کارکرد برای یک لاین."""
     if not shift_log.pk or not department:
@@ -181,7 +206,6 @@ def serialize_main_info_snapshot(main_info):
         "rate_per_unit": main_info["rate_per_unit"],
         "commission": main_info["commission"],
         "is_activity_based": main_info.get("is_activity_based", False),
-        "is_cashier": main_info.get("is_cashier", False),
         "activity_details": activity_details,
     }
 
@@ -286,7 +310,6 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
                 "department_id": dept.pk,
                 "department_name": dept.name,
                 "is_activity_based": True,
-                "is_cashier": getattr(dept, "is_cashier", False),
                 "hours": round(hours, 2) if hours and hours > 0 else Decimal("0.0"),
                 "total_dept_hours": round(hours, 2) if hours and hours > 0 else Decimal("0.0"),
                 "total_sold_units": 0,
@@ -299,28 +322,6 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
 
         if hours <= 0:
             return None
-
-        # سازگاری با لاین صندوقدار بدون تعریف فعالیت: فیلد قدیمی تعداد فاکتور
-        if getattr(dept, "is_cashier", False):
-            inv_count = shift_log.invoice_count or 0
-            share_units = Decimal(inv_count)
-            rate = get_line_rate(dept, level)
-            commission = int(share_units * Decimal(rate))
-            return {
-                "department": dept,
-                "department_id": dept.pk,
-                "department_name": dept.name,
-                "is_activity_based": False,
-                "is_cashier": True,
-                "hours": round(hours, 2),
-                "total_dept_hours": round(hours, 2),
-                "total_sold_units": inv_count,
-                "activity_details": [],
-                "share_units": round(share_units, 2),
-                "rate_per_unit": rate,
-                "commission": commission,
-                "has_performance_recorded": True,
-            }
 
         total_dept_hours = line_pool_hours(dept)
 
@@ -342,7 +343,6 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
             "department_id": dept.pk if dept else None,
             "department_name": dept.name if dept else "",
             "is_activity_based": False,
-            "is_cashier": False,
             "hours": round(hours, 2),
             "total_dept_hours": round(total_dept_hours, 2),
             "total_sold_units": total_sold,

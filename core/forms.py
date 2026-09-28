@@ -118,7 +118,6 @@ class DailyShiftLogForm(forms.ModelForm):
             "date",
             "shift",
             "main_department",
-            "invoice_count",
             "has_support_line",
             "has_overtime",
             "overtime_start_time",
@@ -127,11 +126,6 @@ class DailyShiftLogForm(forms.ModelForm):
             "employee_note",
         ]
         widgets = {
-            "invoice_count": forms.NumberInput(attrs={
-                "placeholder": "مثلاً: ۷۵",
-                "min": "0",
-                "inputmode": "numeric",
-            }),
             "overtime_start_time": forms.TimeInput(format="%H:%M", attrs={"type": "time"}),
             "overtime_end_time": forms.TimeInput(format="%H:%M", attrs={"type": "time"}),
             "employee_note": forms.Textarea(attrs={
@@ -149,14 +143,12 @@ class DailyShiftLogForm(forms.ModelForm):
         self.fields["overtime_department"].queryset = Department.objects.filter(is_active=True)
         self.fields["shift"].label = "شیفت کاری"
         self.fields["main_department"].label = "لاین اصلی"
-        self.fields["invoice_count"].label = "تعداد فاکتورهای صادرشده"
         self.fields["has_overtime"].label = "ثبت اضافه‌کاری"
         self.fields["overtime_start_time"].label = "ساعت شروع اضافه‌کاری"
         self.fields["overtime_end_time"].label = "ساعت پایان اضافه‌کاری"
         self.fields["overtime_department"].label = "لاین اضافه‌کاری"
         self.fields["employee_note"].label = "یادداشت یا توضیح برای مدیر"
 
-        self.fields["invoice_count"].required = False
         self.fields["has_overtime"].required = False
         self.fields["overtime_start_time"].required = False
         self.fields["overtime_end_time"].required = False
@@ -178,21 +170,6 @@ class DailyShiftLogForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         main_dept = cleaned_data.get("main_department")
-        inv_count = cleaned_data.get("invoice_count")
-
-        from .models import LineActivityType
-
-        has_line_activities = (
-            main_dept
-            and LineActivityType.objects.filter(department=main_dept, is_active=True).exists()
-        )
-        if has_line_activities:
-            cleaned_data["invoice_count"] = None
-        elif main_dept and getattr(main_dept, "is_cashier", False):
-            if inv_count is None:
-                raise ValidationError({"invoice_count": "برای لاین صندوقدار، وارد کردن تعداد فاکتورهای صادرشده الزامی است."})
-        else:
-            cleaned_data["invoice_count"] = None
 
         has_ot = cleaned_data.get("has_overtime")
         ot_start = cleaned_data.get("overtime_start_time")
@@ -318,7 +295,7 @@ class DepartmentMonthlyTargetForm(forms.ModelForm):
 class DepartmentForm(forms.ModelForm):
     class Meta:
         model = Department
-        fields = ["name", "is_cashier", "is_active"]
+        fields = ["name", "is_active"]
 
     def clean_name(self):
         name = " ".join(self.cleaned_data["name"].split())
