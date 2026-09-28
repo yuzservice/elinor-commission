@@ -22,6 +22,22 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 import jdatetime
+
+JALALI_MONTHS = (
+    "فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور",
+    "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند",
+)
+FA_DIGITS = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
+PERSIAN_WEEKDAYS = {0: "دوشنبه", 1: "سه‌شنبه", 2: "چهارشنبه", 3: "پنج‌شنبه", 4: "جمعه", 5: "شنبه", 6: "یکشنبه"}
+
+
+def shift_log_date_pill(day):
+    jalali = jdatetime.date.fromgregorian(date=day)
+    return {
+        "jalali": jalali.strftime("%Y/%m/%d"),
+        "weekday": PERSIAN_WEEKDAYS[day.weekday()],
+        "day_month": f"{str(jalali.day).translate(FA_DIGITS)} {JALALI_MONTHS[jalali.month - 1]}",
+    }
 from .decorators import get_or_create_manager_employee, manager_required, reviewer_required
 from .forms import (
     BrandingForm,
@@ -355,20 +371,10 @@ def shift_log_create(request):
     today = timezone.localdate()
     yesterday = today - timedelta(days=1)
     two_days_ago = today - timedelta(days=2)
-    persian_weekdays = {0: "دوشنبه", 1: "سه‌شنبه", 2: "چهارشنبه", 3: "پنج‌شنبه", 4: "جمعه", 5: "شنبه", 6: "یکشنبه"}
-
-    def format_date_pill(d):
-        j = jdatetime.date.fromgregorian(date=d)
-        weekday = persian_weekdays[d.weekday()]
-        return {
-            "jalali": j.strftime("%Y/%m/%d"),
-            "display": f"{weekday} {j.day} {j.strftime('%B')}",
-        }
-
     date_pills = {
-        "today": format_date_pill(today),
-        "yesterday": format_date_pill(yesterday),
-        "two_days_ago": format_date_pill(two_days_ago),
+        "today": shift_log_date_pill(today),
+        "yesterday": shift_log_date_pill(yesterday),
+        "two_days_ago": shift_log_date_pill(two_days_ago),
     }
 
     return render(
@@ -490,20 +496,10 @@ def shift_log_edit(request, pk):
     today = timezone.localdate()
     yesterday = today - timedelta(days=1)
     two_days_ago = today - timedelta(days=2)
-    persian_weekdays = {0: "دوشنبه", 1: "سه‌شنبه", 2: "چهارشنبه", 3: "پنج‌شنبه", 4: "جمعه", 5: "شنبه", 6: "یکشنبه"}
-
-    def format_date_pill(d):
-        j = jdatetime.date.fromgregorian(date=d)
-        weekday = persian_weekdays[d.weekday()]
-        return {
-            "jalali": j.strftime("%Y/%m/%d"),
-            "display": f"{weekday} {j.day} {j.strftime('%B')}",
-        }
-
     date_pills = {
-        "today": format_date_pill(today),
-        "yesterday": format_date_pill(yesterday),
-        "two_days_ago": format_date_pill(two_days_ago),
+        "today": shift_log_date_pill(today),
+        "yesterday": shift_log_date_pill(yesterday),
+        "two_days_ago": shift_log_date_pill(two_days_ago),
     }
 
     return render(
@@ -1482,6 +1478,7 @@ def management_department_detail(request, pk):
                         )
                     action = "department.rates_updated"
                 elif section == "activities":
+                    next_sort = 0
                     for activity in department.line_activity_types.all():
                         if request.POST.get(f"delete_activity_{activity.pk}") == "on":
                             activity.delete()
@@ -1491,7 +1488,6 @@ def management_department_detail(request, pk):
                             f"activity_count_method_{activity.pk}",
                             LineActivityType.CountMethod.QUANTITY,
                         )
-                        unit_label = request.POST.get(f"activity_unit_{activity.pk}", "").strip()
                         multiplier_raw = request.POST.get(f"activity_multiplier_{activity.pk}", "").strip()
                         sort_raw = request.POST.get(f"activity_sort_{activity.pk}", "0").strip()
                         is_active = request.POST.get(f"activity_active_{activity.pk}") == "on"
@@ -1504,12 +1500,12 @@ def management_department_detail(request, pk):
                             raise ValueError(f"ضریب فعالیت «{title}» باید بزرگ‌تر از صفر باشد.")
                         activity.title = title
                         activity.count_method = count_method
-                        if count_method == LineActivityType.CountMethod.CHECKMARK:
-                            activity.unit_label = "انجام"
-                        else:
-                            activity.unit_label = unit_label or "عدد"
+                        activity.unit_label = (
+                            "انجام" if count_method == LineActivityType.CountMethod.CHECKMARK else "عدد"
+                        )
                         activity.unit_multiplier = multiplier
                         activity.sort_order = int(sort_raw or 0)
+                        next_sort = max(next_sort, activity.sort_order + 1)
                         activity.is_active = is_active
                         activity.save()
 
@@ -1527,18 +1523,17 @@ def management_department_detail(request, pk):
                         )
                         if new_count_method not in LineActivityType.CountMethod.values:
                             new_count_method = LineActivityType.CountMethod.QUANTITY
-                        new_unit = request.POST.get("new_activity_unit", "").strip()
                         LineActivityType.objects.create(
                             department=department,
                             title=new_title,
                             unit_label=(
                                 "انجام"
                                 if new_count_method == LineActivityType.CountMethod.CHECKMARK
-                                else (new_unit or "عدد")
+                                else "عدد"
                             ),
                             unit_multiplier=new_multiplier,
                             count_method=new_count_method,
-                            sort_order=int(request.POST.get("new_activity_sort", "0") or 0),
+                            sort_order=next_sort,
                             is_active=True,
                         )
                     action = "department.activities_updated"

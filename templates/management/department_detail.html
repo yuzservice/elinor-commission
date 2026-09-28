@@ -64,45 +64,44 @@
     <div class="card-head">
         <div>
             <h2>فعالیت‌های عملیاتی لاین</h2>
-            <p>برای انبار، صندوق و هر لاینی که پورسانت بر اساس «تعداد × ضریب» محاسبه می‌شود. واحد نهایی × نرخ گرید (بخش ضرایب بالا) = ریال پورسانت.</p>
+            <p>پورسانت = مقدار فعالیت × ضریب × نرخ گرید. برای عوض کردن ترتیب نمایش، دستهٔ ⠿ را با ماوس بکشید و بعد ذخیره کنید.</p>
         </div>
     </div>
     <form method="post">
         {% csrf_token %}
         <input type="hidden" name="section" value="activities">
         <div class="table-wrap">
-            <table>
+            <table class="activity-sort-table">
                 <thead>
                     <tr>
+                        <th style="width:42px;"></th>
                         <th>نام فعالیت</th>
                         <th>نوع ورود</th>
-                        <th class="activity-unit-col">برچسب واحد</th>
                         <th>ضریب → واحد عملکرد</th>
-                        <th>ترتیب</th>
                         <th>فعال</th>
                         <th>حذف</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="activity-sort-body">
                     {% for act in line_activities %}
-                    <tr>
+                    <tr data-activity="{{ act.pk }}">
+                        <td>
+                            <button type="button" class="activity-drag" title="بکشید و جابه‌جا کنید" aria-label="جابه‌جایی">⠿</button>
+                            <input type="hidden" name="activity_sort_{{ act.pk }}" value="{{ forloop.counter0 }}">
+                        </td>
                         <td><input type="text" name="activity_title_{{ act.pk }}" value="{{ act.title }}" style="width:100%;min-width:140px;"></td>
                         <td>
-                            <select name="activity_count_method_{{ act.pk }}" class="activity-count-method-select" style="min-width:88px;">
+                            <select name="activity_count_method_{{ act.pk }}" style="min-width:88px;">
                                 <option value="QUANTITY" {% if act.count_method != 'CHECKMARK' %}selected{% endif %}>عدد</option>
                                 <option value="CHECKMARK" {% if act.count_method == 'CHECKMARK' %}selected{% endif %}>تیک</option>
                             </select>
                         </td>
-                        <td class="activity-unit-col">
-                            <input type="text" name="activity_unit_{{ act.pk }}" class="activity-unit-input" value="{% if act.count_method == 'CHECKMARK' %}{% else %}{{ act.unit_label }}{% endif %}" placeholder="مثلاً بار، فاکتور" style="width:110px;" {% if act.count_method == 'CHECKMARK' %}disabled{% endif %}>
-                        </td>
                         <td><input type="number" step="0.01" min="0.01" name="activity_multiplier_{{ act.pk }}" value="{{ act.unit_multiplier }}" style="width:100px;"></td>
-                        <td><input type="number" min="0" name="activity_sort_{{ act.pk }}" value="{{ act.sort_order }}" style="width:70px;"></td>
                         <td style="text-align:center;"><input type="checkbox" name="activity_active_{{ act.pk }}" {% if act.is_active %}checked{% endif %}></td>
                         <td style="text-align:center;"><input type="checkbox" name="delete_activity_{{ act.pk }}" title="حذف این فعالیت"></td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="7" class="empty">هنوز فعالیتی تعریف نشده. نوع «عدد» برای شمارش (مثلاً فاکتور ×۱) · نوع «تیک» وقتی فقط انجام/عدم‌انجام مهم است.</td></tr>
+                    <tr><td colspan="6" class="empty">هنوز فعالیتی تعریف نشده. نوع «عدد» برای شمارش · نوع «تیک» وقتی فقط انجام یا عدم‌انجام مهم است.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -111,31 +110,62 @@
             <strong style="font-size:13px;">➕ فعالیت جدید</strong>
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-top:10px;">
                 <input type="text" name="new_activity_title" placeholder="نام فعالیت">
-                <select name="new_activity_count_method" id="new-activity-count-method" style="min-width:88px;">
+                <select name="new_activity_count_method" style="min-width:88px;">
                     <option value="QUANTITY" selected>عدد</option>
                     <option value="CHECKMARK">تیک</option>
                 </select>
-                <input type="text" name="new_activity_unit" id="new-activity-unit" placeholder="برچسب واحد (برای عدد)" style="min-width:140px;">
                 <input type="number" step="0.01" min="0.01" name="new_activity_multiplier" placeholder="ضریب (مثلاً ۱۰)">
-                <input type="number" min="0" name="new_activity_sort" placeholder="ترتیب" value="0">
             </div>
+            <small style="display:block;margin-top:8px;color:var(--muted);">فعالیت جدید بعد از ذخیره به انتهای فهرست اضافه می‌شود و بعد می‌توانید جایش را بکشید.</small>
         </div>
         <button class="primary" type="submit" style="margin-top:14px;">💾 ذخیره فعالیت‌ها</button>
     </form>
+    <style>
+        .activity-drag { cursor: grab; border: 0; background: transparent; color: #64748b; font-size: 18px; line-height: 1; padding: 4px 6px; }
+        .activity-drag:active { cursor: grabbing; }
+        #activity-sort-body tr.is-dragging { opacity: 0.45; }
+        #activity-sort-body tr.drop-target td { box-shadow: inset 0 2px 0 #237554; }
+    </style>
     <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        function syncUnitField(selectEl) {
-            const row = selectEl.closest('tr') || selectEl.closest('div');
-            const unitInput = row ? row.querySelector('.activity-unit-input, #new-activity-unit') : document.getElementById('new-activity-unit');
-            if (!unitInput) return;
-            const isTick = selectEl.value === 'CHECKMARK';
-            unitInput.disabled = isTick;
-            if (isTick) unitInput.value = '';
+    document.addEventListener('DOMContentLoaded', function () {
+        const tbody = document.getElementById('activity-sort-body');
+        const form = tbody && tbody.closest('form');
+        if (!tbody || !form) return;
+
+        function renumber() {
+            tbody.querySelectorAll('tr[data-activity]').forEach(function (row, index) {
+                const input = row.querySelector('input[name^="activity_sort_"]');
+                if (input) input.value = String(index);
+            });
         }
-        document.querySelectorAll('.activity-count-method-select, #new-activity-count-method').forEach(sel => {
-            syncUnitField(sel);
-            sel.addEventListener('change', () => syncUnitField(sel));
+
+        let dragged = null;
+        tbody.querySelectorAll('.activity-drag').forEach(function (handle) {
+            const row = handle.closest('tr');
+            handle.addEventListener('pointerdown', function () { row.draggable = true; });
+            row.addEventListener('dragstart', function (event) {
+                dragged = row;
+                row.classList.add('is-dragging');
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', row.dataset.activity || '');
+            });
+            row.addEventListener('dragend', function () {
+                row.draggable = false;
+                row.classList.remove('is-dragging');
+                tbody.querySelectorAll('.drop-target').forEach(function (item) { item.classList.remove('drop-target'); });
+                dragged = null;
+                renumber();
+            });
+            row.addEventListener('dragover', function (event) {
+                if (!dragged || dragged === row || !row.dataset.activity) return;
+                event.preventDefault();
+                const rect = row.getBoundingClientRect();
+                const placeAfter = event.clientY > rect.top + rect.height / 2;
+                if (placeAfter) row.after(dragged);
+                else row.before(dragged);
+            });
         });
+        form.addEventListener('submit', renumber);
     });
     </script>
 </article>

@@ -2,126 +2,148 @@
 {% load persian %}
 {% block title %}{{ title }} | {{ system_settings.panel_name|default:'سامانه عملکرد' }}{% endblock %}
 {% block content %}
-<div class="page-head" style="margin-bottom: 24px;">
+<div class="page-head shift-log-head">
   <div>
-    <p class="eyebrow" style="color: var(--green, #237554); font-weight: 700; font-size: 13px; margin-bottom: 4px;">⏱️ ثبت کارکرد روزانه</p>
-    <h1 style="font-size: 24px; font-weight: 800; margin: 0 0 6px;">{{ title }}</h1>
-    <p style="color: var(--muted); font-size: 13.5px; margin: 0;">سلام {{ employee.first_name }} جان! ساعت حضور، لاین اصلی، بازه‌های کمکی و اضافه‌کاری‌ات را ثبت کن.</p>
+    <p class="eyebrow">⏱️ ثبت کارکرد روزانه</p>
+    <h1>{{ title }}</h1>
+    <p>سلام {{ employee.first_name }} جان. تاریخ، شیفت و لاین را انتخاب کن؛ اگر این لاین فعالیت دارد، همان‌جا تیک بزن یا عدد بنویس.</p>
   </div>
-  <a class="secondary" href="{% if log %}{% url 'shift_log_detail' log.pk %}{% else %}{% url 'shift_logs' %}{% endif %}" style="padding: 8px 16px; border-radius: 10px;">بازگشت</a>
+  <a class="secondary" href="{% if log %}{% url 'shift_log_detail' log.pk %}{% else %}{% url 'shift_logs' %}{% endif %}">بازگشت</a>
 </div>
 
-<article class="card form-card wide" style="background:#fff;border-radius:20px;box-shadow:0 6px 24px rgba(0,0,0,.04);border:1px solid var(--line);padding:28px">
+<article class="card form-card wide shift-log-card">
 <form method="post" id="shift-log-form">
   {% csrf_token %}
   {{ formset.management_form }}
 
-  <!-- بخش ۱: تاریخ و شیفت کاری -->
-  <section class="shift-section">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-      <label class="section-title">📅 ۱. تاریخ و شیفت کاری</label>
-      <small style="color: var(--muted); font-size: 12px;">انتخاب سریع تاریخ با یک کلیک</small>
-    </div>
-    
+  <section class="shift-block">
+    <header class="shift-block-head">
+      <span class="section-badge">الزامی</span>
+      <div class="shift-block-copy">
+        <h2 class="shift-title"><span class="sec-label">امروز کجا بودی؟</span><span class="sec-icon">📅</span><span class="sec-no">۱</span></h2>
+        <p>تاریخ، شیفت و لاین را انتخاب کن.</p>
+      </div>
+    </header>
+
     <div id="date-pills-wrap" class="date-pills">
-      <button type="button" class="date-pill" data-date="{{ date_pills.today.jalali }}">✨ امروز <small>{{ date_pills.today.display }}</small></button>
-      <button type="button" class="date-pill" data-date="{{ date_pills.yesterday.jalali }}">⏳ دیروز <small>{{ date_pills.yesterday.display }}</small></button>
-      <button type="button" class="date-pill" data-date="{{ date_pills.two_days_ago.jalali }}">📅 پریروز <small>{{ date_pills.two_days_ago.display }}</small></button>
-      <button type="button" id="toggle-custom-date" class="date-pill">✏️ تاریخ دیگر…</button>
+      <button type="button" class="date-pill" data-date="{{ date_pills.today.jalali }}"><b>امروز</b><small><span>{{ date_pills.today.weekday }}</span><span>{{ date_pills.today.day_month }}</span></small></button>
+      <button type="button" class="date-pill" data-date="{{ date_pills.yesterday.jalali }}"><b>دیروز</b><small><span>{{ date_pills.yesterday.weekday }}</span><span>{{ date_pills.yesterday.day_month }}</span></small></button>
+      <button type="button" class="date-pill" data-date="{{ date_pills.two_days_ago.jalali }}"><b>پریروز</b><small><span>{{ date_pills.two_days_ago.weekday }}</span><span>{{ date_pills.two_days_ago.day_month }}</span></small></button>
+      <button type="button" id="toggle-custom-date" class="date-pill"><b>تاریخ دیگر</b></button>
     </div>
-    <div id="custom-date-container" style="display:none;max-width:320px;margin-bottom:14px">{{ form.date }}</div>
+    <div id="custom-date-container" class="custom-date">{{ form.date }}</div>
     {% for error in form.date.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-    
-    <div class="form-grid compact-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+
+    <div class="basics-grid">
       <div class="field">
-        <label style="font-weight:600;font-size:13px;display:block;margin-bottom:6px;">شیفت کاری <em>*</em></label>
+        <label>شیفت کاری <em>*</em></label>
         {{ form.shift }}
         {% for error in form.shift.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
       </div>
       <div class="field">
-        <label style="font-weight:600;font-size:13px;display:block;margin-bottom:6px;">لاین اصلی <em>*</em></label>
+        <label>لاین اصلی <em>*</em></label>
         {{ form.main_department }}
         {% for error in form.main_department.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
       </div>
     </div>
-
-    <!-- فعالیت‌های عملیاتی لاین (انبار، صندوق با تعریف فعالیت و ...) -->
-    <div id="line-activities-wrap" style="display:none;margin-top:16px;background:#eff6ff;border:1.5px solid #93c5fd;border-radius:14px;padding:16px;">
-      <label class="section-title" style="display:block;margin-bottom:8px;">📋 فعالیت‌های این لاین</label>
-      <small style="color:#1d4ed8;display:block;margin-bottom:12px;line-height:1.6;">تعداد هر فعالیت را وارد کن. واحد عملکرد = تعداد × ضریب فعالیت · پورسانت = جمع واحدها × نرخ گرید شما.</small>
-      <div id="line-activities-fields" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;"></div>
-    </div>
-
   </section>
 
-  <!-- بخش ۲: بازه‌های کمکی -->
-  <section class="shift-section">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-      <label class="section-title">🤝 ۲. بازه‌های کمکی در طول شیفت</label>
-      <span class="badge" style="background:#f1f5f9;color:var(--muted);font-size:11px;">اختیاری</span>
-    </div>
-    <small class="help-text" style="display:block;margin-bottom:12px;">اگر در تایم شیفت به لاین دیگری کمک کردی، لاین مقصد و ساعت دقیق را اضافه کن.</small>
-    <div style="display:none">{{ form.has_support_line }}</div>
-    
-    <div id="interval-list">
-      {% for interval_form in formset %}
-      <div class="interval-card" data-form-index="{{ forloop.counter0 }}">
-        {{ interval_form.id }}
-        <div class="form-grid interval-grid">
-          <div class="field"><label>لاین مقصد</label>{{ interval_form.department }}</div>
-          <div class="field"><label>ساعت شروع</label>{{ interval_form.start_time }}</div>
-          <div class="field"><label>ساعت پایان</label>{{ interval_form.end_time }}</div>
-          <button type="button" class="remove-interval secondary">حذف</button>
-        </div>
-        <div style="display:none">{{ interval_form.DELETE }}</div>
-        {% for field in interval_form %}{% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}{% endfor %}
-        {% for error in interval_form.non_field_errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+  <section class="shift-block" id="line-activities-wrap" hidden>
+    <header class="shift-block-head">
+      <div class="shift-block-copy">
+        <h2 class="shift-title"><span class="sec-label" id="activity-section-label">چه کاری انجام دادی؟</span><span class="sec-icon">📋</span><span class="sec-no">۲</span></h2>
+        <p id="activity-section-hint">تیک بزن یا تعداد را بنویس.</p>
       </div>
-      {% endfor %}
+    </header>
+    <div class="activity-panel">
+      <div id="line-activities-fields" class="activity-list"></div>
     </div>
-    <button type="button" id="add-interval" class="secondary" style="margin-top:12px;padding:7px 14px;border-radius:10px;font-size:12.5px;">+ افزودن بازه کمکی جدید</button>
-    {% for error in formset.non_form_errors %}<div class="message error">{{ error }}</div>{% endfor %}
   </section>
 
-  <!-- بخش ۳: ثبت اضافه‌کاری (طرح جدید و هوشمند) -->
-  <section class="shift-section" style="background: #fdfdfd; border-radius: 14px; padding: 18px; border: 1.5px solid {% if form.has_overtime.value %}#bbf7d0{% else %}#e2e8f0{% endif %};">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-      <label for="id_has_overtime" style="cursor: pointer; display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 14.5px; color: var(--ink); margin: 0;">
-        <input type="checkbox" name="has_overtime" id="id_has_overtime" {% if form.has_overtime.value %}checked{% endif %} style="width: 20px; height: 20px; accent-color: var(--green, #237554); cursor: pointer;">
-        <span>⚡ ۳. ثبت اضافه‌کاری در این روز</span>
+  <section class="shift-block">
+    <header class="shift-block-head">
+      <span class="section-badge muted">اختیاری</span>
+      <div class="shift-block-copy">
+        <h2 class="shift-title"><span class="sec-label">مورد اضافه‌ای بود؟</span><span class="sec-icon">✨</span><span class="sec-no">۳</span></h2>
+        <p>کمک، اضافه‌کاری یا توضیح را فقط در صورت نیاز باز کن.</p>
+      </div>
+    </header>
+
+    <div class="extra-card extra-support">
+      <label class="extra-toggle" for="support-toggle">
+        <input type="checkbox" id="support-toggle">
+        <span>
+          <b>🤝 به لاین دیگری کمک کردم</b>
+          <small>لاین مقصد و ساعت شروع و پایان را اضافه کن.</small>
+        </span>
       </label>
-      <span id="overtime-duration-badge" class="badge" style="display: none; background: var(--green2, #dff4e9); color: var(--green, #237554); font-weight: 800; font-size: 12.5px; padding: 5px 12px; border-radius: 8px;">
-        ۰ ساعت
-      </span>
+      <div id="support-panel" class="extra-panel">
+        <div style="display:none">{{ form.has_support_line }}</div>
+        <div id="interval-list">
+          {% for interval_form in formset %}
+          <div class="interval-card" data-form-index="{{ forloop.counter0 }}">
+            {{ interval_form.id }}
+            <div class="form-grid interval-grid">
+              <div class="field"><label>لاین مقصد</label>{{ interval_form.department }}</div>
+              <div class="field"><label>ساعت شروع</label>{{ interval_form.start_time }}</div>
+              <div class="field"><label>ساعت پایان</label>{{ interval_form.end_time }}</div>
+              <button type="button" class="remove-interval secondary">حذف</button>
+            </div>
+            <div style="display:none">{{ interval_form.DELETE }}</div>
+            {% for field in interval_form %}{% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}{% endfor %}
+            {% for error in interval_form.non_field_errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </div>
+          {% endfor %}
+        </div>
+        <button type="button" id="add-interval" class="secondary add-interval-btn">+ افزودن بازه کمکی</button>
+        {% for error in formset.non_form_errors %}<div class="message error">{{ error }}</div>{% endfor %}
+      </div>
     </div>
 
-    <div id="overtime-fields-container" style="display: {% if form.has_overtime.value %}block{% else %}none{% endif %}; margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--line);">
-      <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; font-size: 12.5px; color: #166534; display: flex; align-items: center; gap: 8px;">
-        <span>💡</span>
-        <span>ساعت اضافه‌کاری شما به طور خودکار در شیفت متناظر (عصر) محاسبه شده و سهم پورسانت آن از فروش همان شیفت پرداخت می‌شود.</span>
+    <div class="extra-card extra-overtime">
+      <label class="extra-toggle" for="id_has_overtime">
+        <input type="checkbox" name="has_overtime" id="id_has_overtime" {% if form.has_overtime.value %}checked{% endif %}>
+        <span>
+          <b>⚡ اضافه‌کاری داشتم</b>
+          <small id="overtime-duration-badge">ساعت اضافه‌کاری جدا از شیفت اصلی ثبت می‌شود.</small>
+        </span>
+      </label>
+      <div id="overtime-fields-container" class="extra-panel">
+        <div class="ot-hint">💡 ساعت اضافه‌کاری در شیفت متناظر محاسبه می‌شود و سهم پورسانت از فروش همان شیفت پرداخت می‌شود.</div>
+        <div class="basics-grid overtime-grid">
+          <div class="field">
+            <label>لاین اضافه‌کاری</label>
+            {{ form.overtime_department }}
+            {% for error in form.overtime_department.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </div>
+          <div class="field">
+            <label>ساعت شروع</label>
+            {{ form.overtime_start_time }}
+            {% for error in form.overtime_start_time.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </div>
+          <div class="field">
+            <label>ساعت پایان</label>
+            {{ form.overtime_end_time }}
+            {% for error in form.overtime_end_time.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </div>
+        </div>
       </div>
+    </div>
 
-      <div class="form-grid" style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 14px; align-items: end;">
-        <div class="field">
-          <label style="font-weight: 600; font-size: 12.5px; display: block; margin-bottom: 6px;">لاین فعالیت در اضافه‌کاری</label>
-          {{ form.overtime_department }}
-          {% for error in form.overtime_department.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-        </div>
-        <div class="field">
-          <label style="font-weight: 600; font-size: 12.5px; display: block; margin-bottom: 6px;">ساعت شروع اضافه‌کاری</label>
-          {{ form.overtime_start_time }}
-          {% for error in form.overtime_start_time.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-        </div>
-        <div class="field">
-          <label style="font-weight: 600; font-size: 12.5px; display: block; margin-bottom: 6px;">ساعت پایان اضافه‌کاری</label>
-          {{ form.overtime_end_time }}
-          {% for error in form.overtime_end_time.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-        </div>
+    <div class="extra-card extra-note">
+      <label class="extra-toggle" for="note-toggle">
+        <input type="checkbox" id="note-toggle">
+        <span>
+          <b>📝 توضیح برای مدیر</b>
+          <small>اختیاری. اگر نکته‌ای هست همین‌جا بنویس.</small>
+        </span>
+      </label>
+      <div id="note-panel" class="extra-panel">
+        {{ form.employee_note }}
       </div>
     </div>
   </section>
 
-  <!-- تمپلیت بازه کمکی جدید -->
   <template id="empty-interval-template">
     <div class="interval-card" data-form-index="__prefix__">
       <div class="form-grid interval-grid">
@@ -134,21 +156,15 @@
     </div>
   </template>
 
-  <!-- بخش ۴: یادداشت برای مدیر -->
-  <section style="margin-bottom:24px">
-    <label class="section-title">📝 ۴. یادداشت یا توضیح برای مدیر <small style="color:var(--muted);font-weight:400;">(اختیاری)</small></label>
-    {{ form.employee_note }}
-  </section>
   {% for error in form.non_field_errors %}<div class="message error">{{ error }}</div>{% endfor %}
 
-  <!-- نوار خلاصه محاسبه زنده و دکمه ثبت -->
   <div class="live-summary">
     <div>
-      <span style="font-size: 12px; color: var(--muted); font-weight: 600;">خلاصه محاسبه خودکار سیستم</span>
-      <strong id="summary-total" style="font-size: 20px; color: var(--green, #237554); margin: 3px 0;">مجموع کارکرد: —</strong>
-      <small id="summary-breakdown" style="font-size: 12.5px; color: #475569;">شیفت اصلی: — · کمکی: ۰ ساعت · اضافه‌کاری: ۰ ساعت</small>
+      <span class="summary-kicker">خلاصه محاسبه خودکار سیستم</span>
+      <strong id="summary-total">تاریخ، شیفت و لاین را انتخاب کن</strong>
+      <small id="summary-breakdown">فعالیتی ثبت نشده</small>
     </div>
-    <button class="primary" type="submit" style="padding: 12px 28px; font-size: 15px; font-weight: 800; border-radius: 12px; box-shadow: 0 4px 14px rgba(35,117,84,0.3);">{{ submit }}</button>
+    <button class="primary" type="submit">{{ submit }}</button>
   </div>
 </form>
 </article>
@@ -156,23 +172,73 @@
 {{ activity_values|json_script:"activity-values-data" }}
 
 <style>
-.shift-section{margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid var(--line)}
-.section-title{font-size:14.5px;font-weight:700;color:var(--ink);display:block;margin-bottom:6px}
-.date-pills{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:15px}
-.date-pill{padding:9px 15px;border-radius:10px;border:1px solid var(--line);background:#f8faf9;font:inherit;font-size:12px;cursor:pointer;transition:all 0.15s ease}
-.date-pill small{color:var(--muted)}
-.date-pill:hover{background:#f1f5f9}
-.date-pill.active{background:var(--green,#237554);color:#fff;border-color:var(--green,#237554);box-shadow:0 2px 8px rgba(35,117,84,0.25)}
-.date-pill.active small{color:#e6f4ea}
-.interval-card{padding:14px 16px;margin-top:12px;background:#f8faf9;border:1px dashed var(--green,#237554);border-radius:12px}
-.interval-grid{grid-template-columns:2fr 1fr 1fr auto;align-items:end;gap:12px}
-.remove-interval{height:42px;color:#b53a3a;border-color:#fca5a5}
-.live-summary{background:linear-gradient(120deg,#f0fdf4,#e6f4ea);border:1.5px solid #bbf7d0;border-radius:16px;padding:20px 24px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;box-shadow:0 4px 16px rgba(35,117,84,0.06)}
-@media(max-width:760px){
-  .compact-grid{grid-template-columns:1fr !important}
-  .interval-grid{grid-template-columns:1fr 1fr}
-  .interval-grid .field:first-child{grid-column:span 2}
-  #overtime-fields-container .form-grid{grid-template-columns:1fr !important}
+#shift-log-form { direction: rtl; text-align: right; }
+.shift-log-head { margin-bottom: 24px; direction: rtl; text-align: right; }
+.shift-log-head .eyebrow { color: var(--green, #237554); font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+.shift-log-head h1 { font-size: 24px; font-weight: 800; margin: 0 0 6px; }
+.shift-log-head p { color: var(--muted); font-size: 13.5px; margin: 0; max-width: 640px; line-height: 1.7; }
+.shift-log-card { background: #fff; border-radius: 20px; box-shadow: 0 6px 24px rgba(23,33,29,.06); border: 1px solid var(--line); padding: 28px 28px 12px; }
+.shift-block { margin-bottom: 18px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.shift-block-head { display: flex; direction: ltr; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; width: 100%; }
+.shift-block-copy { min-width: 0; margin-left: auto; text-align: right; }
+.shift-title { display: flex; direction: ltr; justify-content: flex-end; align-items: center; gap: 8px; width: 100%; margin: 0 0 4px; font-size: 16px; font-weight: 800; text-align: right; }
+.sec-no { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: var(--green2, #dff4e9); color: var(--green, #237554); font-size: 13px; font-weight: 800; flex: 0 0 26px; }
+.sec-icon { font-size: 16px; line-height: 1; }
+.sec-label { text-align: right; }
+.shift-block-head p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.7; text-align: right; }
+.section-badge { background: var(--green2, #dff4e9); color: var(--green, #237554); font-size: 11px; font-weight: 800; border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
+.section-badge.muted { background: #f1f5f9; color: #64748b; }
+.date-pills { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-bottom: 16px; direction: ltr; }
+.date-pill { padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line); background: #f8faf9; font: inherit; cursor: pointer; text-align: right; direction: rtl; min-width: 118px; transition: .15s ease; }
+.date-pill b { display: block; font-size: 13px; font-weight: 800; }
+.date-pill small { display: flex; justify-content: flex-end; gap: 6px; color: var(--muted); font-weight: 600; font-size: 11.5px; margin-top: 3px; direction: rtl; }
+.date-pill:hover { background: #f1f5f9; }
+.date-pill.active { background: var(--green, #237554); color: #fff; border-color: var(--green, #237554); box-shadow: 0 2px 8px rgba(35,117,84,.25); }
+.date-pill.active small { color: #e6f4ea; }
+.custom-date { display: none; max-width: 320px; margin-bottom: 14px; }
+.basics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; direction: rtl; }
+.basics-grid label, .interval-grid label { font-weight: 700; font-size: 13px; display: block; margin-bottom: 6px; text-align: right; }
+.activity-panel { background: #eff6ff; border: 1.5px solid #93c5fd; border-radius: 14px; padding: 14px; }
+.activity-list { display: flex; flex-direction: column; gap: 8px; direction: rtl; }
+.activity-row { display: flex; align-items: center; justify-content: flex-start; gap: 12px; direction: rtl; text-align: right; padding: 12px 14px; border-radius: 12px; background: #fff; border: 1px solid #dbeafe; }
+.activity-row label { margin: 0; font-weight: 700; font-size: 13.5px; text-align: right; }
+.activity-row input[type="number"] { width: 120px; margin-right: auto; text-align: center; font-weight: 800; }
+.activity-check { display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%; direction: rtl; }
+.activity-check input, .extra-toggle input { width: 20px !important; height: 20px; min-width: 20px; padding: 0; accent-color: var(--green, #237554); flex: 0 0 20px; }
+.activity-check b { display: block; font-size: 14px; }
+.activity-check small { display: block; color: #1d4ed8; font-size: 12px; font-weight: 600; margin-top: 2px; }
+.activity-empty { margin: 0; color: #1e40af; font-size: 13px; line-height: 1.7; text-align: right; }
+.extra-card { border: 1.5px solid #e2e8f0; border-radius: 14px; margin-bottom: 12px; background: #fdfdfd; direction: rtl; text-align: right; }
+.extra-support.is-open { border-color: #86efac; background: #f0fdf4; }
+.extra-overtime.is-open { border-color: #86efac; background: #f7fdf9; }
+.extra-note.is-open { border-color: #fcd34d; background: #fffbeb; }
+.extra-toggle { display: flex; direction: ltr; justify-content: flex-end; gap: 10px; align-items: flex-start; padding: 14px 16px; cursor: pointer; margin: 0; text-align: right; }
+.extra-toggle span { order: 1; flex: 1; text-align: right; }
+.extra-toggle input { order: 2; }
+.extra-toggle b { display: block; font-size: 14.5px; }
+.extra-toggle small { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; line-height: 1.6; }
+.extra-panel { display: none; padding: 0 16px 16px; direction: rtl; text-align: right; }
+.extra-card.is-open .extra-panel { display: block; }
+.ot-hint { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 12.5px; color: #166534; line-height: 1.7; text-align: right; }
+.interval-card { padding: 14px 16px; margin-bottom: 10px; background: #f8faf9; border: 1px dashed var(--green, #237554); border-radius: 12px; direction: rtl; }
+.interval-grid { display: grid; grid-template-columns: 2fr 1fr 1fr auto; align-items: end; gap: 12px; direction: rtl; }
+.remove-interval { height: 42px; color: #b53a3a; border-color: #fca5a5; width: auto; }
+.add-interval-btn { margin-top: 4px; padding: 7px 14px; border-radius: 10px; font-size: 12.5px; }
+.overtime-grid { grid-template-columns: 2fr 1fr 1fr; }
+.live-summary { position: sticky; bottom: 0; margin: 12px -28px 0; background: linear-gradient(120deg, #f0fdf4, #e6f4ea); border: 1.5px solid #bbf7d0; border-radius: 16px; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center; gap: 14px; direction: rtl; text-align: right; box-shadow: 0 4px 16px rgba(35,117,84,.08); }
+.summary-kicker { font-size: 12px; color: var(--muted); font-weight: 700; }
+.live-summary strong { display: block; font-size: 16px; color: var(--green, #237554); margin: 3px 0; font-weight: 800; line-height: 1.7; text-align: right; }
+.live-summary small { font-size: 12.5px; color: #475569; }
+.live-summary .primary { padding: 12px 28px; font-size: 15px; font-weight: 800; border-radius: 12px; white-space: nowrap; box-shadow: 0 4px 14px rgba(35,117,84,.3); }
+@media (max-width: 760px) {
+  .basics-grid, .overtime-grid, .interval-grid { grid-template-columns: 1fr; }
+  .date-pills { display: grid; grid-template-columns: 1fr 1fr; }
+  .date-pill { min-width: 0; width: 100%; }
+  .activity-row { align-items: stretch; flex-direction: column; }
+  .activity-row input[type="number"] { width: 100%; margin-right: 0; }
+  .live-summary { flex-direction: column; align-items: stretch; margin-right: -16px; margin-left: -16px; }
+  .shift-log-card { padding: 18px 16px 8px; }
+  .shift-title { font-size: 15px; }
 }
 </style>
 
@@ -180,51 +246,52 @@
 document.addEventListener('DOMContentLoaded', () => {
   const dateInput = document.getElementById('id_date');
   const custom = document.getElementById('custom-date-container');
-  
-  // دکمه‌های انتخاب سریع تاریخ
+  const mainDept = document.getElementById('id_main_department');
+  const shift = document.getElementById('id_shift');
+  const form = document.getElementById('shift-log-form');
+
   document.querySelectorAll('.date-pill[data-date]').forEach(btn => btn.addEventListener('click', () => {
     dateInput.value = btn.dataset.date;
     dateInput.dispatchEvent(new Event('change', { bubbles: true }));
     custom.style.display = 'none';
     syncDates();
+    updateSummary();
   }));
-  
+
   document.getElementById('toggle-custom-date').addEventListener('click', () => {
-    custom.style.display = (custom.style.display === 'none' ? 'block' : 'none');
+    custom.style.display = (custom.style.display === 'none' || custom.style.display === '' ? 'block' : 'none');
     if (custom.style.display === 'block') {
       dateInput.focus();
-      dateInput.click();
     }
   });
 
-  dateInput.addEventListener('change', syncDates);
-  dateInput.addEventListener('input', syncDates);
+  dateInput.addEventListener('change', () => { syncDates(); updateSummary(); });
+  dateInput.addEventListener('input', () => { syncDates(); updateSummary(); });
 
   function syncDates() {
     const val = dateInput.value ? dateInput.value.trim() : '';
     let matched = false;
     document.querySelectorAll('.date-pill[data-date]').forEach(btn => {
-      const isMatch = (btn.dataset.date === val);
+      const isMatch = btn.dataset.date === val;
       btn.classList.toggle('active', isMatch);
       if (isMatch) matched = true;
     });
     const toggleBtn = document.getElementById('toggle-custom-date');
-    if (toggleBtn) {
-      if (!matched && val) {
-        toggleBtn.classList.add('active');
-        toggleBtn.innerHTML = `✏️ تاریخ: <strong>${val}</strong>`;
-        custom.style.display = 'block';
-      } else {
-        toggleBtn.classList.remove('active');
-        toggleBtn.innerHTML = '✏️ تاریخ دیگر…';
-      }
+    if (!matched && val) {
+      toggleBtn.classList.add('active');
+      toggleBtn.innerHTML = `<b>${val}</b>`;
+      custom.style.display = 'block';
+    } else {
+      toggleBtn.classList.remove('active');
+      toggleBtn.innerHTML = '<b>تاریخ دیگر</b>';
     }
   }
   syncDates();
 
-  // مدیریت بازه‌های کمکی
   const list = document.getElementById('interval-list');
   const totalForms = document.getElementById('id_support-TOTAL_FORMS');
+  const supportToggle = document.getElementById('support-toggle');
+  const supportCard = supportToggle.closest('.extra-card');
 
   function bindRemove(card) {
     card.querySelector('.remove-interval').addEventListener('click', () => {
@@ -237,10 +304,28 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       updateSummary();
     });
-    card.querySelectorAll('select,input[type="time"]').forEach(x => x.addEventListener('change', updateSummary));
+    card.querySelectorAll('select,input[type="time"]').forEach(el => el.addEventListener('change', updateSummary));
   }
 
   document.querySelectorAll('.interval-card').forEach(bindRemove);
+
+  function supportHasData() {
+    return [...document.querySelectorAll('.interval-card')].some(card => {
+      if (card.style.display === 'none') return false;
+      const dept = card.querySelector('select');
+      const times = [...card.querySelectorAll('input[type="time"]')];
+      return Boolean(dept?.value) || times.some(item => item.value);
+    });
+  }
+
+  function setSupportOpen(open) {
+    supportToggle.checked = open;
+    supportCard.classList.toggle('is-open', open);
+    updateSummary();
+  }
+
+  supportToggle.addEventListener('change', () => setSupportOpen(supportToggle.checked));
+  if (supportHasData()) setSupportOpen(true);
 
   document.getElementById('add-interval').addEventListener('click', () => {
     const index = Number(totalForms.value);
@@ -248,146 +333,179 @@ document.addEventListener('DOMContentLoaded', () => {
     list.insertAdjacentHTML('beforeend', html);
     totalForms.value = index + 1;
     bindRemove(list.lastElementChild);
-    updateSummary();
+    setSupportOpen(true);
   });
 
-  function minutes(v) {
-    if (!v) return null;
-    const [h, m] = v.split(':').map(Number);
+  function minutes(value) {
+    if (!value) return null;
+    const [h, m] = value.split(':').map(Number);
     return h * 60 + m;
   }
 
-  // مدیریت بخش اضافه‌کاری
   const otCheckbox = document.getElementById('id_has_overtime');
-  const otContainer = document.getElementById('overtime-fields-container');
+  const otCard = otCheckbox.closest('.extra-card');
   const otBadge = document.getElementById('overtime-duration-badge');
   const otStart = document.getElementById('id_overtime_start_time');
   const otEnd = document.getElementById('id_overtime_end_time');
   const otDept = document.getElementById('id_overtime_department');
-  const mainDept = document.getElementById('id_main_department');
 
-  otCheckbox.addEventListener('change', () => {
-    const checked = otCheckbox.checked;
-    otContainer.style.display = checked ? 'block' : 'none';
-    if (checked && !otDept.value && mainDept.value) {
-      otDept.value = mainDept.value;
-    }
+  function setOvertimeOpen(open) {
+    otCheckbox.checked = open;
+    otCard.classList.toggle('is-open', open);
+    if (open && !otDept.value && mainDept.value) otDept.value = mainDept.value;
     updateSummary();
+  }
+
+  otCheckbox.addEventListener('change', () => setOvertimeOpen(otCheckbox.checked));
+  if (otCheckbox.checked) otCard.classList.add('is-open');
+  [otStart, otEnd, otDept].forEach(el => {
+    if (!el) return;
+    el.addEventListener('input', updateSummary);
+    el.addEventListener('change', updateSummary);
   });
 
-  if (otStart) otStart.addEventListener('input', updateSummary);
-  if (otEnd) otEnd.addEventListener('input', updateSummary);
-  if (otStart) otStart.addEventListener('change', updateSummary);
-  if (otEnd) otEnd.addEventListener('change', updateSummary);
-  if (otDept) otDept.addEventListener('change', updateSummary);
+  const noteToggle = document.getElementById('note-toggle');
+  const noteCard = noteToggle.closest('.extra-card');
+  const noteInput = document.getElementById('id_employee_note');
+  function setNoteOpen(open) {
+    noteToggle.checked = open;
+    noteCard.classList.toggle('is-open', open);
+  }
+  noteToggle.addEventListener('change', () => setNoteOpen(noteToggle.checked));
+  if (noteInput && noteInput.value.trim()) setNoteOpen(true);
 
   function getOvertimeHours() {
     if (!otCheckbox.checked || !otStart.value || !otEnd.value) return 0;
-    const a = minutes(otStart.value);
-    let b = minutes(otEnd.value);
-    if (a === null || b === null) return 0;
-    if (b <= a) b += 1440;
-    return Math.max(0, (b - a) / 60);
-  }
-
-  // محاسبه خلاصه زنده کارکرد
-  function updateSummary() {
-    const shift = document.getElementById('id_shift');
-    let standardHours = Number('{{ standard_hours|default:"6.0" }}');
-    let support = 0;
-
-    const selected = shift.options[shift.selectedIndex];
-    if (selected && selected.textContent) {
-      const match = selected.textContent.match(/(\d{1,2}):?(\d{2})?\s*تا\s*(\d{1,2}):?(\d{2})?/);
-      if (match) {
-        let a = Number(match[1]) * 60 + Number(match[2] || 0);
-        let b = Number(match[3]) * 60 + Number(match[4] || 0);
-        if (b <= a) b += 1440;
-        standardHours = (b - a) / 60;
-      }
-    }
-
-    document.querySelectorAll('.interval-card').forEach(card => {
-      if (card.style.display === 'none') return;
-      const times = card.querySelectorAll('input[type="time"]');
-      const a = minutes(times[0]?.value);
-      let b = minutes(times[1]?.value);
-      if (a !== null && b !== null) {
-        if (b <= a) b += 1440;
-        support += (b - a) / 60;
-      }
-    });
-
-    const overtimeHours = getOvertimeHours();
-    if (otCheckbox.checked && overtimeHours > 0) {
-      otBadge.style.display = 'inline-block';
-      otBadge.textContent = `⚡ ${overtimeHours.toFixed(1)} ساعت اضافه‌کاری`;
-    } else {
-      otBadge.style.display = 'none';
-    }
-
-    const mainHours = Math.max(0, standardHours - support);
-    const totalHours = mainHours + support + overtimeHours;
-    const name = mainDept.options[mainDept.selectedIndex]?.text || 'لاین اصلی';
-
-    document.getElementById('summary-total').textContent = `مجموع کارکرد: ${totalHours.toFixed(1)} ساعت`;
-    document.getElementById('summary-breakdown').textContent = 
-      `${name}: ${mainHours.toFixed(1)} ساعت · کمکی: ${support.toFixed(1)} ساعت · اضافه‌کاری: ${overtimeHours.toFixed(1)} ساعت`;
-
-    document.getElementById('id_has_support_line').checked = (support > 0);
+    const start = minutes(otStart.value);
+    let end = minutes(otEnd.value);
+    if (start === null || end === null) return 0;
+    if (end <= start) end += 1440;
+    return Math.max(0, (end - start) / 60);
   }
 
   const lineActivitiesByDept = JSON.parse(document.getElementById('line-activities-data').textContent);
   const activityValues = JSON.parse(document.getElementById('activity-values-data').textContent);
-  const activitiesWrap = document.getElementById('line-activities-wrap');
+  const activitiesSection = document.getElementById('line-activities-wrap');
   const activitiesFields = document.getElementById('line-activities-fields');
+  const activityLabel = document.getElementById('activity-section-label');
+  const activityHint = document.getElementById('activity-section-hint');
 
   function renderLineActivities() {
     const deptId = String(mainDept.value || '');
     const defs = lineActivitiesByDept[deptId] || [];
-    if (activitiesFields) activitiesFields.innerHTML = '';
-    const hasActivities = defs.length > 0;
-    if (activitiesWrap) activitiesWrap.style.display = hasActivities ? 'block' : 'none';
+    const lineName = mainDept.options[mainDept.selectedIndex]?.text || '';
+    activitiesFields.innerHTML = '';
+    if (!defs.length) {
+      activitiesSection.hidden = true;
+      return;
+    }
+    activitiesSection.hidden = false;
+    activityLabel.textContent = lineName ? `کارهای ${lineName}` : 'چه کاری انجام دادی؟';
+    activityHint.textContent = 'تیک بزن یا تعداد را بنویس.';
     defs.forEach(def => {
-      const wrap = document.createElement('div');
-      wrap.className = 'field';
-      wrap.style.marginBottom = '0';
+      const row = document.createElement('div');
+      row.className = 'activity-row';
       const val = activityValues[String(def.id)] ?? '';
       if (def.count_method === 'CHECKMARK') {
         const checked = Number(val) > 0 ? 'checked' : '';
-        wrap.innerHTML = `
-          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-weight:600;font-size:13.5px;padding:10px 12px;background:#fff;border-radius:10px;border:1px solid #bfdbfe;">
-            <input type="checkbox" name="activity_${def.id}" value="1" ${checked} style="margin-top:3px;width:18px;height:18px;">
-            <span>${def.title}<small style="display:block;color:var(--muted);font-weight:500;margin-top:4px;">انجام دادم · ×${def.unit_multiplier} واحد عملکرد</small></span>
+        row.innerHTML = `
+          <label class="activity-check">
+            <input type="checkbox" name="activity_${def.id}" value="1" ${checked}>
+            <span><b>${def.title}</b><small>انجام دادم</small></span>
           </label>
         `;
       } else {
-        wrap.innerHTML = `
-          <label style="font-weight:600;font-size:13px;display:block;margin-bottom:6px;">
-            ${def.title} <small style="color:var(--muted);font-weight:500;">(${def.unit_label} · ×${def.unit_multiplier})</small>
-          </label>
-          <input type="number" min="0" step="1" name="activity_${def.id}" value="${val}" inputmode="numeric" placeholder="۰">
+        row.innerHTML = `
+          <label for="activity-input-${def.id}">${def.title}</label>
+          <input id="activity-input-${def.id}" type="number" min="0" step="1" name="activity_${def.id}" value="${val}" inputmode="numeric" placeholder="۰">
         `;
       }
-      activitiesFields.appendChild(wrap);
+      activitiesFields.appendChild(row);
     });
   }
 
-  function refreshLineActivities() {
-    renderLineActivities();
+  activitiesFields.addEventListener('input', updateSummary);
+  activitiesFields.addEventListener('change', updateSummary);
+
+  function filledActivityCount() {
+    let count = 0;
+    activitiesFields.querySelectorAll('input[type="checkbox"]').forEach(el => { if (el.checked) count += 1; });
+    activitiesFields.querySelectorAll('input[type="number"]').forEach(el => { if (Number(el.value) > 0) count += 1; });
+    return count;
   }
 
-  document.getElementById('id_shift').addEventListener('change', updateSummary);
+  function updateSummary() {
+    let standardHours = Number('{{ standard_hours|default:"6.0" }}');
+    let support = 0;
+    const selectedShift = shift.options[shift.selectedIndex];
+    if (selectedShift && selectedShift.textContent) {
+      const match = selectedShift.textContent.match(/(\d{1,2}):?(\d{2})?\s*تا\s*(\d{1,2}):?(\d{2})?/);
+      if (match) {
+        let start = Number(match[1]) * 60 + Number(match[2] || 0);
+        let end = Number(match[3]) * 60 + Number(match[4] || 0);
+        if (end <= start) end += 1440;
+        standardHours = (end - start) / 60;
+      }
+    }
+
+    if (supportToggle.checked) {
+      document.querySelectorAll('.interval-card').forEach(card => {
+        if (card.style.display === 'none') return;
+        const times = card.querySelectorAll('input[type="time"]');
+        const start = minutes(times[0]?.value);
+        let end = minutes(times[1]?.value);
+        if (start !== null && end !== null) {
+          if (end <= start) end += 1440;
+          support += (end - start) / 60;
+        }
+      });
+    }
+
+    const overtimeHours = getOvertimeHours();
+    if (otCheckbox.checked && overtimeHours > 0) {
+      otBadge.textContent = `${overtimeHours.toFixed(1)} ساعت اضافه‌کاری`;
+    } else {
+      otBadge.textContent = 'ساعت اضافه‌کاری جدا از شیفت اصلی ثبت می‌شود.';
+    }
+
+    const mainHours = Math.max(0, standardHours - support);
+    const totalHours = mainHours + support + overtimeHours;
+    const lineName = mainDept.options[mainDept.selectedIndex]?.text || 'لاین انتخاب نشده';
+    const shiftName = (selectedShift?.text || 'شیفت').split('(')[0].trim();
+    const dateText = dateInput.value?.trim() || 'بدون تاریخ';
+    const done = filledActivityCount();
+    const activityDefs = lineActivitiesByDept[String(mainDept.value || '')] || [];
+
+    document.getElementById('summary-total').textContent = `${dateText} · ${shiftName} · ${lineName}`;
+    const bits = [`${totalHours.toFixed(1)} ساعت حضور`];
+    if (activityDefs.length) bits.unshift(done ? `${done} فعالیت ثبت شد` : 'فعالیتی ثبت نشده');
+    document.getElementById('summary-breakdown').textContent = bits.join(' · ');
+    document.getElementById('id_has_support_line').checked = supportToggle.checked && support > 0;
+  }
+
+  form.addEventListener('submit', () => {
+    if (!supportToggle.checked) {
+      document.querySelectorAll('.interval-card').forEach(card => {
+        const del = card.querySelector('input[name$="-DELETE"]');
+        const existingId = card.querySelector('input[name$="-id"]')?.value;
+        if (del && existingId) del.checked = true;
+        else if (!existingId) card.remove();
+      });
+    }
+    if (!noteToggle.checked && noteInput) noteInput.value = '';
+  });
+
+  shift.addEventListener('change', updateSummary);
   mainDept.addEventListener('change', () => {
     if (otCheckbox.checked && (!otDept.value || otDept.value === mainDept.dataset.lastMain)) {
       otDept.value = mainDept.value;
     }
     mainDept.dataset.lastMain = mainDept.value;
-    refreshLineActivities();
+    renderLineActivities();
     updateSummary();
   });
 
-  refreshLineActivities();
+  renderLineActivities();
   updateSummary();
 });
 </script>

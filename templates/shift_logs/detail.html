@@ -97,7 +97,7 @@
     <div><span>لاین اصلی</span><b>{{ log.main_department.name }}</b></div>
     {% if calc.main_info.activity_details %}
     {% for act in calc.main_info.activity_details %}
-    <div><span>{{ act.title }}</span><b>{% if act.count_method == 'CHECKMARK' %}{% if act.quantity %}✓ انجام شد{% else %}—{% endif %} → {{ act.performance_units }} واحد عملکرد{% else %}{{ act.quantity|persian_digits }} {{ act.unit_label }} → {{ act.performance_units }} واحد عملکرد{% endif %}</b></div>
+    <div><span>{{ act.title }}</span><b>{% if act.count_method == 'CHECKMARK' %}{% if act.quantity %}✓ انجام شد{% else %}—{% endif %} → {{ act.performance_units }} واحد عملکرد{% else %}{{ act.quantity|persian_digits }} → {{ act.performance_units }} واحد عملکرد{% endif %}</b></div>
     {% endfor %}
     {% endif %}
     <div><span>ساعت در لاین اصلی</span><b>{{ log.main_hours }} ساعت</b></div>
