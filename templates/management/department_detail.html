@@ -75,9 +75,9 @@
                 <thead>
                     <tr>
                         <th>نام فعالیت</th>
-                        <th>واحد شمارش</th>
+                        <th>نوع ورود</th>
+                        <th class="activity-unit-col">برچسب واحد</th>
                         <th>ضریب → واحد عملکرد</th>
-                        <th>ثبت در کارکرد</th>
                         <th>ترتیب</th>
                         <th>فعال</th>
                         <th>حذف</th>
@@ -87,15 +87,22 @@
                     {% for act in line_activities %}
                     <tr>
                         <td><input type="text" name="activity_title_{{ act.pk }}" value="{{ act.title }}" style="width:100%;min-width:140px;"></td>
-                        <td><input type="text" name="activity_unit_{{ act.pk }}" value="{{ act.unit_label }}" style="width:90px;"></td>
+                        <td>
+                            <select name="activity_count_method_{{ act.pk }}" class="activity-count-method-select" style="min-width:88px;">
+                                <option value="QUANTITY" {% if act.count_method != 'CHECKMARK' %}selected{% endif %}>عدد</option>
+                                <option value="CHECKMARK" {% if act.count_method == 'CHECKMARK' %}selected{% endif %}>تیک</option>
+                            </select>
+                        </td>
+                        <td class="activity-unit-col">
+                            <input type="text" name="activity_unit_{{ act.pk }}" class="activity-unit-input" value="{% if act.count_method == 'CHECKMARK' %}{% else %}{{ act.unit_label }}{% endif %}" placeholder="مثلاً بار، فاکتور" style="width:110px;" {% if act.count_method == 'CHECKMARK' %}disabled{% endif %}>
+                        </td>
                         <td><input type="number" step="0.01" min="0.01" name="activity_multiplier_{{ act.pk }}" value="{{ act.unit_multiplier }}" style="width:100px;"></td>
-                        <td style="text-align:center;" title="کارمند فقط تیک می‌زند که انجام داده (بدون عدد)"><label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;"><input type="checkbox" name="activity_checkmark_{{ act.pk }}" {% if act.count_method == 'CHECKMARK' %}checked{% endif %}> تیک</label></td>
                         <td><input type="number" min="0" name="activity_sort_{{ act.pk }}" value="{{ act.sort_order }}" style="width:70px;"></td>
                         <td style="text-align:center;"><input type="checkbox" name="activity_active_{{ act.pk }}" {% if act.is_active %}checked{% endif %}></td>
                         <td style="text-align:center;"><input type="checkbox" name="delete_activity_{{ act.pk }}" title="حذف این فعالیت"></td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="7" class="empty">هنوز فعالیتی برای این لاین تعریف نشده. مثال صندوق: «فاکتور صادرشده» با ضریب ۱ · مثال انبار: «بار ورودی» با ضریب ۱۰ · برای کارهای روزانه: تیک «انجام دادم»</td></tr>
+                    <tr><td colspan="7" class="empty">هنوز فعالیتی تعریف نشده. نوع «عدد» برای شمارش (مثلاً فاکتور ×۱) · نوع «تیک» وقتی فقط انجام/عدم‌انجام مهم است.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -104,14 +111,33 @@
             <strong style="font-size:13px;">➕ فعالیت جدید</strong>
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-top:10px;">
                 <input type="text" name="new_activity_title" placeholder="نام فعالیت">
-                <input type="text" name="new_activity_unit" placeholder="واحد (مثلاً بار)" value="عدد">
+                <select name="new_activity_count_method" id="new-activity-count-method" style="min-width:88px;">
+                    <option value="QUANTITY" selected>عدد</option>
+                    <option value="CHECKMARK">تیک</option>
+                </select>
+                <input type="text" name="new_activity_unit" id="new-activity-unit" placeholder="برچسب واحد (برای عدد)" style="min-width:140px;">
                 <input type="number" step="0.01" min="0.01" name="new_activity_multiplier" placeholder="ضریب (مثلاً ۱۰)">
                 <input type="number" min="0" name="new_activity_sort" placeholder="ترتیب" value="0">
-                <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;padding:8px 0;"><input type="checkbox" name="new_activity_checkmark"> فقط تیک (بدون عدد)</label>
             </div>
         </div>
         <button class="primary" type="submit" style="margin-top:14px;">💾 ذخیره فعالیت‌ها</button>
     </form>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        function syncUnitField(selectEl) {
+            const row = selectEl.closest('tr') || selectEl.closest('div');
+            const unitInput = row ? row.querySelector('.activity-unit-input, #new-activity-unit') : document.getElementById('new-activity-unit');
+            if (!unitInput) return;
+            const isTick = selectEl.value === 'CHECKMARK';
+            unitInput.disabled = isTick;
+            if (isTick) unitInput.value = '';
+        }
+        document.querySelectorAll('.activity-count-method-select, #new-activity-count-method').forEach(sel => {
+            syncUnitField(sel);
+            sel.addEventListener('change', () => syncUnitField(sel));
+        });
+    });
+    </script>
 </article>
 <article class="card control-section" id="targets"><div class="card-head"><div><h2>تارگت‌های لاین</h2><p>سه سطح موجود برنزی، نقره‌ای و طلایی</p></div></div><form method="post">{% csrf_token %}<input type="hidden" name="section" value="target"><div class="target-level-grid"><fieldset><legend>🥉 برنزی</legend><label>تعداد کالا<input type="number" min="1" name="bronze_units" value="{{ target.bronze_units }}"></label><label>پاداش (ریال)<input type="number" min="0" name="bronze_reward" value="{{ target.bronze_reward }}"></label></fieldset><fieldset><legend>🥈 نقره‌ای</legend><label>تعداد کالا<input type="number" min="1" name="silver_units" value="{{ target.silver_units }}"></label><label>پاداش (ریال)<input type="number" min="0" name="silver_reward" value="{{ target.silver_reward }}"></label></fieldset><fieldset><legend>🥇 طلایی</legend><label>تعداد کالا<input type="number" min="1" name="gold_units" value="{{ target.gold_units }}"></label><label>پاداش (ریال)<input type="number" min="0" name="gold_reward" value="{{ target.gold_reward }}"></label></fieldset></div><label class="toggle-row"><input type="checkbox" name="is_active" {% if target.is_active %}checked{% endif %}><span><b>تارگت فعال باشد</b><small>در خلاصه عملکرد و محاسبات فعلی نمایش داده می‌شود.</small></span></label><button class="primary" type="submit">ذخیره تارگت‌ها</button></form></article>
 <article class="card control-section" id="violations"><div class="card-head"><div><h2>قوانین تخلف مرتبط</h2><p>قوانین سراسری یا اختصاص‌یافته به این لاین؛ فرمول مالی جدیدی اعمال نشده است.</p></div><a class="secondary" href="{% url 'management_violation_rules' %}">مدیریت قوانین</a></div><div class="rule-chips">{% for rule in rules %}<a href="{% url 'management_violation_rule_edit' rule.pk %}"><b>{{ rule.title }}</b><small>{{ rule.first_points }} / {{ rule.second_points }} / {{ rule.third_points }} امتیاز · {{ rule.get_recurrence_window_display }}</small></a>{% empty %}<p class="empty">قانون مرتبطی تعریف نشده است.</p>{% endfor %}</div></article>

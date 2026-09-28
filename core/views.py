@@ -1487,24 +1487,28 @@ def management_department_detail(request, pk):
                             activity.delete()
                             continue
                         title = request.POST.get(f"activity_title_{activity.pk}", "").strip()
-                        unit_label = request.POST.get(f"activity_unit_{activity.pk}", "عدد").strip() or "عدد"
+                        count_method = request.POST.get(
+                            f"activity_count_method_{activity.pk}",
+                            LineActivityType.CountMethod.QUANTITY,
+                        )
+                        unit_label = request.POST.get(f"activity_unit_{activity.pk}", "").strip()
                         multiplier_raw = request.POST.get(f"activity_multiplier_{activity.pk}", "").strip()
                         sort_raw = request.POST.get(f"activity_sort_{activity.pk}", "0").strip()
                         is_active = request.POST.get(f"activity_active_{activity.pk}") == "on"
-                        is_checkmark = request.POST.get(f"activity_checkmark_{activity.pk}") == "on"
+                        if count_method not in LineActivityType.CountMethod.values:
+                            count_method = LineActivityType.CountMethod.QUANTITY
                         if not title:
                             raise ValueError(f"نام فعالیت «{activity.title}» نمی‌تواند خالی باشد.")
                         multiplier = Decimal(multiplier_raw)
                         if multiplier <= 0:
                             raise ValueError(f"ضریب فعالیت «{title}» باید بزرگ‌تر از صفر باشد.")
                         activity.title = title
-                        activity.unit_label = unit_label if not is_checkmark else (unit_label or "انجام")
+                        activity.count_method = count_method
+                        if count_method == LineActivityType.CountMethod.CHECKMARK:
+                            activity.unit_label = "انجام"
+                        else:
+                            activity.unit_label = unit_label or "عدد"
                         activity.unit_multiplier = multiplier
-                        activity.count_method = (
-                            LineActivityType.CountMethod.CHECKMARK
-                            if is_checkmark
-                            else LineActivityType.CountMethod.QUANTITY
-                        )
                         activity.sort_order = int(sort_raw or 0)
                         activity.is_active = is_active
                         activity.save()
@@ -1517,21 +1521,23 @@ def management_department_detail(request, pk):
                         new_multiplier = Decimal(new_multiplier_raw)
                         if new_multiplier <= 0:
                             raise ValueError("ضریب فعالیت جدید باید بزرگ‌تر از صفر باشد.")
-                        new_checkmark = request.POST.get("new_activity_checkmark") == "on"
+                        new_count_method = request.POST.get(
+                            "new_activity_count_method",
+                            LineActivityType.CountMethod.QUANTITY,
+                        )
+                        if new_count_method not in LineActivityType.CountMethod.values:
+                            new_count_method = LineActivityType.CountMethod.QUANTITY
+                        new_unit = request.POST.get("new_activity_unit", "").strip()
                         LineActivityType.objects.create(
                             department=department,
                             title=new_title,
                             unit_label=(
                                 "انجام"
-                                if new_checkmark
-                                else (request.POST.get("new_activity_unit", "عدد").strip() or "عدد")
+                                if new_count_method == LineActivityType.CountMethod.CHECKMARK
+                                else (new_unit or "عدد")
                             ),
                             unit_multiplier=new_multiplier,
-                            count_method=(
-                                LineActivityType.CountMethod.CHECKMARK
-                                if new_checkmark
-                                else LineActivityType.CountMethod.QUANTITY
-                            ),
+                            count_method=new_count_method,
                             sort_order=int(request.POST.get("new_activity_sort", "0") or 0),
                             is_active=True,
                         )
