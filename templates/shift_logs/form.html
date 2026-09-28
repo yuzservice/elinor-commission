@@ -45,7 +45,14 @@
       </div>
     </div>
 
-    <!-- فیلد اختصاصی لاین صندوقدار -->
+    <!-- فعالیت‌های عملیاتی لاین (انبار، صندوق با تعریف فعالیت و ...) -->
+    <div id="line-activities-wrap" style="display:none;margin-top:16px;background:#eff6ff;border:1.5px solid #93c5fd;border-radius:14px;padding:16px;">
+      <label class="section-title" style="display:block;margin-bottom:8px;">📋 فعالیت‌های این لاین</label>
+      <small style="color:#1d4ed8;display:block;margin-bottom:12px;line-height:1.6;">تعداد هر فعالیت را وارد کن. واحد عملکرد = تعداد × ضریب فعالیت · پورسانت = جمع واحدها × نرخ گرید شما.</small>
+      <div id="line-activities-fields" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;"></div>
+    </div>
+
+    <!-- فیلد اختصاصی لاین صندوقدار (فقط وقتی فعالیت تعریف نشده) -->
     <div id="cashier-invoices-wrap" style="display:none;margin-top:16px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:14px;padding:16px;">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
         <div>
@@ -160,6 +167,8 @@
   </div>
 </form>
 </article>
+{{ line_activities_by_department|json_script:"line-activities-data" }}
+{{ activity_values|json_script:"activity-values-data" }}
 
 <style>
 .shift-section{margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid var(--line)}
@@ -344,20 +353,44 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const cashierDeptIds = {{ cashier_department_ids|default:"[]" }};
+  const lineActivitiesByDept = JSON.parse(document.getElementById('line-activities-data').textContent);
+  const activityValues = JSON.parse(document.getElementById('activity-values-data').textContent);
   const cashierWrap = document.getElementById('cashier-invoices-wrap');
+  const activitiesWrap = document.getElementById('line-activities-wrap');
+  const activitiesFields = document.getElementById('line-activities-fields');
   const invoiceInput = document.getElementById('id_invoice_count');
 
-  function checkCashier() {
-    const val = Number(mainDept.value);
-    const isCashier = cashierDeptIds.includes(val);
+  function renderLineActivities() {
+    const deptId = String(mainDept.value || '');
+    const defs = lineActivitiesByDept[deptId] || [];
+    if (activitiesFields) activitiesFields.innerHTML = '';
+    const hasActivities = defs.length > 0;
+    if (activitiesWrap) activitiesWrap.style.display = hasActivities ? 'block' : 'none';
+    defs.forEach(def => {
+      const wrap = document.createElement('div');
+      wrap.className = 'field';
+      wrap.style.marginBottom = '0';
+      const val = activityValues[String(def.id)] ?? '';
+      wrap.innerHTML = `
+        <label style="font-weight:600;font-size:13px;display:block;margin-bottom:6px;">
+          ${def.title} <small style="color:var(--muted);font-weight:500;">(${def.unit_label} · ×${def.unit_multiplier})</small>
+        </label>
+        <input type="number" min="0" step="1" name="activity_${def.id}" value="${val}" inputmode="numeric" placeholder="۰">
+      `;
+      activitiesFields.appendChild(wrap);
+    });
+    const isCashier = cashierDeptIds.includes(Number(deptId));
     if (cashierWrap) {
-      cashierWrap.style.display = isCashier ? 'block' : 'none';
-      if (invoiceInput && isCashier) {
-        invoiceInput.required = true;
-      } else if (invoiceInput) {
-        invoiceInput.required = false;
-      }
+      cashierWrap.style.display = (isCashier && !hasActivities) ? 'block' : 'none';
     }
+    if (invoiceInput) {
+      invoiceInput.required = isCashier && !hasActivities;
+      if (hasActivities) invoiceInput.value = '';
+    }
+  }
+
+  function checkCashier() {
+    renderLineActivities();
   }
 
   document.getElementById('id_shift').addEventListener('change', updateSummary);

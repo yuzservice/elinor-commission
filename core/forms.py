@@ -180,7 +180,15 @@ class DailyShiftLogForm(forms.ModelForm):
         main_dept = cleaned_data.get("main_department")
         inv_count = cleaned_data.get("invoice_count")
 
-        if main_dept and getattr(main_dept, "is_cashier", False):
+        from .models import LineActivityType
+
+        has_line_activities = (
+            main_dept
+            and LineActivityType.objects.filter(department=main_dept, is_active=True).exists()
+        )
+        if has_line_activities:
+            cleaned_data["invoice_count"] = None
+        elif main_dept and getattr(main_dept, "is_cashier", False):
             if inv_count is None:
                 raise ValidationError({"invoice_count": "برای لاین صندوقدار، وارد کردن تعداد فاکتورهای صادرشده الزامی است."})
         else:

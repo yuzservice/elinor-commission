@@ -12,8 +12,10 @@ from .models import (
     Department,
     Employee,
     EmployeeLevelHistory,
+    LineActivityType,
     LineCommissionRate,
     LineShiftPerformance,
+    ShiftLogActivityEntry,
     LineTarget,
     Shift,
     SupportLineInterval,
@@ -928,6 +930,52 @@ class LineCommissionEngineTests(BaseEmployeeTest):
         self.assertEqual(metrics["line_target_result"]["achieved_title"], "تارگت برنزی 🥉")
         self.assertEqual(metrics["line_target_result"]["next_target_title"], "تارگت نقره‌ای 🥈")
         self.assertEqual(metrics["commission"], 5060000)
+
+    def test_line_activity_units_multiply_and_use_line_rate(self):
+        warehouse = Department.objects.create(name="انبار")
+        LineCommissionRate.objects.create(
+            department=warehouse,
+            commission_level=self.level_a,
+            rate_per_unit=1000,
+        )
+        inbound = LineActivityType.objects.create(
+            department=warehouse,
+            title="بار ورودی",
+            unit_label="بار",
+            unit_multiplier=Decimal("10.0"),
+        )
+        returns = LineActivityType.objects.create(
+            department=warehouse,
+            title="بازگشتی باز شده",
+            unit_multiplier=Decimal("2.0"),
+        )
+        self.employee.primary_department = warehouse
+        self.employee.save(update_fields=["primary_department"])
+
+        log = DailyShiftLog.objects.create(
+            employee=self.employee,
+            date=date(2026, 9, 1),
+            shift=self.shift_morning,
+            main_department=warehouse,
+            main_hours=Decimal("6.0"),
+        )
+        ShiftLogActivityEntry.objects.create(
+            shift_log=log,
+            activity_type=inbound,
+            quantity=3,
+            unit_multiplier_snapshot=inbound.unit_multiplier,
+        )
+        ShiftLogActivityEntry.objects.create(
+            shift_log=log,
+            activity_type=returns,
+            quantity=5,
+            unit_multiplier_snapshot=returns.unit_multiplier,
+        )
+
+        calc = calculate_single_shift_log(log)
+        self.assertTrue(calc["main_info"]["is_activity_based"])
+        self.assertEqual(calc["main_info"]["share_units"], Decimal("40.0"))
+        self.assertEqual(calc["total_commission"], 40000)
 
 class CommissionTests(BaseEmployeeTest):
     def test_violation_is_deduction(self):

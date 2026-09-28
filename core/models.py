@@ -499,6 +499,78 @@ class LineCommissionRate(models.Model):
     def __str__(self):
         return f"{self.department.name} - گرید {self.commission_level.code}: {self.rate_per_unit}"
 
+
+class LineActivityType(models.Model):
+    """تعریف فعالیت‌های عملیاتی لاین (انبار، صندوق و ...) با ضریب تبدیل به واحد عملکرد."""
+
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.CASCADE,
+        related_name="line_activity_types",
+        verbose_name="لاین / بخش",
+    )
+    title = models.CharField("نام فعالیت", max_length=120)
+    unit_label = models.CharField("واحد شمارش", max_length=50, default="عدد")
+    unit_multiplier = models.DecimalField(
+        "ضریب تبدیل به واحد عملکرد",
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("1.0"),
+        validators=[MinValueValidator(Decimal("0.01"))],
+        help_text="مثلاً ۱۰ یعنی هر واحد شمارش = ۱۰ واحد عملکرد در پورسانت",
+    )
+    sort_order = models.PositiveIntegerField("ترتیب", default=0)
+    is_active = models.BooleanField("فعال", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sort_order", "title", "pk"]
+        verbose_name = "نوع فعالیت لاین"
+        verbose_name_plural = "انواع فعالیت لاین"
+        unique_together = [("department", "title")]
+
+    def __str__(self):
+        return f"{self.department.name} · {self.title}"
+
+
+class ShiftLogActivityEntry(models.Model):
+    shift_log = models.ForeignKey(
+        DailyShiftLog,
+        on_delete=models.CASCADE,
+        related_name="activity_entries",
+        verbose_name="کارکرد شیفت",
+    )
+    activity_type = models.ForeignKey(
+        LineActivityType,
+        on_delete=models.PROTECT,
+        related_name="shift_entries",
+        verbose_name="نوع فعالیت",
+    )
+    quantity = models.PositiveIntegerField("تعداد / مقدار", default=0)
+    unit_multiplier_snapshot = models.DecimalField(
+        "ضریب لحظه ثبت",
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("1.0"),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["activity_type__sort_order", "activity_type__title", "pk"]
+        verbose_name = "ثبت فعالیت در کارکرد"
+        verbose_name_plural = "ثبت‌های فعالیت در کارکرد"
+        unique_together = [("shift_log", "activity_type")]
+
+    @property
+    def performance_units(self):
+        return Decimal(self.quantity) * Decimal(self.unit_multiplier_snapshot or self.activity_type.unit_multiplier)
+
+    def __str__(self):
+        return f"{self.shift_log_id} · {self.activity_type.title}: {self.quantity}"
+
+
 class LineTarget(models.Model):
     department = models.OneToOneField(
         Department,

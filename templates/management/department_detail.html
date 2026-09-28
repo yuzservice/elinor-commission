@@ -1,6 +1,6 @@
 {% extends 'base.html' %}{% block title %}مرکز کنترل {{ department.name }}{% endblock %}{% block content %}
 <div class="admin-page-head"><div><span class="admin-kicker">مرکز کنترل لاین</span><h1>{{ department.name }}</h1><p>تنظیمات و عملکرد این لاین در یک نمای یکپارچه</p></div><div class="head-actions"><a class="secondary" href="{% url 'management_departments' %}">بازگشت به لاین‌ها</a><a class="secondary" href="{% url 'management_department_edit' department.pk %}">ویرایش اطلاعات پایه</a></div></div>
-<nav class="control-tabs"><a href="#overview">خلاصه عملکرد</a><a href="#base">اطلاعات پایه</a><a href="#rates">ضرایب پورسانت</a><a href="#targets">تارگت‌ها</a><a href="#violations">قوانین تخلف</a><a href="#history">تاریخچه</a></nav>
+<nav class="control-tabs"><a href="#overview">خلاصه عملکرد</a><a href="#base">اطلاعات پایه</a><a href="#rates">ضرایب پورسانت</a><a href="#activities">فعالیت‌ها</a><a href="#targets">تارگت‌ها</a><a href="#violations">قوانین تخلف</a><a href="#history">تاریخچه</a></nav>
 <section id="overview" class="admin-stat-grid"><article><span class="stat-icon green">▦</span><div><small>وضعیت لاین</small><strong>{% if department.is_active %}فعال{% else %}غیرفعال{% endif %}</strong></div></article><article><span class="stat-icon blue">↗</span><div><small>فروش ماه جاری</small><strong>{{ performance_units }}</strong><span>کالا</span></div></article><article><span class="stat-icon gold">◎</span><div><small>پیشرفت تارگت بعدی</small><strong>{% if target_result %}{{ target_result.progress_percent }}٪{% else %}—{% endif %}</strong></div></article><article><span class="stat-icon rose">⚠</span><div><small>قوانین تخلف مرتبط</small><strong>{{ rules|length }}</strong><span>قانون</span></div></article></section>
 <article class="card control-section" id="base"><div class="card-head"><h2>اطلاعات پایه لاین</h2></div><div class="detail-pairs"><div><small>نام لاین</small><b>{{ department.name }}</b></div><div><small>نوع لاین</small><b>{% if department.is_cashier %}🧾 صندوقدار (ثبت مستقیم فاکتور){% else %}استاندارد (تسهیم شیفتی){% endif %}</b></div><div><small>وضعیت</small><b>{% if department.is_active %}فعال{% else %}غیرفعال{% endif %}</b></div><div><small>پرسنل اصلی</small><b>{{ department.primary_employees.count }} نفر</b></div></div></article>
 <article class="card control-section" id="rates">
@@ -58,6 +58,56 @@
         <div style="margin-top: 18px;">
             <button class="primary" type="submit" style="padding: 10px 24px; font-weight: 700;">💾 ذخیره ضرایب لاین</button>
         </div>
+    </form>
+</article>
+<article class="card control-section" id="activities">
+    <div class="card-head">
+        <div>
+            <h2>فعالیت‌های عملیاتی لاین</h2>
+            <p>برای انبار، صندوق و هر لاینی که پورسانت بر اساس «تعداد × ضریب» محاسبه می‌شود. واحد نهایی × نرخ گرید (بخش ضرایب بالا) = ریال پورسانت.</p>
+        </div>
+    </div>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="section" value="activities">
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>نام فعالیت</th>
+                        <th>واحد شمارش</th>
+                        <th>ضریب → واحد عملکرد</th>
+                        <th>ترتیب</th>
+                        <th>فعال</th>
+                        <th>حذف</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for act in line_activities %}
+                    <tr>
+                        <td><input type="text" name="activity_title_{{ act.pk }}" value="{{ act.title }}" style="width:100%;min-width:140px;"></td>
+                        <td><input type="text" name="activity_unit_{{ act.pk }}" value="{{ act.unit_label }}" style="width:90px;"></td>
+                        <td><input type="number" step="0.01" min="0.01" name="activity_multiplier_{{ act.pk }}" value="{{ act.unit_multiplier }}" style="width:100px;"></td>
+                        <td><input type="number" min="0" name="activity_sort_{{ act.pk }}" value="{{ act.sort_order }}" style="width:70px;"></td>
+                        <td style="text-align:center;"><input type="checkbox" name="activity_active_{{ act.pk }}" {% if act.is_active %}checked{% endif %}></td>
+                        <td style="text-align:center;"><input type="checkbox" name="delete_activity_{{ act.pk }}" title="حذف این فعالیت"></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="empty">هنوز فعالیتی برای این لاین تعریف نشده. مثال صندوق: «فاکتور صادرشده» با ضریب ۱ · مثال انبار: «بار ورودی» با ضریب ۱۰</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div style="margin-top:16px;padding:14px;border-radius:12px;border:1.5px dashed var(--line);background:var(--bg,#f8faf9);">
+            <strong style="font-size:13px;">➕ فعالیت جدید</strong>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-top:10px;">
+                <input type="text" name="new_activity_title" placeholder="نام فعالیت">
+                <input type="text" name="new_activity_unit" placeholder="واحد (مثلاً بار)" value="عدد">
+                <input type="number" step="0.01" min="0.01" name="new_activity_multiplier" placeholder="ضریب (مثلاً ۱۰)">
+                <input type="number" min="0" name="new_activity_sort" placeholder="ترتیب" value="0">
+            </div>
+        </div>
+        <button class="primary" type="submit" style="margin-top:14px;">💾 ذخیره فعالیت‌ها</button>
     </form>
 </article>
 <article class="card control-section" id="targets"><div class="card-head"><div><h2>تارگت‌های لاین</h2><p>سه سطح موجود برنزی، نقره‌ای و طلایی</p></div></div><form method="post">{% csrf_token %}<input type="hidden" name="section" value="target"><div class="target-level-grid"><fieldset><legend>🥉 برنزی</legend><label>تعداد کالا<input type="number" min="1" name="bronze_units" value="{{ target.bronze_units }}"></label><label>پاداش (ریال)<input type="number" min="0" name="bronze_reward" value="{{ target.bronze_reward }}"></label></fieldset><fieldset><legend>🥈 نقره‌ای</legend><label>تعداد کالا<input type="number" min="1" name="silver_units" value="{{ target.silver_units }}"></label><label>پاداش (ریال)<input type="number" min="0" name="silver_reward" value="{{ target.silver_reward }}"></label></fieldset><fieldset><legend>🥇 طلایی</legend><label>تعداد کالا<input type="number" min="1" name="gold_units" value="{{ target.gold_units }}"></label><label>پاداش (ریال)<input type="number" min="0" name="gold_reward" value="{{ target.gold_reward }}"></label></fieldset></div><label class="toggle-row"><input type="checkbox" name="is_active" {% if target.is_active %}checked{% endif %}><span><b>تارگت فعال باشد</b><small>در خلاصه عملکرد و محاسبات فعلی نمایش داده می‌شود.</small></span></label><button class="primary" type="submit">ذخیره تارگت‌ها</button></form></article>

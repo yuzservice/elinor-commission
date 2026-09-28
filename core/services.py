@@ -11,10 +11,12 @@ from .models import (
     Department,
     Employee,
     EmployeeLevelHistory,
+    LineActivityType,
     LineCommissionRate,
     LineShiftPerformance,
     LineTarget,
     Shift,
+    ShiftLogActivityEntry,
     Violation,
 )
 
@@ -82,6 +84,107 @@ def find_target_shift_for_overtime(overtime_start_time, current_shift):
         return next_shifts[0]
     other_shifts = [s for s in active_shifts if s.pk != current_shift.pk]
     return other_shifts[0] if other_shifts else None
+
+
+def department_has_line_activities(department):
+    if not department:
+        return False
+    return LineActivityType.objects.filter(department=department, is_active=True).exists()
+
+
+def activity_performance_for_shift_log(shift_log, department):
+    """جمع واحد عملکرد از فعالیت‌های ثبت‌شده روی کارکرد برای یک لاین."""
+    if not shift_log.pk or not department:
+        return Decimal("0.0"), []
+    details = []
+    total = Decimal("0.0")
+    entries = shift_log.activity_entries.filter(
+        activity_type__department=department,
+        activity_type__is_active=True,
+    ).select_related("activity_type")
+    for entry in entries:
+        multiplier = entry.unit_multiplier_snapshot or entry.activity_type.unit_multiplier
+        units = Decimal(entry.quantity) * Decimal(multiplier)
+        total += units
+        details.append({
+            "activity_type_id": entry.activity_type_id,
+            "title": entry.activity_type.title,
+            "unit_label": entry.activity_type.unit_label,
+            "quantity": entry.quantity,
+            "unit_multiplier": multiplier,
+            "performance_units": round(units, 2),
+        })
+    return total, details
+
+
+def save_shift_log_activity_entries(*, shift_log, post_data):
+    """ذخیره مقادیر فعالیت‌های لاین اصلی از POST کارکرد شیفت."""
+    department = shift_log.main_department
+    activity_types = list(
+        LineActivityType.objects.filter(department=department, is_active=True).order_by("sort_order", "title")
+    )
+    if not activity_types:
+        ShiftLogActivityEntry.objects.filter(shift_log=shift_log).delete()
+        return
+
+    any_positive = False
+    for activity_type in activity_types:
+        raw = (post_data.get(f"activity_{activity_type.pk}") or "").strip()
+        if raw == "":
+            quantity = 0
+        else:
+            try:
+                quantity = int(raw)
+            except (TypeError, ValueError) as exc:
+                raise ValidationError({f"activity_{activity_type.pk}": "مقدار فعالیت باید عدد صحیح باشد."}) from exc
+        if quantity < 0:
+            raise ValidationError({f"activity_{activity_type.pk}": "مقدار فعالیت نمی‌تواند منفی باشد."})
+        if quantity > 0:
+            any_positive = True
+        ShiftLogActivityEntry.objects.update_or_create(
+            shift_log=shift_log,
+            activity_type=activity_type,
+            defaults={
+                "quantity": quantity,
+                "unit_multiplier_snapshot": activity_type.unit_multiplier,
+            },
+        )
+
+    ShiftLogActivityEntry.objects.filter(shift_log=shift_log).exclude(
+        activity_type__in=activity_types
+    ).delete()
+
+    if not any_positive:
+        raise ValidationError("برای لاین انتخاب‌شده حداقل یک فعالیت با مقدار بیشتر از صفر ثبت کنید.")
+
+
+def serialize_main_info_snapshot(main_info):
+    if not main_info:
+        return None
+    activity_details = []
+    for row in main_info.get("activity_details") or []:
+        activity_details.append({
+            "activity_type_id": row.get("activity_type_id"),
+            "title": row.get("title"),
+            "unit_label": row.get("unit_label"),
+            "quantity": row.get("quantity"),
+            "unit_multiplier": float(row.get("unit_multiplier", 0)),
+            "performance_units": float(row.get("performance_units", 0)),
+        })
+    return {
+        "department_id": main_info["department"].pk,
+        "department_name": main_info["department"].name,
+        "hours": float(main_info["hours"]),
+        "total_dept_hours": float(main_info["total_dept_hours"]),
+        "total_sold_units": main_info["total_sold_units"],
+        "share_units": float(main_info["share_units"]),
+        "rate_per_unit": main_info["rate_per_unit"],
+        "commission": main_info["commission"],
+        "is_activity_based": main_info.get("is_activity_based", False),
+        "is_cashier": main_info.get("is_cashier", False),
+        "activity_details": activity_details,
+    }
+
 
 def calculate_single_shift_log(shift_log, force_dynamic=False):
     """محاسبه جزئیات سهم فروش و پورسانت یک رکورد کارکرد شیفت (پشتیبانی از فریز، چند لاین کمکی و اضافه‌کاری)."""
@@ -170,10 +273,34 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
         return dept_support_hours.get(dept.pk, Decimal("0.0"))
 
     def compute_line(dept, hours):
-        if not dept or hours <= 0:
+        if not dept:
             return None
 
-        # قانون لاین صندوقدار: محاسبه مستقیم بر اساس تعداد فاکتورهای صادرشده کارمند
+        activity_units, activity_details = activity_performance_for_shift_log(shift_log, dept)
+        if activity_units > Decimal("0.0"):
+            rate = get_line_rate(dept, level)
+            share_units = activity_units
+            commission = int(share_units * Decimal(rate))
+            return {
+                "department": dept,
+                "department_id": dept.pk,
+                "department_name": dept.name,
+                "is_activity_based": True,
+                "is_cashier": getattr(dept, "is_cashier", False),
+                "hours": round(hours, 2) if hours and hours > 0 else Decimal("0.0"),
+                "total_dept_hours": round(hours, 2) if hours and hours > 0 else Decimal("0.0"),
+                "total_sold_units": 0,
+                "activity_details": activity_details,
+                "share_units": round(share_units, 2),
+                "rate_per_unit": rate,
+                "commission": commission,
+                "has_performance_recorded": True,
+            }
+
+        if hours <= 0:
+            return None
+
+        # سازگاری با لاین صندوقدار بدون تعریف فعالیت: فیلد قدیمی تعداد فاکتور
         if getattr(dept, "is_cashier", False):
             inv_count = shift_log.invoice_count or 0
             share_units = Decimal(inv_count)
@@ -183,10 +310,12 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
                 "department": dept,
                 "department_id": dept.pk,
                 "department_name": dept.name,
+                "is_activity_based": False,
                 "is_cashier": True,
                 "hours": round(hours, 2),
                 "total_dept_hours": round(hours, 2),
                 "total_sold_units": inv_count,
+                "activity_details": [],
                 "share_units": round(share_units, 2),
                 "rate_per_unit": rate,
                 "commission": commission,
@@ -212,9 +341,12 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
             "department": dept,
             "department_id": dept.pk if dept else None,
             "department_name": dept.name if dept else "",
+            "is_activity_based": False,
+            "is_cashier": False,
             "hours": round(hours, 2),
             "total_dept_hours": round(total_dept_hours, 2),
             "total_sold_units": total_sold,
+            "activity_details": [],
             "share_units": round(share_units, 2),
             "rate_per_unit": rate,
             "commission": commission,
@@ -377,19 +509,7 @@ def sync_shift_logs_for_performance(date, shift, exclude_log_id=None):
         other_log.frozen_total_units_share = Decimal(str(c["total_units_share"]))
         other_log.frozen_commission_amount = c["total_commission"]
 
-        s_main = None
-        if c.get("main_info"):
-            m = c["main_info"]
-            s_main = {
-                "department_id": m["department"].pk,
-                "department_name": m["department"].name,
-                "hours": float(m["hours"]),
-                "total_dept_hours": float(m["total_dept_hours"]),
-                "total_sold_units": m["total_sold_units"],
-                "share_units": float(m["share_units"]),
-                "rate_per_unit": m["rate_per_unit"],
-                "commission": m["commission"],
-            }
+        s_main = serialize_main_info_snapshot(c.get("main_info"))
         s_supp = []
         for s in c.get("support_infos", []):
             s_supp.append({
@@ -458,19 +578,7 @@ def approve_shift_log(shift_log, actor, manager_note=""):
     shift_log.frozen_commission_amount = calc["total_commission"]
 
     # ساخت ساختار سریالایزپذیر برای JSONField
-    serializable_main_info = None
-    if calc.get("main_info"):
-        m = calc["main_info"]
-        serializable_main_info = {
-            "department_id": m["department"].pk,
-            "department_name": m["department"].name,
-            "hours": float(m["hours"]),
-            "total_dept_hours": float(m["total_dept_hours"]),
-            "total_sold_units": m["total_sold_units"],
-            "share_units": float(m["share_units"]),
-            "rate_per_unit": m["rate_per_unit"],
-            "commission": m["commission"],
-        }
+    serializable_main_info = serialize_main_info_snapshot(calc.get("main_info"))
 
     serializable_supp_infos = []
     for s in calc.get("support_infos", []):

@@ -46,10 +46,12 @@ from .models import (
     DailyShiftLog,
     Department,
     Employee,
+    LineActivityType,
     LineCommissionRate,
     LineShiftPerformance,
     LineTarget,
     Shift,
+    ShiftLogActivityEntry,
     SupportLineInterval,
     SystemSettings,
     Violation,
@@ -60,9 +62,11 @@ from .services import (
     audit,
     calculate_single_shift_log,
     change_employee_level,
+    department_has_line_activities,
     employee_metrics,
     reject_shift_log,
     revert_shift_log_to_pending,
+    save_shift_log_activity_entries,
     sync_shift_logs_for_performance,
 )
 
@@ -185,6 +189,7 @@ def manager_dashboard(request):
             "total_commission": total_commission,
             "total_wallet_balance": total_wallet_balance,
             "active_employees_count": len(employees),
+            "today": today,
             "start": start,
             "end": end,
         },
@@ -224,6 +229,39 @@ def shift_log_snapshot(obj):
             }
             for item in obj.support_intervals.select_related("department").all()
         ],
+        "activities": [
+            {
+                "activity_type_id": entry.activity_type_id,
+                "title": entry.activity_type.title,
+                "quantity": entry.quantity,
+                "unit_multiplier": str(entry.unit_multiplier_snapshot),
+            }
+            for entry in obj.activity_entries.select_related("activity_type").all()
+        ],
+    }
+
+
+def line_activities_by_department():
+    payload = {}
+    for activity in LineActivityType.objects.filter(
+        is_active=True,
+        department__is_active=True,
+    ).select_related("department").order_by("department_id", "sort_order", "title"):
+        payload.setdefault(str(activity.department_id), []).append({
+            "id": activity.pk,
+            "title": activity.title,
+            "unit_label": activity.unit_label,
+            "unit_multiplier": str(activity.unit_multiplier),
+        })
+    return payload
+
+
+def shift_log_activity_values(log=None):
+    if not log or not log.pk:
+        return {}
+    return {
+        str(entry.activity_type_id): entry.quantity
+        for entry in log.activity_entries.all()
     }
 
 
@@ -284,6 +322,10 @@ def shift_log_create(request):
                 if not formset.is_valid():
                     raise ValidationError("بازه‌های کمکی را بررسی کن.")
                 save_support_intervals(request=request, log=log, formset=formset)
+                if department_has_line_activities(log.main_department):
+                    save_shift_log_activity_entries(shift_log=log, post_data=request.POST)
+                else:
+                    log.activity_entries.all().delete()
                 audit(
                     actor=request.user,
                     action="shift_log.created",
@@ -293,7 +335,12 @@ def shift_log_create(request):
         except IntegrityError:
             form.add_error(None, "برای این تاریخ و شیفت قبلاً کارکرد ثبت کرده‌ای. می‌تونی از بخش کارکردهای من ویرایشش کنی.")
         except ValidationError as exc:
-            form.add_error(None, exc)
+            if hasattr(exc, "message_dict"):
+                for field, errors in exc.message_dict.items():
+                    for message in errors:
+                        form.add_error(None, message)
+            else:
+                form.add_error(None, exc)
         else:
             messages.success(request, "کارکرد شیفتت ثبت شد و برای تأیید و واریز به مدیر ارسال گردید! 👏")
             return redirect("shift_log_detail", pk=log.pk)
@@ -329,6 +376,8 @@ def shift_log_create(request):
             "date_pills": date_pills,
             "standard_hours": employee.standard_daily_hours or Decimal("6.0"),
             "cashier_department_ids": list(Department.objects.filter(is_cashier=True).values_list("pk", flat=True)),
+            "line_activities_by_department": line_activities_by_department(),
+            "activity_values": shift_log_activity_values(),
         },
     )
 
@@ -375,7 +424,9 @@ def shift_log_detail(request, pk):
     employee = getattr(request.user, "employee", None)
     if not employee:
         raise PermissionDenied
-    qs = DailyShiftLog.objects.select_related("employee", "shift", "main_department", "reviewed_by").prefetch_related("support_departments", "support_intervals__department")
+    qs = DailyShiftLog.objects.select_related("employee", "shift", "main_department", "reviewed_by").prefetch_related(
+        "support_departments", "support_intervals__department", "activity_entries__activity_type"
+    )
     if not employee.can_review:
         qs = qs.filter(employee=employee)
     log = get_object_or_404(qs, pk=pk)
@@ -412,6 +463,10 @@ def shift_log_edit(request, pk):
                 obj.total_hours = obj.shift.standard_hours
                 obj.save()
                 save_support_intervals(request=request, log=obj, formset=formset, previous=old)
+                if department_has_line_activities(obj.main_department):
+                    save_shift_log_activity_entries(shift_log=obj, post_data=request.POST)
+                else:
+                    obj.activity_entries.all().delete()
                 new = shift_log_snapshot(obj)
                 audit(
                     actor=request.user,
@@ -458,6 +513,8 @@ def shift_log_edit(request, pk):
             "date_pills": date_pills,
             "standard_hours": employee.standard_daily_hours or Decimal("6.0"),
             "cashier_department_ids": list(Department.objects.filter(is_cashier=True).values_list("pk", flat=True)),
+            "line_activities_by_department": line_activities_by_department(),
+            "activity_values": shift_log_activity_values(log),
         },
     )
 
@@ -1417,6 +1474,45 @@ def management_department_detail(request, pk):
                             defaults={"rate_per_unit": new_rate, "is_active": True},
                         )
                     action = "department.rates_updated"
+                elif section == "activities":
+                    for activity in department.line_activity_types.all():
+                        if request.POST.get(f"delete_activity_{activity.pk}") == "on":
+                            activity.delete()
+                            continue
+                        title = request.POST.get(f"activity_title_{activity.pk}", "").strip()
+                        unit_label = request.POST.get(f"activity_unit_{activity.pk}", "عدد").strip() or "عدد"
+                        multiplier_raw = request.POST.get(f"activity_multiplier_{activity.pk}", "").strip()
+                        sort_raw = request.POST.get(f"activity_sort_{activity.pk}", "0").strip()
+                        is_active = request.POST.get(f"activity_active_{activity.pk}") == "on"
+                        if not title:
+                            raise ValueError(f"نام فعالیت «{activity.title}» نمی‌تواند خالی باشد.")
+                        multiplier = Decimal(multiplier_raw)
+                        if multiplier <= 0:
+                            raise ValueError(f"ضریب فعالیت «{title}» باید بزرگ‌تر از صفر باشد.")
+                        activity.title = title
+                        activity.unit_label = unit_label
+                        activity.unit_multiplier = multiplier
+                        activity.sort_order = int(sort_raw or 0)
+                        activity.is_active = is_active
+                        activity.save()
+
+                    new_title = request.POST.get("new_activity_title", "").strip()
+                    new_multiplier_raw = request.POST.get("new_activity_multiplier", "").strip()
+                    if new_title:
+                        if not new_multiplier_raw:
+                            raise ValueError("برای فعالیت جدید، ضریب تبدیل الزامی است.")
+                        new_multiplier = Decimal(new_multiplier_raw)
+                        if new_multiplier <= 0:
+                            raise ValueError("ضریب فعالیت جدید باید بزرگ‌تر از صفر باشد.")
+                        LineActivityType.objects.create(
+                            department=department,
+                            title=new_title,
+                            unit_label=request.POST.get("new_activity_unit", "عدد").strip() or "عدد",
+                            unit_multiplier=new_multiplier,
+                            sort_order=int(request.POST.get("new_activity_sort", "0") or 0),
+                            is_active=True,
+                        )
+                    action = "department.activities_updated"
                 elif section == "target":
                     target = target or LineTarget(department=department)
                     values = {}
@@ -1450,10 +1546,12 @@ def management_department_detail(request, pk):
     rules = ViolationRule.objects.filter(Q(all_departments=True) | Q(departments=department)).distinct().order_by("title")
     history = AuditLog.objects.filter(entity_type="Department", entity_id=str(department.pk))[:20]
     recent_performances = department.shift_performances.select_related("shift")[:10]
+    line_activities = list(department.line_activity_types.all())
     return render(request, "management/department_detail.html", {
         "department": department, "rate_rows": rate_rows, "target": target,
         "performance_units": units, "target_result": target.evaluate_target(units) if target and target.is_active else None,
         "rules": rules, "history": history, "recent_performances": recent_performances,
+        "line_activities": line_activities,
         "start": start, "end": end,
     })
 
@@ -1493,6 +1591,7 @@ def department_delete_blockers(department):
         ("کارکرد ثبت‌شده در لاین کمکی", department.support_shift_logs.count()),
         ("بازه کمکی ثبت‌شده", department.support_intervals.count()),
         ("فروش روزانه ثبت‌شده", department.shift_performances.count()),
+        ("ثبت فعالیت در کارکردها", ShiftLogActivityEntry.objects.filter(activity_type__department=department).count()),
         ("اتصال قانون تخلف", department.violation_rules.count()),
     ]
 
