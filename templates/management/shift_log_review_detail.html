@@ -108,7 +108,10 @@
                     <td><b>{{ s.department_name }}</b></td>
                     <td><span class="badge" style="background: #e8f0fe; color: #1a73e8;">لاین کمکی</span></td>
                     <td>{{ s.hours }} ساعت</td>
-                    <td>{{ s.total_dept_hours }} ساعت</td>
+                    <td>
+                        {{ s.total_dept_hours }} ساعت
+                        <small style="display:block; color: var(--muted);">بدون کسر از سهم لاین اصلی</small>
+                    </td>
                     <td>
                         <strong>{{ s.total_sold_units }} عدد</strong>
                         {% if not s.has_performance_recorded %}

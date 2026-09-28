@@ -21,7 +21,7 @@ from .models import (
     ViolationRule,
     DepartmentMonthlyTarget,
 )
-from .services import employee_metrics
+from .services import calculate_single_shift_log, employee_metrics
 
 class BaseEmployeeTest(TestCase):
     def setUp(self):
@@ -767,9 +767,9 @@ class LineCommissionEngineTests(BaseEmployeeTest):
             recorded_by=self.manager_user,
         )
         # Accessories: 40 sold units in Morning shift
-        # Total accessories hours = 2h (Emp1) + 6h (Emp2) = 8h
-        # Emp1 gets (2/8)*40 = 10 units
-        # Emp2 gets (6/8)*40 = 30 units
+        # Primary hours stay 6h (Emp2 only). Emp1's 2h support is excluded from that denominator.
+        # Emp2 keeps (6/6)*40 = 40 units
+        # Emp1's help share is extra: (2/6)*40 = 13.33 units
         LineShiftPerformance.objects.create(
             date=date(2026, 8, 29),
             shift=self.shift_morning,
@@ -780,18 +780,18 @@ class LineCommissionEngineTests(BaseEmployeeTest):
 
         # Check Emp1 metrics
         m1 = employee_metrics(self.employee, date(2026, 8, 1), date(2026, 8, 31))
-        # Total units share for Emp1: 30 (pants) + 10 (accessories) = 40 units
-        self.assertEqual(m1["total_sales_units_share"], Decimal("40.0"))
-        # Commission: 30 * 1500 (pants) + 10 * 800 (accessories) = 45000 + 8000 = 53000
-        self.assertEqual(m1["gross_sales_commission"], 53000)
-        self.assertEqual(m1["commission"], 53000)
+        # Total units share for Emp1: 30 (pants) + 13.33 (accessories help) = 43.33 units
+        self.assertEqual(m1["total_sales_units_share"], Decimal("43.33"))
+        # Commission: 30 * 1500 (pants) + int(13.333... * 800) (accessories) = 45000 + 10666 = 55666
+        self.assertEqual(m1["gross_sales_commission"], 55666)
+        self.assertEqual(m1["commission"], 55666)
 
-        # Check Emp2 metrics
+        # Check Emp2 metrics: full primary-line share, not reduced by the helper
         m2 = employee_metrics(self.emp2, date(2026, 8, 1), date(2026, 8, 31))
-        self.assertEqual(m2["total_sales_units_share"], Decimal("30.0"))
-        # Commission: 30 * 800 = 24000
-        self.assertEqual(m2["gross_sales_commission"], 24000)
-        self.assertEqual(m2["commission"], 24000)
+        self.assertEqual(m2["total_sales_units_share"], Decimal("40.0"))
+        # Commission: 40 * 800 = 32000
+        self.assertEqual(m2["gross_sales_commission"], 32000)
+        self.assertEqual(m2["commission"], 32000)
 
     def test_overtime_sharing_with_target_evening_shift(self):
         # Emp1: 6h Pants (main) in Morning shift + 2h Overtime (16:00 to 18:00) in Pants
@@ -808,7 +808,9 @@ class LineCommissionEngineTests(BaseEmployeeTest):
             overtime_department=self.dept_pants,
         )
 
-        # Emp2: 6h Pants in Morning shift
+        # Emp2: 6h Pants in Morning shift. Primary line must be pants so these hours enter the pants pool.
+        self.emp2.primary_department = self.dept_pants
+        self.emp2.save(update_fields=["primary_department"])
         DailyShiftLog.objects.create(
             employee=self.emp2,
             date=date(2026, 8, 30),

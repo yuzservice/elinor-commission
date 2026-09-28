@@ -126,8 +126,11 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
         hours_each = (log.support_hours or Decimal("0")) / Decimal(len(departments))
         return {department.pk: hours_each for department in departments}
 
-    # محاسبه ساعات کل حضور پرسنل در هر لاین در این شیفت
-    dept_total_hours = {}
+    # مخرج تسهیم فروش فقط ساعت لاین اصلی و اضافه‌کاری است.
+    # ساعت کمکی به این مخرج اضافه نمی‌شود تا از سهم کسی که در لاین اصلی خودش حاضر است کسر نشود.
+    # اگر لاین هیچ ساعت اصلی یا اضافه‌کاری نداشته باشد، کمک‌کننده‌ها فروش را بین خودشان تقسیم می‌کنند.
+    dept_base_hours = {}
+    dept_support_hours = {}
     for log in sibling_logs:
         log_emp = log.employee
         log_main_h = log.main_hours
@@ -141,10 +144,10 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
 
         for p_dept in p_depts:
             if log_main_h > Decimal("0.0"):
-                dept_total_hours[p_dept.pk] = dept_total_hours.get(p_dept.pk, Decimal("0.0")) + log_main_h
+                dept_base_hours[p_dept.pk] = dept_base_hours.get(p_dept.pk, Decimal("0.0")) + log_main_h
 
         for department_id, hours in support_hours_by_department(log).items():
-            dept_total_hours[department_id] = dept_total_hours.get(department_id, Decimal("0.0")) + hours
+            dept_support_hours[department_id] = dept_support_hours.get(department_id, Decimal("0.0")) + hours
 
     # احتساب ساعت‌های اضافه‌کاری پرسنل سایر شیفت‌ها که به این شیفت اختصاص یافته است
     other_logs_with_ot = DailyShiftLog.objects.filter(
@@ -158,7 +161,13 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
         if ot_target and ot_target.pk == shift.pk:
             ot_dept = o_log.overtime_department or o_log.main_department
             if ot_dept:
-                dept_total_hours[ot_dept.pk] = dept_total_hours.get(ot_dept.pk, Decimal("0.0")) + (o_log.overtime_hours or Decimal("0.0"))
+                dept_base_hours[ot_dept.pk] = dept_base_hours.get(ot_dept.pk, Decimal("0.0")) + (o_log.overtime_hours or Decimal("0.0"))
+
+    def line_pool_hours(dept):
+        base = dept_base_hours.get(dept.pk, Decimal("0.0"))
+        if base > Decimal("0.0"):
+            return base
+        return dept_support_hours.get(dept.pk, Decimal("0.0"))
 
     def compute_line(dept, hours):
         if not dept or hours <= 0:
@@ -184,7 +193,7 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
                 "has_performance_recorded": True,
             }
 
-        total_dept_hours = dept_total_hours.get(dept.pk, Decimal("0.0"))
+        total_dept_hours = line_pool_hours(dept)
 
         # خواندن آمار فروش ثبت‌شده توسط مدیر
         perf = LineShiftPerformance.objects.filter(date=date, shift=shift, department=dept).first()
@@ -261,7 +270,8 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
                     status=DailyShiftLog.Status.REJECTED
                 ).select_related("employee", "main_department").prefetch_related("support_departments", "support_intervals__department")
             )
-            target_dept_hours = Decimal("0.0")
+            target_base_hours = Decimal("0.0")
+            target_support_hours = Decimal("0.0")
             for t_log in target_sibling_logs:
                 t_main_h = t_log.main_hours
                 if (t_main_h is None or t_main_h <= Decimal("0.0")) and t_log.shift:
@@ -270,10 +280,10 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
                 if not t_p_depts and t_log.main_department:
                     t_p_depts = [t_log.main_department]
                 if any(p.pk == ot_dept.pk for p in t_p_depts):
-                    target_dept_hours += t_main_h
+                    target_base_hours += t_main_h
                 for department_id, hours in support_hours_by_department(t_log).items():
                     if department_id == ot_dept.pk:
-                        target_dept_hours += hours
+                        target_support_hours += hours
 
             target_ot_logs = DailyShiftLog.objects.filter(
                 date=date,
@@ -285,7 +295,9 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
                 if find_target_shift_for_overtime(t_ot_log.overtime_start_time, t_ot_log.shift) == ot_target_shift:
                     t_ot_d = t_ot_log.overtime_department or t_ot_log.main_department
                     if t_ot_d and t_ot_d.pk == ot_dept.pk:
-                        target_dept_hours += (t_ot_log.overtime_hours or Decimal("0.0"))
+                        target_base_hours += (t_ot_log.overtime_hours or Decimal("0.0"))
+
+            target_dept_hours = target_base_hours if target_base_hours > Decimal("0.0") else target_support_hours
 
             target_perf = LineShiftPerformance.objects.filter(
                 date=date, shift=ot_target_shift, department=ot_dept
