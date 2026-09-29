@@ -114,7 +114,18 @@ fi
 
 # 5. Apply Database Migrations & Collect Static Files
 echo -e "\n${BLUE}▶ [4/5] Applying new database migrations safely...${NC}"
-sleep 3
+echo -e "Waiting until the container finishes its startup migration..."
+ready=0
+for _ in $(seq 1 90); do
+    if $COMPOSE_CMD exec -T web sh -c 'tr "\0" " " < /proc/1/cmdline | grep -q gunicorn'; then
+        ready=1
+        break
+    fi
+    sleep 2
+done
+if [ "$ready" != "1" ]; then
+    echo -e "${YELLOW}Startup is still in progress. Applying migrations anyway.${NC}"
+fi
 $COMPOSE_CMD exec -T web python manage.py migrate --noinput
 
 echo -e "Collecting static files..."

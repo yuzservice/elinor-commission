@@ -4,6 +4,19 @@ import django.db.models.deletion
 from django.db import migrations, models
 
 
+def drop_orphan_branch_sequence(apps, schema_editor):
+    """اگر ساخت جدول شعبه وسط کار قطع شده باشد، فقط دنباله‌اش می‌ماند و ساخت دوباره خطا می‌دهد."""
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT to_regclass('public.core_branch') IS NULL
+               AND to_regclass('public.core_branch_id_seq') IS NOT NULL
+            """
+        )
+        if cursor.fetchone()[0]:
+            cursor.execute("DROP SEQUENCE public.core_branch_id_seq")
+
+
 def seed_branches(apps, schema_editor):
     Branch = apps.get_model("core", "Branch")
     specs = [
@@ -39,6 +52,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(drop_orphan_branch_sequence, migrations.RunPython.noop),
         migrations.CreateModel(
             name='Branch',
             fields=[
