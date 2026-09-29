@@ -471,15 +471,13 @@ class AdminAccountForm(forms.Form):
         max_length=150,
         help_text="نام کاربری انگلیسی برای ورود به سامانه",
     )
-    access_level = forms.ChoiceField(
-        label="نوع دسترسی",
-        choices=[
-            ("BRANCH", "ادمین یک شعبه"),
-            ("SUPER", "سوپر ادمین همه شعبه‌ها"),
-        ],
-        help_text="ادمین شعبه فقط شعبه انتخاب‌شده را می‌بیند. سوپر ادمین بین شعبه‌ها جابه‌جا می‌شود.",
+    branch = forms.ModelChoiceField(
+        label="شعبه",
+        queryset=Branch.objects.none(),
+        required=False,
+        empty_label="سوپر ادمین همه شعبه‌ها",
+        help_text="با انتخاب یک شعبه، ادمین فقط همان شعبه را می‌بیند. گزینه اول به همه شعبه‌ها دسترسی دارد.",
     )
-    branch = forms.ModelChoiceField(label="شعبه", queryset=Branch.objects.none(), required=False)
     is_active = forms.BooleanField(label="حساب فعال باشد", required=False, initial=True)
     password = forms.CharField(label="رمز عبور", widget=forms.PasswordInput, required=False, strip=False)
 
@@ -501,8 +499,7 @@ class AdminAccountForm(forms.Form):
                 "first_name": instance.first_name if instance else "",
                 "last_name": instance.last_name if instance else "",
                 "username": instance.user.username if instance else "",
-                "access_level": "SUPER" if instance and instance.is_super_admin else "BRANCH",
-                "branch": selected.pk if selected else None,
+                "branch": None if instance and instance.is_super_admin else (selected.pk if selected else None),
                 "is_active": instance.is_active if instance else True,
             })
 
@@ -527,14 +524,6 @@ class AdminAccountForm(forms.Form):
         except ValidationError as exc:
             raise forms.ValidationError(exc.messages)
         return password
-
-    def clean(self):
-        data = super().clean()
-        if data.get("access_level") == "SUPER":
-            data["branch"] = None
-        elif not data.get("branch"):
-            self.add_error("branch", "شعبه این ادمین را انتخاب کنید.")
-        return data
 
 class BranchForm(forms.ModelForm):
     class Meta:

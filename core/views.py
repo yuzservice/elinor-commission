@@ -1929,8 +1929,8 @@ def _save_admin_account(form):
     from django.contrib.auth.models import User
 
     data = form.cleaned_data
-    is_super = data["access_level"] == "SUPER"
-    target_branch = None if is_super else data.get("branch")
+    target_branch = data.get("branch")
+    is_super = target_branch is None
     instance = form.instance
     if instance is None:
         user = User.objects.create_user(
