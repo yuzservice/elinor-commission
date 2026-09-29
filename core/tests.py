@@ -778,6 +778,97 @@ class LineShiftPerformanceTests(BaseEmployeeTest):
         self.assertEqual(rec1.sold_units, 25)
         self.assertEqual(rec2.sold_units, 12)
 
+    def test_manager_can_open_line_performance_list(self):
+        LineShiftPerformance.objects.create(
+            date=date(2026, 8, 29),
+            shift=self.shift_morning,
+            department=self.department,
+            sold_units=10,
+            recorded_by=self.manager_user,
+        )
+        self.client.force_login(self.manager_user)
+        response = self.client.get(reverse("management_line_performances"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.department.name)
+        filtered = self.client.get(reverse("management_line_performances"), {"shift": self.shift_morning.pk, "department": self.department.pk})
+        self.assertEqual(filtered.status_code, 200)
+
+class ManagementMenuSmokeTests(BaseEmployeeTest):
+    def test_manager_menu_pages_render(self):
+        DailyShiftLog.objects.create(
+            employee=self.employee,
+            date=date(2026, 8, 29),
+            shift=self.shift_morning,
+            main_department=self.department,
+        )
+        LineShiftPerformance.objects.create(
+            date=date(2026, 8, 29),
+            shift=self.shift_morning,
+            department=self.department,
+            sold_units=4,
+            recorded_by=self.manager_user,
+        )
+        self.client.force_login(self.manager_user)
+        pages = [
+            "dashboard",
+            "management_shift_log_reviews",
+            "management_line_performances",
+            "management_line_performance_batch",
+            "management_line_performance_create",
+            "management_commission_report",
+            "violation_create",
+            "violations",
+            "management_employees",
+            "management_departments",
+            "management_activities",
+            "management_shifts",
+            "branding_settings",
+            "management_backup",
+            "profile",
+            "employees",
+            "shift_logs",
+            "shift_log_create",
+            "my_commission_report",
+        ]
+        for name in pages:
+            response = self.client.get(reverse(name), follow=True)
+            self.assertEqual(response.status_code, 200, name)
+        detail_pages = [
+            ("management_employee_detail", self.employee.pk),
+            ("management_employee_edit", self.employee.pk),
+            ("management_department_detail", self.department.pk),
+            ("management_department_edit", self.department.pk),
+            ("management_shift_edit", self.shift_morning.pk),
+            ("management_shift_log_review_detail", DailyShiftLog.objects.get().pk),
+        ]
+        performance = LineShiftPerformance.objects.get()
+        detail_pages.append(("management_line_performance_edit", performance.pk))
+        for name, pk in detail_pages:
+            response = self.client.get(reverse(name, args=[pk]), follow=True)
+            self.assertEqual(response.status_code, 200, name)
+        self.assertEqual(self.client.get(reverse("management_admins")).status_code, 403)
+
+        self.client.force_login(self.employee_user)
+        for name in ("dashboard", "shift_log_create", "shift_logs", "my_commission_report", "violations", "profile"):
+            response = self.client.get(reverse(name), follow=True)
+            self.assertEqual(response.status_code, 200, name)
+
+    def test_super_admin_branch_pages_render(self):
+        super_user = User.objects.create_user("superadmin", password="StrongPass123!")
+        Employee.objects.create(
+            user=super_user,
+            employee_code="S001",
+            first_name="سوپر",
+            last_name="ادمین",
+            role=Employee.Role.MANAGER,
+            is_super_admin=True,
+            is_active=True,
+        )
+        self.client.force_login(super_user)
+        for name in ("dashboard", "management_admins", "management_admin_create", "management_branch_create", "management_line_performances"):
+            response = self.client.get(reverse(name))
+            self.assertEqual(response.status_code, 200, name)
+
 class LineCommissionEngineTests(BaseEmployeeTest):
     def setUp(self):
         super().setUp()

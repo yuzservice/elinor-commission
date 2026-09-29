@@ -835,12 +835,14 @@ def management_line_performances(request):
     if dept_val:
         qs = qs.filter(department_id=dept_val)
 
-    # جلسات یکتای شیفت (تاریخ، شیفت) مرتب‌شده از جدیدترین به قدیمی‌ترین
-    session_keys = list(
-        qs.values_list("date", "shift_id")
+    # جلسات یکتای شیفت (تاریخ، شیفت) مرتب‌شده از جدیدترین به قدیمی‌ترین.
+    # sort_order باید در SELECT باشد وگرنه PostgreSQL خطای DISTINCT می‌دهد.
+    session_rows = list(
+        qs.values_list("date", "shift_id", "shift__sort_order")
         .distinct()
         .order_by("-date", "shift__sort_order", "shift_id")
     )
+    session_keys = [(row[0], row[1]) for row in session_rows]
 
     paginator = Paginator(session_keys, 10)
     page_num = request.GET.get("page")
@@ -906,7 +908,7 @@ def management_line_performances(request):
             "total_records": total_records,
             "total_sold_all": total_sold_all,
             "shifts": Shift.objects.filter(is_active=True),
-            "departments": active_departments,
+            "departments": Department.objects.filter(is_active=True).order_by("name"),
             "filters": request.GET,
         },
     )
