@@ -9,6 +9,7 @@ from django.db.models import Q
 import jdatetime
 from PIL import Image, UnidentifiedImageError
 from .models import (
+    Branch,
     CommissionLevel,
     DailyShiftLog,
     Department,
@@ -473,30 +474,37 @@ class AdminAccountForm(forms.Form):
     access_level = forms.ChoiceField(
         label="نوع دسترسی",
         choices=[
-            ("BRANCH", "ادمین همین شعبه"),
+            ("BRANCH", "ادمین یک شعبه"),
             ("SUPER", "سوپر ادمین همه شعبه‌ها"),
         ],
-        help_text="ادمین شعبه فقط شعبه فعال را می‌بیند. سوپر ادمین بین شعبه‌ها جابه‌جا می‌شود.",
+        help_text="ادمین شعبه فقط شعبه انتخاب‌شده را می‌بیند. سوپر ادمین بین شعبه‌ها جابه‌جا می‌شود.",
     )
+    branch = forms.ModelChoiceField(label="شعبه", queryset=Branch.objects.none(), required=False)
     is_active = forms.BooleanField(label="حساب فعال باشد", required=False, initial=True)
     password = forms.CharField(label="رمز عبور", widget=forms.PasswordInput, required=False, strip=False)
 
-    def __init__(self, *args, instance=None, **kwargs):
+    def __init__(self, *args, instance=None, active_branch=None, **kwargs):
         self.instance = instance
         super().__init__(*args, **kwargs)
+        branches = Branch.objects.filter(is_active=True)
+        if instance and instance.branch_id:
+            branches = Branch.objects.filter(Q(is_active=True) | Q(pk=instance.branch_id))
+        self.fields["branch"].queryset = branches.order_by("sort_order", "name")
         if instance is None:
             self.fields["password"].required = True
             self.fields["password"].label = "رمز عبور اولیه"
         else:
             self.fields["password"].help_text = "اگر خالی بماند، رمز فعلی تغییر نمی‌کند."
-            if not self.is_bound:
-                self.initial.update({
-                    "first_name": instance.first_name,
-                    "last_name": instance.last_name,
-                    "username": instance.user.username,
-                    "access_level": "SUPER" if instance.is_super_admin else "BRANCH",
-                    "is_active": instance.is_active,
-                })
+        if not self.is_bound:
+            selected = instance.branch if instance and instance.branch_id else active_branch
+            self.initial.update({
+                "first_name": instance.first_name if instance else "",
+                "last_name": instance.last_name if instance else "",
+                "username": instance.user.username if instance else "",
+                "access_level": "SUPER" if instance and instance.is_super_admin else "BRANCH",
+                "branch": selected.pk if selected else None,
+                "is_active": instance.is_active if instance else True,
+            })
 
     def clean_username(self):
         username = self.cleaned_data.get("username", "").strip()
@@ -519,6 +527,28 @@ class AdminAccountForm(forms.Form):
         except ValidationError as exc:
             raise forms.ValidationError(exc.messages)
         return password
+
+    def clean(self):
+        data = super().clean()
+        if data.get("access_level") == "SUPER":
+            data["branch"] = None
+        elif not data.get("branch"):
+            self.add_error("branch", "شعبه این ادمین را انتخاب کنید.")
+        return data
+
+class BranchForm(forms.ModelForm):
+    class Meta:
+        model = Branch
+        fields = ["name", "sort_order", "is_active"]
+
+    def clean_name(self):
+        name = " ".join(self.cleaned_data.get("name", "").split())
+        qs = Branch.objects.filter(name__iexact=name)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError("شعبه‌ای با این نام وجود دارد.")
+        return name
 
 class ManagerPasswordResetForm(SetPasswordForm):
     pass

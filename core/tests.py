@@ -1282,6 +1282,7 @@ class BranchScopeTests(BaseEmployeeTest):
                 "first_name": "ادمین",
                 "last_name": "گرگان",
                 "access_level": "BRANCH",
+                "branch": gorgan.pk,
                 "is_active": "on",
                 "password": "AnotherStrong123!",
             },
@@ -1301,3 +1302,38 @@ class BranchScopeTests(BaseEmployeeTest):
         page = self.client.get(reverse("management_activities"))
         self.assertContains(page, "فروشگاه گرگان")
         self.assertNotContains(page, reverse("switch_branch"))
+
+    def test_branch_and_admin_are_managed_on_one_page(self):
+        self.manager.is_super_admin = True
+        self.manager.branch = None
+        self.manager.save()
+        sari = Branch.objects.get(name="فروشگاه ساری")
+        gorgan = Branch.objects.get(name="فروشگاه گرگان")
+        self.client.force_login(self.manager_user)
+        self.client.post(reverse("switch_branch"), {"branch": sari.pk, "next": "/"})
+        created = self.client.post(
+            reverse("management_branch_create"),
+            {"name": "  فروشگاه آزمایش  ", "sort_order": "9", "is_active": "on"},
+        )
+        self.assertEqual(created.status_code, 302)
+        branch = Branch.objects.get(name="فروشگاه آزمایش")
+        page = self.client.get(reverse("management_admins"))
+        self.assertContains(page, "شعبه‌ها و ادمین‌ها")
+        self.assertContains(page, "فروشگاه آزمایش")
+        self.assertContains(page, "ادمین جدید")
+        response = self.client.post(
+            reverse("management_admin_create"),
+            {
+                "username": "labadmin",
+                "first_name": "ادمین",
+                "last_name": "آزمایش",
+                "access_level": "BRANCH",
+                "branch": gorgan.pk,
+                "is_active": "on",
+                "password": "AnotherStrong123!",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        admin = Employee._base_manager.get(user__username="labadmin")
+        self.assertEqual(admin.branch, gorgan)
+        self.assertNotEqual(admin.branch, sari)

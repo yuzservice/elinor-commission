@@ -1,16 +1,62 @@
 {% extends 'base.html' %}
-{% block title %}ادمین‌ها{% endblock %}
+{% block title %}شعبه‌ها و ادمین‌ها{% endblock %}
 {% block content %}
 <div class="admin-page-head">
     <div>
         <span class="admin-kicker">دسترسی</span>
-        <h1>ادمین‌ها</h1>
-        <p>حساب ورود برای مدیریت شعبه یا همه شعبه‌ها. این حساب‌ها پورسانت، شیفت و لاین ندارند.</p>
+        <h1>شعبه‌ها و ادمین‌ها</h1>
+        <p>شعبه جدید خالی ساخته می‌شود. ادمین همان شعبه لاین، فعالیت و بقیه تعریف‌ها را خودش می‌سازد.</p>
     </div>
-    <a class="primary" href="{% url 'management_admin_create' %}">+ ادمین جدید</a>
 </div>
 
-<article class="card">
+<article class="card" id="branches" style="margin-bottom: 20px;">
+    <div class="card-head">
+        <div>
+            <h2>شعبه‌ها</h2>
+            <p>نام شعبه در منوی بالای صفحه سوپر ادمین دیده می‌شود.</p>
+        </div>
+        <a class="primary" href="{% url 'management_branch_create' %}">+ شعبه جدید</a>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>نام</th>
+                    <th>ترتیب</th>
+                    <th>وضعیت</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for branch in branches %}
+                <tr>
+                    <td><b>{{ branch.name }}</b></td>
+                    <td>{{ branch.sort_order }}</td>
+                    <td>
+                        <span class="status {% if branch.is_active %}approved{% else %}rejected{% endif %}">
+                            {% if branch.is_active %}فعال{% else %}غیرفعال{% endif %}
+                        </span>
+                    </td>
+                    <td><a class="table-link" href="{% url 'management_branch_edit' branch.pk %}">ویرایش</a></td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="empty">شعبه‌ای ثبت نشده است.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</article>
+
+<article class="card" id="admins">
+    <div class="card-head">
+        <div>
+            <h2>ادمین‌ها</h2>
+            <p>حساب ورود برای مدیریت یک شعبه یا همه شعبه‌ها. این حساب‌ها پورسانت نمی‌گیرند.</p>
+        </div>
+        <a class="primary" href="{% url 'management_admin_create' %}">+ ادمین جدید</a>
+    </div>
     <div class="table-wrap">
         <table>
             <thead>

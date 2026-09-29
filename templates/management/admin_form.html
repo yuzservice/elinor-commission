@@ -5,10 +5,7 @@
     <div>
         <span class="admin-kicker">دسترسی</span>
         <h1>{{ title }}</h1>
-        <p>
-            فقط نام، ورود و نوع دسترسی. ادمین پورسانت نمی‌گیرد.
-            {% if active_branch %}شعبه فعال الان: <b>{{ active_branch.name }}</b>.{% endif %}
-        </p>
+        <p>فقط نام، ورود، نوع دسترسی و در صورت نیاز شعبه. ادمین پورسانت نمی‌گیرد.</p>
     </div>
     <a class="secondary" href="{% url 'management_admins' %}">بازگشت به ادمین‌ها</a>
 </div>
@@ -30,7 +27,7 @@
                 </label>
             </div>
             {% else %}
-            <div class="field {% if field.name == 'access_level' or field.name == 'username' %}span-2{% endif %}">
+            <div class="field {% if field.name == 'access_level' or field.name == 'username' or field.name == 'branch' %}span-2{% endif %}">
                 <label>{{ field.label }}{% if field.field.required %}<em>*</em>{% endif %}</label>
                 {{ field }}
                 {% if field.help_text %}<small class="help">{{ field.help_text }}</small>{% endif %}
@@ -48,6 +45,21 @@
         </div>
     </form>
 </article>
+<script>
+(function () {
+    const access = document.getElementById("id_access_level");
+    const branchField = document.getElementById("id_branch");
+    if (!access || !branchField) return;
+    const wrap = branchField.closest(".field");
+    function sync() {
+        const show = access.value === "BRANCH";
+        if (wrap) wrap.style.display = show ? "" : "none";
+        branchField.required = show;
+    }
+    access.addEventListener("change", sync);
+    sync();
+})();
+</script>
 
 {% if admin_account and admin_account.user_id != user.id %}
 <article class="card" style="margin-top:24px;border:1px solid #fecaca;background:#fffafa;max-width:720px">

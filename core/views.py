@@ -48,6 +48,7 @@ from .forms import (
     EmployeeCreateForm,
     EmployeeEditForm,
     AdminAccountForm,
+    BranchForm,
     JalaliDateField,
     LineShiftPerformanceForm,
     ManagerPasswordResetForm,
@@ -1924,16 +1925,12 @@ def _require_super_admin(request):
     return employee
 
 
-def _save_admin_account(form, branch):
+def _save_admin_account(form):
     from django.contrib.auth.models import User
 
-    access = form.cleaned_data["access_level"]
-    is_super = access == "SUPER"
-    target_branch = None if is_super else branch
-    if not is_super and target_branch is None:
-        form.add_error("access_level", "اول از بالای صفحه یک شعبه را انتخاب کنید.")
-        return None
     data = form.cleaned_data
+    is_super = data["access_level"] == "SUPER"
+    target_branch = None if is_super else data.get("branch")
     instance = form.instance
     if instance is None:
         user = User.objects.create_user(
@@ -1978,16 +1975,17 @@ def _save_admin_account(form, branch):
 def management_admins(request):
     _require_super_admin(request)
     admins = _admin_accounts().order_by("last_name", "first_name")
-    return render(request, "management/admin_list.html", {"admins": admins})
+    branches = Branch.objects.order_by("sort_order", "name")
+    return render(request, "management/admin_list.html", {"admins": admins, "branches": branches})
 
 
 @login_required
 def management_admin_create(request):
     _require_super_admin(request)
-    form = AdminAccountForm(request.POST or None)
+    form = AdminAccountForm(request.POST or None, active_branch=getattr(request, "branch", None))
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
-            employee = _save_admin_account(form, getattr(request, "branch", None))
+            employee = _save_admin_account(form)
         if employee:
             scope = "سوپر ادمین" if employee.is_super_admin else employee.branch.name
             messages.success(request, f"ادمین {employee.full_name} با دسترسی {scope} ساخته شد.")
@@ -2003,10 +2001,10 @@ def management_admin_create(request):
 def management_admin_edit(request, pk):
     _require_super_admin(request)
     employee = get_object_or_404(_admin_accounts(), pk=pk)
-    form = AdminAccountForm(request.POST or None, instance=employee)
+    form = AdminAccountForm(request.POST or None, instance=employee, active_branch=getattr(request, "branch", None))
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
-            saved = _save_admin_account(form, getattr(request, "branch", None))
+            saved = _save_admin_account(form)
         if saved:
             messages.success(request, "حساب ادمین به‌روزرسانی شد.")
             return redirect("management_admins")
@@ -2034,6 +2032,64 @@ def management_admin_delete(request, pk):
     if user and not user.is_superuser:
         user.delete()
     messages.success(request, f"حساب ادمین «{name}» حذف شد.")
+    return redirect("management_admins")
+
+
+def _branch_usage(branch):
+    checks = [
+        ("ادمین یا کارمند", Employee._base_manager.filter(branch=branch).exists()),
+        ("لاین", Department._base_manager.filter(branch=branch).exists()),
+        ("گرید", CommissionLevel._base_manager.filter(branch=branch).exists()),
+        ("شیفت", Shift._base_manager.filter(branch=branch).exists()),
+        ("فعالیت", LineActivityType._base_manager.filter(branch=branch).exists()),
+        ("قانون تخلف", ViolationRule._base_manager.filter(branch=branch).exists()),
+        ("کارکرد", DailyShiftLog._base_manager.filter(branch=branch).exists()),
+        ("فروش روزانه", LineShiftPerformance._base_manager.filter(branch=branch).exists()),
+        ("تخلف", Violation._base_manager.filter(branch=branch).exists()),
+    ]
+    return [label for label, used in checks if used]
+
+
+@login_required
+def management_branch_create(request):
+    _require_super_admin(request)
+    next_order = (Branch.objects.order_by("-sort_order").values_list("sort_order", flat=True).first() or 0) + 1
+    form = BranchForm(request.POST or None, initial={"sort_order": next_order, "is_active": True})
+    if request.method == "POST" and form.is_valid():
+        branch = form.save()
+        messages.success(request, f"شعبه «{branch.name}» ساخته شد. تعریف لاین و فعالیت‌ها با ادمین همان شعبه است.")
+        return redirect("management_admins")
+    return render(request, "management/branch_form.html", {"form": form, "title": "ساخت شعبه", "submit": "ساخت شعبه"})
+
+
+@login_required
+def management_branch_edit(request, pk):
+    _require_super_admin(request)
+    branch = get_object_or_404(Branch, pk=pk)
+    form = BranchForm(request.POST or None, instance=branch)
+    if request.method == "POST" and form.is_valid():
+        branch = form.save()
+        messages.success(request, f"شعبه «{branch.name}» به‌روزرسانی شد.")
+        return redirect("management_admins")
+    return render(
+        request,
+        "management/branch_form.html",
+        {"form": form, "title": "ویرایش شعبه", "submit": "ذخیره", "branch_account": branch},
+    )
+
+
+@login_required
+@require_POST
+def management_branch_delete(request, pk):
+    _require_super_admin(request)
+    branch = get_object_or_404(Branch, pk=pk)
+    used = _branch_usage(branch)
+    if used:
+        messages.error(request, f"شعبه «{branch.name}» حذف نمی‌شود چون این‌ها را دارد: {'، '.join(used)}. می‌توانید آن را غیرفعال کنید.")
+        return redirect("management_branch_edit", pk=pk)
+    name = branch.name
+    branch.delete()
+    messages.success(request, f"شعبه «{name}» حذف شد.")
     return redirect("management_admins")
 
 
