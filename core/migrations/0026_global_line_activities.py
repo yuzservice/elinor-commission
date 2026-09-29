@@ -18,6 +18,9 @@ def globalize_activities(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    # ادغام ردیف‌ها تریگر کلید خارجی را باز می‌گذارد؛ ALTER در همان تراکنش
+    # روی PostgreSQL با خطای pending trigger events شکست می‌خورد.
+    atomic = False
 
     dependencies = [
         ("core", "0025_line_activity_count_method"),
