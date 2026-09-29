@@ -1,8 +1,8 @@
 {% extends 'base.html' %}{% block title %}مرکز کنترل {{ department.name }}{% endblock %}{% block content %}
 <div class="admin-page-head"><div><span class="admin-kicker">مرکز کنترل لاین</span><h1>{{ department.name }}</h1><p>تنظیمات و عملکرد این لاین در یک نمای یکپارچه</p></div><div class="head-actions"><a class="secondary" href="{% url 'management_departments' %}">بازگشت به لاین‌ها</a><a class="secondary" href="{% url 'management_department_edit' department.pk %}">ویرایش اطلاعات پایه</a></div></div>
-<nav class="control-tabs"><a href="#overview">خلاصه عملکرد</a><a href="#base">اطلاعات پایه</a><a href="#rates">ضرایب پورسانت</a><a href="#activities">فعالیت‌ها</a><a href="#targets">تارگت‌ها</a><a href="#violations">قوانین تخلف</a><a href="#history">تاریخچه</a></nav>
+<nav class="control-tabs"><a href="#overview">خلاصه عملکرد</a><a href="#base">اطلاعات پایه</a><a href="#rates">ضرایب پورسانت</a><a href="#targets">تارگت‌ها</a><a href="#violations">قوانین تخلف</a><a href="#history">تاریخچه</a></nav>
 <section id="overview" class="admin-stat-grid"><article><span class="stat-icon green">▦</span><div><small>وضعیت لاین</small><strong>{% if department.is_active %}فعال{% else %}غیرفعال{% endif %}</strong></div></article><article><span class="stat-icon blue">↗</span><div><small>فروش ماه جاری</small><strong>{{ performance_units }}</strong><span>کالا</span></div></article><article><span class="stat-icon gold">◎</span><div><small>پیشرفت تارگت بعدی</small><strong>{% if target_result %}{{ target_result.progress_percent }}٪{% else %}—{% endif %}</strong></div></article><article><span class="stat-icon rose">⚠</span><div><small>قوانین تخلف مرتبط</small><strong>{{ rules|length }}</strong><span>قانون</span></div></article></section>
-<article class="card control-section" id="base"><div class="card-head"><h2>اطلاعات پایه لاین</h2></div><div class="detail-pairs"><div><small>نام لاین</small><b>{{ department.name }}</b></div><div><small>محاسبه پورسانت</small><b>{% if line_activities %}📋 بر اساس فعالیت‌های لاین{% else %}تسهیم فروش شیفت{% endif %}</b></div><div><small>وضعیت</small><b>{% if department.is_active %}فعال{% else %}غیرفعال{% endif %}</b></div><div><small>پرسنل اصلی</small><b>{{ department.primary_employees.count }} نفر</b></div></div></article>
+<article class="card control-section" id="base"><div class="card-head"><h2>اطلاعات پایه لاین</h2></div><div class="detail-pairs"><div><small>نام لاین</small><b>{{ department.name }}</b></div><div><small>محاسبه پورسانت</small><b>تسهیم فروش شیفت؛ اگر فعالیت ثبت شود پورسانت لاین اصلی از فعالیت حساب می‌شود</b></div><div><small>وضعیت</small><b>{% if department.is_active %}فعال{% else %}غیرفعال{% endif %}</b></div><div><small>پرسنل اصلی</small><b>{{ department.primary_employees.count }} نفر</b></div></div></article>
 <article class="card control-section" id="rates">
     <div class="card-head">
         <div>
@@ -60,117 +60,8 @@
         </div>
     </form>
 </article>
-<article class="card control-section" id="activities">
-    <div class="card-head">
-        <div>
-            <h2>فعالیت‌های عملیاتی لاین</h2>
-            <p>پورسانت = مقدار فعالیت × ضریب × نرخ گرید. برای عوض کردن ترتیب نمایش، دستهٔ ⠿ را با ماوس بکشید و بعد ذخیره کنید.</p>
-        </div>
-    </div>
-    <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="section" value="activities">
-        <div class="table-wrap">
-            <table class="activity-sort-table">
-                <thead>
-                    <tr>
-                        <th style="width:42px;"></th>
-                        <th>نام فعالیت</th>
-                        <th>نوع ورود</th>
-                        <th>ضریب → واحد عملکرد</th>
-                        <th>فعال</th>
-                        <th>حذف</th>
-                    </tr>
-                </thead>
-                <tbody id="activity-sort-body">
-                    {% for act in line_activities %}
-                    <tr data-activity="{{ act.pk }}">
-                        <td>
-                            <button type="button" class="activity-drag" title="بکشید و جابه‌جا کنید" aria-label="جابه‌جایی">⠿</button>
-                            <input type="hidden" name="activity_sort_{{ act.pk }}" value="{{ forloop.counter0 }}">
-                        </td>
-                        <td><input type="text" name="activity_title_{{ act.pk }}" value="{{ act.title }}" style="width:100%;min-width:140px;"></td>
-                        <td>
-                            <select name="activity_count_method_{{ act.pk }}" style="min-width:88px;">
-                                <option value="QUANTITY" {% if act.count_method != 'CHECKMARK' %}selected{% endif %}>عدد</option>
-                                <option value="CHECKMARK" {% if act.count_method == 'CHECKMARK' %}selected{% endif %}>تیک</option>
-                            </select>
-                        </td>
-                        <td><input type="number" step="0.01" min="0.01" name="activity_multiplier_{{ act.pk }}" value="{{ act.unit_multiplier }}" style="width:100px;"></td>
-                        <td style="text-align:center;"><input type="checkbox" name="activity_active_{{ act.pk }}" {% if act.is_active %}checked{% endif %}></td>
-                        <td style="text-align:center;"><input type="checkbox" name="delete_activity_{{ act.pk }}" title="حذف این فعالیت"></td>
-                    </tr>
-                    {% empty %}
-                    <tr><td colspan="6" class="empty">هنوز فعالیتی تعریف نشده. نوع «عدد» برای شمارش · نوع «تیک» وقتی فقط انجام یا عدم‌انجام مهم است.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        <div style="margin-top:16px;padding:14px;border-radius:12px;border:1.5px dashed var(--line);background:var(--bg,#f8faf9);">
-            <strong style="font-size:13px;">➕ فعالیت جدید</strong>
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-top:10px;">
-                <input type="text" name="new_activity_title" placeholder="نام فعالیت">
-                <select name="new_activity_count_method" style="min-width:88px;">
-                    <option value="QUANTITY" selected>عدد</option>
-                    <option value="CHECKMARK">تیک</option>
-                </select>
-                <input type="number" step="0.01" min="0.01" name="new_activity_multiplier" placeholder="ضریب (مثلاً ۱۰)">
-            </div>
-            <small style="display:block;margin-top:8px;color:var(--muted);">فعالیت جدید بعد از ذخیره به انتهای فهرست اضافه می‌شود و بعد می‌توانید جایش را بکشید.</small>
-        </div>
-        <button class="primary" type="submit" style="margin-top:14px;">💾 ذخیره فعالیت‌ها</button>
-    </form>
-    <style>
-        .activity-drag { cursor: grab; border: 0; background: transparent; color: #64748b; font-size: 18px; line-height: 1; padding: 4px 6px; }
-        .activity-drag:active { cursor: grabbing; }
-        #activity-sort-body tr.is-dragging { opacity: 0.45; }
-        #activity-sort-body tr.drop-target td { box-shadow: inset 0 2px 0 #237554; }
-    </style>
-    <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const tbody = document.getElementById('activity-sort-body');
-        const form = tbody && tbody.closest('form');
-        if (!tbody || !form) return;
-
-        function renumber() {
-            tbody.querySelectorAll('tr[data-activity]').forEach(function (row, index) {
-                const input = row.querySelector('input[name^="activity_sort_"]');
-                if (input) input.value = String(index);
-            });
-        }
-
-        let dragged = null;
-        tbody.querySelectorAll('.activity-drag').forEach(function (handle) {
-            const row = handle.closest('tr');
-            handle.addEventListener('pointerdown', function () { row.draggable = true; });
-            row.addEventListener('dragstart', function (event) {
-                dragged = row;
-                row.classList.add('is-dragging');
-                event.dataTransfer.effectAllowed = 'move';
-                event.dataTransfer.setData('text/plain', row.dataset.activity || '');
-            });
-            row.addEventListener('dragend', function () {
-                row.draggable = false;
-                row.classList.remove('is-dragging');
-                tbody.querySelectorAll('.drop-target').forEach(function (item) { item.classList.remove('drop-target'); });
-                dragged = null;
-                renumber();
-            });
-            row.addEventListener('dragover', function (event) {
-                if (!dragged || dragged === row || !row.dataset.activity) return;
-                event.preventDefault();
-                const rect = row.getBoundingClientRect();
-                const placeAfter = event.clientY > rect.top + rect.height / 2;
-                if (placeAfter) row.after(dragged);
-                else row.before(dragged);
-            });
-        });
-        form.addEventListener('submit', renumber);
-    });
-    </script>
-</article>
 <article class="card control-section" id="targets"><div class="card-head"><div><h2>تارگت‌های لاین</h2><p>سه سطح موجود برنزی، نقره‌ای و طلایی</p></div></div><form method="post">{% csrf_token %}<input type="hidden" name="section" value="target"><div class="target-level-grid"><fieldset><legend>🥉 برنزی</legend><label>تعداد کالا<input type="number" min="1" name="bronze_units" value="{{ target.bronze_units }}"></label><label>پاداش (ریال)<input type="number" min="0" name="bronze_reward" value="{{ target.bronze_reward }}"></label></fieldset><fieldset><legend>🥈 نقره‌ای</legend><label>تعداد کالا<input type="number" min="1" name="silver_units" value="{{ target.silver_units }}"></label><label>پاداش (ریال)<input type="number" min="0" name="silver_reward" value="{{ target.silver_reward }}"></label></fieldset><fieldset><legend>🥇 طلایی</legend><label>تعداد کالا<input type="number" min="1" name="gold_units" value="{{ target.gold_units }}"></label><label>پاداش (ریال)<input type="number" min="0" name="gold_reward" value="{{ target.gold_reward }}"></label></fieldset></div><label class="toggle-row"><input type="checkbox" name="is_active" {% if target.is_active %}checked{% endif %}><span><b>تارگت فعال باشد</b><small>در خلاصه عملکرد و محاسبات فعلی نمایش داده می‌شود.</small></span></label><button class="primary" type="submit">ذخیره تارگت‌ها</button></form></article>
-<article class="card control-section" id="violations"><div class="card-head"><div><h2>قوانین تخلف مرتبط</h2><p>قوانین سراسری یا اختصاص‌یافته به این لاین؛ فرمول مالی جدیدی اعمال نشده است.</p></div><a class="secondary" href="{% url 'management_violation_rules' %}">مدیریت قوانین</a></div><div class="rule-chips">{% for rule in rules %}<a href="{% url 'management_violation_rule_edit' rule.pk %}"><b>{{ rule.title }}</b><small>{{ rule.first_points }} / {{ rule.second_points }} / {{ rule.third_points }} امتیاز · {{ rule.get_recurrence_window_display }}</small></a>{% empty %}<p class="empty">قانون مرتبطی تعریف نشده است.</p>{% endfor %}</div></article>
+<article class="card control-section" id="violations"><div class="card-head"><div><h2>تخلفات</h2><p>فهرست تخلفات برای همه لاین‌ها یکی است و از بخش فعالیت‌ها و تخلفات تنظیم می‌شود.</p></div><a class="secondary" href="{% url 'management_activities' %}#violations">تنظیم تخلفات</a></div><div class="rule-chips">{% for rule in rules %}<a href="{% url 'management_activities' %}#violations"><b>{{ rule.title }}</b><small>ضریب {{ rule.base_multiplier }} · تکرار ×{{ rule.repeat_multiplier }}</small></a>{% empty %}<p class="empty">هنوز تخلفی تعریف نشده است.</p>{% endfor %}</div></article>
 <article class="card control-section" id="history"><div class="card-head"><h2>تاریچه تغییرات مهم</h2></div><div class="history-list">{% for item in history %}<div><b>{{ item.action }}</b><span>{{ item.created_at|date:'Y/m/d H:i' }} · {{ item.actor|default:'سیستم' }}</span></div>{% empty %}<p class="empty">هنوز تغییری برای این لاین ثبت نشده است.</p>{% endfor %}</div></article>
 <article class="card control-section"><div class="card-head"><h2>عملکردهای اخیر</h2></div><div class="table-wrap"><table><thead><tr><th>تاریخ</th><th>شیفت</th><th>فروش</th><th>مبلغ فروش</th></tr></thead><tbody>{% for item in recent_performances %}<tr><td>{{ item.date }}</td><td>{{ item.shift.title }}</td><td>{{ item.sold_units }} کالا</td><td>{{ item.sales_amount }} ریال</td></tr>{% empty %}<tr><td colspan="4" class="empty">هنوز عملکردی برای این لاین ثبت نشده است.</td></tr>{% endfor %}</tbody></table></div></article>
 <article class="card control-section" style="border:1px solid #fecaca;background:#fffafa"><div class="card-head"><div><h2 style="color:#b42318">منطقه خطر</h2><p>حذف خود لاین فقط زمانی انجام می‌شود که هیچ وابستگی عملیاتی یا تنظیماتی باقی نمانده باشد.</p></div></div><form method="post" action="{% url 'management_department_delete' department.pk %}" onsubmit="return confirm('لاین «{{ department.name|escapejs }}» برای همیشه حذف شود؟');">{% csrf_token %}<button class="secondary" type="submit" style="color:#b42318;border-color:#ef4444">حذف لاین</button></form></article>

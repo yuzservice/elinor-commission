@@ -1,0 +1,156 @@
+{% extends 'base.html' %}
+{% block title %}فعالیت‌ها و تخلفات{% endblock %}
+{% block content %}
+<div class="admin-page-head">
+  <div>
+    <span class="admin-kicker">تعاریف سراسری</span>
+    <h1>فعالیت‌ها و تخلفات</h1>
+    <p>هر دو فهرست برای همه لاین‌ها یکی است.</p>
+  </div>
+</div>
+
+<article class="card form-card" id="activities">
+  <div class="card-head">
+    <div>
+      <h2>فعالیت‌ها</h2>
+      <p>کارمند در ثبت کارکرد فعالیت را انتخاب می‌کند. واحد عملکرد = تعداد یا تیک × ضریب.</p>
+    </div>
+  </div>
+  <form method="post" id="activity-form">
+    {% csrf_token %}
+    <input type="hidden" name="section" value="activities">
+    <div id="activity-rows" class="activity-admin-list">
+      {% for activity in activities %}
+      <div class="activity-admin-row" draggable="true">
+        <button type="button" class="drag-handle" aria-label="جابه‌جایی">⠿</button>
+        <input type="hidden" name="activity_sort_{{ activity.pk }}" class="activity-sort" value="{{ activity.sort_order }}">
+        <div class="field">
+          <label>نام فعالیت</label>
+          <input type="text" name="activity_title_{{ activity.pk }}" value="{{ activity.title }}" required>
+        </div>
+        <div class="field">
+          <label>نوع ورود</label>
+          <select name="activity_count_method_{{ activity.pk }}">
+            <option value="QUANTITY" {% if activity.count_method == 'QUANTITY' %}selected{% endif %}>عدد</option>
+            <option value="CHECKMARK" {% if activity.count_method == 'CHECKMARK' %}selected{% endif %}>تیک</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>ضریب</label>
+          <input type="number" min="0.01" step="0.01" name="activity_multiplier_{{ activity.pk }}" value="{{ activity.unit_multiplier }}" required>
+        </div>
+        <label class="check-inline"><input type="checkbox" name="activity_active_{{ activity.pk }}" {% if activity.is_active %}checked{% endif %}><span>فعال</span></label>
+        <label class="check-inline danger"><input type="checkbox" name="delete_activity_{{ activity.pk }}"><span>حذف</span></label>
+      </div>
+      {% empty %}
+      <p class="empty">هنوز فعالیتی تعریف نشده است. از کادر پایین اولین مورد را اضافه کن.</p>
+      {% endfor %}
+    </div>
+
+    <div class="activity-admin-new">
+      <div class="field"><label>فعالیت جدید</label><input type="text" name="new_activity_title" placeholder="مثلاً فاکتور صادرشده"></div>
+      <div class="field">
+        <label>نوع ورود</label>
+        <select name="new_activity_count_method">
+          <option value="QUANTITY">عدد</option>
+          <option value="CHECKMARK">تیک</option>
+        </select>
+      </div>
+      <div class="field"><label>ضریب</label><input type="number" min="0.01" step="0.01" name="new_activity_multiplier" placeholder="۱"></div>
+    </div>
+    <button class="primary" type="submit">ذخیره فعالیت‌ها</button>
+  </form>
+</article>
+
+<article class="card form-card" id="violations">
+  <div class="card-head">
+    <div>
+      <h2>تخلفات</h2>
+      <p>بار اول همان ضریب است. از بار دوم به بعد امتیاز = ضریب × چندبرابر، و دیگر بیشتر نمی‌شود. مبلغ کسر = امتیاز × نرخ تخلف گرید.</p>
+    </div>
+  </div>
+  <form method="post" id="violation-rules-form">
+    {% csrf_token %}
+    <input type="hidden" name="section" value="violations">
+    <div class="activity-admin-list">
+      {% for rule in rules %}
+      <div class="violation-admin-row">
+        <div class="field">
+          <label>عنوان تخلف</label>
+          <input type="text" name="violation_title_{{ rule.pk }}" value="{{ rule.title }}" required>
+        </div>
+        <div class="field">
+          <label>ضریب</label>
+          <input type="number" min="1" step="1" name="violation_multiplier_{{ rule.pk }}" value="{{ rule.base_multiplier }}" required>
+        </div>
+        <div class="field">
+          <label>چند برابر در تکرار</label>
+          <input type="number" min="1" step="1" name="violation_repeat_{{ rule.pk }}" value="{{ rule.repeat_multiplier }}" required>
+        </div>
+        <label class="check-inline danger"><input type="checkbox" name="delete_violation_{{ rule.pk }}"><span>حذف</span></label>
+      </div>
+      {% empty %}
+      <p class="empty">هنوز تخلفی تعریف نشده است. از کادر پایین اولین مورد را اضافه کن.</p>
+      {% endfor %}
+    </div>
+    <div class="violation-admin-new">
+      <div class="field"><label>تخلف جدید</label><input type="text" name="new_violation_title" placeholder="مثلاً تأخیر"></div>
+      <div class="field"><label>ضریب</label><input type="number" min="1" step="1" name="new_violation_multiplier" placeholder="۲"></div>
+      <div class="field"><label>چند برابر در تکرار</label><input type="number" min="1" step="1" name="new_violation_repeat" placeholder="۲"></div>
+    </div>
+    <button class="primary" type="submit">ذخیره تخلفات</button>
+  </form>
+</article>
+
+<style>
+  .activity-admin-list { display: flex; flex-direction: column; gap: 10px; }
+  .activity-admin-row, .activity-admin-new, .violation-admin-row, .violation-admin-new {
+    display: grid;
+    gap: 10px;
+    align-items: end;
+    padding: 12px;
+    border: 1px solid var(--line, #e5eae7);
+    border-radius: 14px;
+    background: #fff;
+    direction: rtl;
+  }
+  .activity-admin-row, .activity-admin-new { grid-template-columns: auto 1.4fr .8fr .6fr auto auto; }
+  .activity-admin-new { grid-template-columns: 1.4fr .8fr .6fr; margin: 16px 0; background: #f0fdf4; border-style: dashed; }
+  .violation-admin-row, .violation-admin-new { grid-template-columns: 1.6fr .7fr .9fr auto; }
+  .violation-admin-new { grid-template-columns: 1.6fr .7fr .9fr; margin: 16px 0; background: #fff7ed; border-style: dashed; }
+  .activity-admin-row .field, .activity-admin-new .field, .violation-admin-row .field, .violation-admin-new .field { margin: 0; }
+  .activity-admin-row label, .activity-admin-new label, .violation-admin-row label, .violation-admin-new label { font-size: 12px; font-weight: 700; }
+  .drag-handle { width: 36px; height: 42px; border: 0; background: #f8faf9; border-radius: 10px; cursor: grab; font-size: 18px; }
+  .activity-admin-row.dragging { opacity: .45; }
+  .check-inline { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; margin: 0 0 10px; }
+  .check-inline.danger { color: #b42318; }
+  #violations { margin-top: 18px; }
+  @media (max-width: 800px) {
+    .activity-admin-row, .activity-admin-new, .violation-admin-row, .violation-admin-new { grid-template-columns: 1fr 1fr; }
+    .drag-handle { grid-column: 1 / -1; width: 100%; }
+  }
+</style>
+<script>
+document.querySelectorAll('.activity-admin-row').forEach(row => {
+  row.addEventListener('dragstart', () => row.classList.add('dragging'));
+  row.addEventListener('dragend', () => {
+    row.classList.remove('dragging');
+    document.querySelectorAll('.activity-sort').forEach((input, index) => { input.value = index; });
+  });
+});
+const list = document.getElementById('activity-rows');
+if (list) {
+  list.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    const dragging = list.querySelector('.dragging');
+    if (!dragging) return;
+    const after = [...list.querySelectorAll('.activity-admin-row:not(.dragging)')].find(item => {
+      const box = item.getBoundingClientRect();
+      return event.clientY < box.top + box.height / 2;
+    });
+    if (after) list.insertBefore(dragging, after);
+    else list.appendChild(dragging);
+  });
+}
+</script>
+{% endblock %}

@@ -1,1 +1,51 @@
-{% extends 'base.html' %}{% block title %}ثبت تخلف{% endblock %}{% block content %}<div class="page-head"><div><p class="eyebrow">تخلفات پرسنل</p><h1>ثبت تخلف</h1><p>امتیاز قانون در لحظه ثبت به‌عنوان snapshot نگهداری می‌شود.</p></div><a class="secondary" href="{% url 'violations' %}">بازگشت</a></div><article class="card form-card"><form method="post">{% csrf_token %}{% for field in form %}<div class="field"><label>{{ field.label }}</label>{{ field }}{% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>{% endfor %}<button class="primary" type="submit">ثبت تخلف</button></form></article>{% endblock %}
+{% extends 'base.html' %}{% block title %}ثبت تخلف{% endblock %}{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">تخلفات پرسنل</p>
+    <h1>ثبت تخلف</h1>
+    <p>مرتبه تکرار در همان ماه شمسی خودکار است. بار اول برابر ضریب است و از بار دوم به بعد امتیاز = ضریب × چندبرابر. این امتیاز همان لحظه ثبت ذخیره می‌شود.</p>
+  </div>
+  <a class="secondary" href="{% url 'violations' %}">بازگشت</a>
+</div>
+<article class="card form-card">
+  <form method="post" id="violation-form">
+    {% csrf_token %}
+    {% for field in form %}
+    <div class="field">
+      <label>{{ field.label }}</label>
+      {{ field }}
+      {% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+    </div>
+    {% endfor %}
+    <div class="card" id="violation-preview" style="margin:12px 0;background:#fff7ed;border:1px solid #fdba74">
+      <p style="margin:0">پیش‌نمایش این ماه: <b id="violation-preview-text">کارمند، قانون و تاریخ را انتخاب کن.</b></p>
+    </div>
+    <button class="primary" type="submit">ثبت تخلف</button>
+  </form>
+</article>
+<script>
+const form = document.getElementById('violation-form');
+const preview = document.getElementById('violation-preview-text');
+let timer;
+async function refreshPreview() {
+  const employee = form.querySelector('[name="employee"]').value;
+  const rule = form.querySelector('[name="rule"]').value;
+  const day = form.querySelector('[name="violation_date"]').value;
+  if (!employee || !rule || !day) {
+    preview.textContent = 'کارمند، قانون و تاریخ را انتخاب کن.';
+    return;
+  }
+  const params = new URLSearchParams({employee, rule, violation_date: day});
+  const response = await fetch(`{% url 'violation_occurrence_preview' %}?${params}`);
+  if (!response.ok) {
+    preview.textContent = 'پیش‌نمایش آماده نیست.';
+    return;
+  }
+  const data = await response.json();
+  preview.textContent = `مرتبه ${data.occurrence} این ماه · امتیاز ${data.points}`;
+}
+form.addEventListener('change', () => { clearTimeout(timer); timer = setTimeout(refreshPreview, 200); });
+form.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(refreshPreview, 300); });
+refreshPreview();
+</script>
+{% endblock %}

@@ -34,8 +34,10 @@ urlpatterns = [
     # Violations
     path("violations/", views.violation_list, name="violations"),
     path("violations/new/", views.violation_create, name="violation_create"),
+    path("violations/preview/", views.violation_occurrence_preview, name="violation_occurrence_preview"),
     path("management/violations/<int:pk>/", views.management_violation_detail, name="management_violation_detail"),
     path("management/violations/<int:pk>/delete/", views.management_violation_delete, name="management_violation_delete"),
+    path("management/activities/", views.management_activities, name="management_activities"),
     path("management/violation-rules/", views.management_violation_rules, name="management_violation_rules"),
     path("management/violation-rules/create/", views.management_violation_rule_create, name="management_violation_rule_create"),
     path("management/violation-rules/<int:pk>/edit/", views.management_violation_rule_edit, name="management_violation_rule_edit"),

@@ -86,45 +86,33 @@ def find_target_shift_for_overtime(overtime_start_time, current_shift):
     return other_shifts[0] if other_shifts else None
 
 
-def department_has_line_activities(department):
-    if not department:
-        return False
-    return LineActivityType.objects.filter(department=department, is_active=True).exists()
-
-
 def department_needs_shift_sales_performance(department):
-    """لاین‌های با فعالیت تعریف‌شده به ثبت فروش شیفت توسط مدیر نیاز ندارند."""
-    return department is not None and not department_has_line_activities(department)
+    return department is not None
 
 
 def departments_needing_performance_for_logs(logs):
     needed = set()
     for log in logs:
-        if department_needs_shift_sales_performance(log.main_department):
+        if log.main_department_id:
             needed.add(log.main_department_id)
         for department in log.support_departments.all():
-            if department_needs_shift_sales_performance(department):
-                needed.add(department.pk)
+            needed.add(department.pk)
     return needed
 
 
 def count_active_departments_needing_shift_sales():
-    return (
-        Department.objects.filter(is_active=True)
-        .exclude(line_activity_types__is_active=True)
-        .distinct()
-        .count()
-    )
+    return Department.objects.filter(is_active=True).count()
 
 
-def activity_performance_for_shift_log(shift_log, department):
-    """جمع واحد عملکرد از فعالیت‌های ثبت‌شده روی کارکرد برای یک لاین."""
-    if not shift_log.pk or not department:
+def activity_performance_for_shift_log(shift_log, department=None):
+    """جمع واحد عملکرد از فعالیت‌های ثبت‌شده روی کارکرد. فقط برای لاین اصلی همان کارکرد."""
+    if not shift_log.pk:
+        return Decimal("0.0"), []
+    if department is not None and shift_log.main_department_id != department.pk:
         return Decimal("0.0"), []
     details = []
     total = Decimal("0.0")
     entries = shift_log.activity_entries.filter(
-        activity_type__department=department,
         activity_type__is_active=True,
     ).select_related("activity_type")
     for entry in entries:
@@ -144,17 +132,27 @@ def activity_performance_for_shift_log(shift_log, department):
 
 
 def save_shift_log_activity_entries(*, shift_log, post_data):
-    """ذخیره مقادیر فعالیت‌های لاین اصلی از POST کارکرد شیفت."""
-    department = shift_log.main_department
-    activity_types = list(
-        LineActivityType.objects.filter(department=department, is_active=True).order_by("sort_order", "title")
-    )
-    if not activity_types:
+    """ذخیره فعالیت‌هایی که کارمند خودش به کارکرد اضافه کرده است."""
+    raw_ids = post_data.getlist("activity_ids") if hasattr(post_data, "getlist") else post_data.get("activity_ids", [])
+    activity_ids = []
+    for raw in raw_ids:
+        try:
+            activity_ids.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+    types = {
+        item.pk: item
+        for item in LineActivityType.objects.filter(pk__in=activity_ids, is_active=True)
+    }
+    ShiftLogActivityEntry.objects.filter(shift_log=shift_log).exclude(activity_type_id__in=types).delete()
+    if not types:
         ShiftLogActivityEntry.objects.filter(shift_log=shift_log).delete()
         return
 
-    any_positive = False
-    for activity_type in activity_types:
+    for activity_id in activity_ids:
+        activity_type = types.get(activity_id)
+        if not activity_type:
+            continue
         if activity_type.count_method == LineActivityType.CountMethod.CHECKMARK:
             raw_checked = post_data.get(f"activity_{activity_type.pk}")
             quantity = 1 if raw_checked in ("on", "1", "true", True) else 0
@@ -169,8 +167,9 @@ def save_shift_log_activity_entries(*, shift_log, post_data):
                     raise ValidationError({f"activity_{activity_type.pk}": "مقدار فعالیت باید عدد صحیح باشد."}) from exc
             if quantity < 0:
                 raise ValidationError({f"activity_{activity_type.pk}": "مقدار فعالیت نمی‌تواند منفی باشد."})
-        if quantity > 0:
-            any_positive = True
+        if quantity <= 0:
+            ShiftLogActivityEntry.objects.filter(shift_log=shift_log, activity_type=activity_type).delete()
+            continue
         ShiftLogActivityEntry.objects.update_or_create(
             shift_log=shift_log,
             activity_type=activity_type,
@@ -180,12 +179,28 @@ def save_shift_log_activity_entries(*, shift_log, post_data):
             },
         )
 
-    ShiftLogActivityEntry.objects.filter(shift_log=shift_log).exclude(
-        activity_type__in=activity_types
-    ).delete()
 
-    if not any_positive:
-        raise ValidationError("برای لاین انتخاب‌شده حداقل یک فعالیت را ثبت کنید (عدد یا تیک انجام‌شده).")
+def jalali_month_bounds(day):
+    import jdatetime
+    jdate = jdatetime.date.fromgregorian(date=day)
+    start = jdatetime.date(jdate.year, jdate.month, 1).togregorian()
+    if jdate.month == 12:
+        end = jdatetime.date(jdate.year + 1, 1, 1).togregorian()
+    else:
+        end = jdatetime.date(jdate.year, jdate.month + 1, 1).togregorian()
+    return start, end
+
+
+def next_violation_occurrence(*, employee, rule, violation_date):
+    """مرتبه تکرار همین قانون برای همین کارمند در همان ماه شمسی."""
+    start, end = jalali_month_bounds(violation_date)
+    count = Violation.objects.filter(
+        employee=employee,
+        rule=rule,
+        violation_date__gte=start,
+        violation_date__lt=end,
+    ).count()
+    return count + 1
 
 
 def serialize_main_info_snapshot(main_info):

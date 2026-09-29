@@ -368,9 +368,12 @@ class ManagementDeletionTests(BaseEmployeeTest):
 
     def test_violation_rule_delete_blocks_and_clean_rule_deletes(self):
         linked = ViolationRule.objects.create(code="LINKED", title="قانون مرتبط", first_points=1, second_points=2, third_points=3)
-        linked.departments.add(self.department)
+        Violation.objects.create(
+            employee=self.employee, rule=linked, violation_date=date(2026, 8, 2),
+            occurrence=1, points_snapshot=1, recorded_by=self.manager_user, description="مرتبط",
+        )
         response = self.client.post(reverse("management_violation_rule_delete", args=[linked.pk]), follow=True)
-        self.assertContains(response, "1 لاین مرتبط")
+        self.assertContains(response, "1 تخلف ثبت‌شده")
         clean = ViolationRule.objects.create(code="CLEAN", title="قانون پاک", first_points=1, second_points=2, third_points=3)
         self.client.post(reverse("management_violation_rule_delete", args=[clean.pk]))
         self.assertFalse(ViolationRule.objects.filter(pk=clean.pk).exists())
@@ -390,38 +393,62 @@ class ManagementDeletionTests(BaseEmployeeTest):
 
 
 class ViolationRuleManagementTests(BaseEmployeeTest):
-    def test_manager_can_create_line_scoped_rule(self):
+    def test_manager_can_create_global_rule(self):
         self.client.force_login(self.manager_user)
-        response = self.client.post(reverse("management_violation_rule_create"), {
-            "code": "LATE", "title": "تاخیر", "first_points": 1,
-            "second_points": 2, "third_points": 4,
-            "recurrence_window": ViolationRule.RecurrenceWindow.SAME_MONTH,
-            "departments": [self.department.pk], "is_active": "on",
+        response = self.client.post(reverse("management_activities"), {
+            "section": "violations",
+            "new_violation_title": "تاخیر",
+            "new_violation_multiplier": "2",
+            "new_violation_repeat": "2",
         })
         self.assertEqual(response.status_code, 302)
-        rule = ViolationRule.objects.get(code="LATE")
-        self.assertFalse(rule.all_departments)
-        self.assertEqual(list(rule.departments.all()), [self.department])
+        rule = ViolationRule.objects.get(title="تاخیر")
+        self.assertTrue(rule.all_departments)
+        self.assertEqual(rule.departments.count(), 0)
+        self.assertTrue(rule.code)
+        self.assertEqual(rule.base_multiplier, 2)
+        self.assertEqual(rule.repeat_multiplier, 2)
+        self.assertEqual(rule.points_for(1), 2)
+        self.assertEqual(rule.points_for(2), 4)
+        self.assertEqual(rule.points_for(4), 4)
         self.assertTrue(AuditLog.objects.filter(action="violation_rule.created").exists())
 
     def test_violation_keeps_rule_snapshot_after_rule_change(self):
         rule = ViolationRule.objects.create(
-            code="V-SNAP", title="قانون اولیه", first_points=2, second_points=4, third_points=8,
+            code="V-SNAP", title="قانون اولیه", first_points=2, second_points=4, third_points=6,
+            base_multiplier=2,
         )
         self.client.force_login(self.manager_user)
         response = self.client.post(reverse("violation_create"), {
             "employee": self.employee.pk, "rule": rule.pk,
-            "violation_date": "۱۴۰۵/۰۶/۰۹", "occurrence": 2, "description": "شرح",
+            "violation_date": "۱۴۰۵/۰۶/۰۹", "description": "شرح",
         })
         self.assertEqual(response.status_code, 302)
         violation = Violation.objects.get(rule=rule)
         rule.title = "قانون ویرایش‌شده"
-        rule.second_points = 20
+        rule.base_multiplier = 9
         rule.save()
         violation.refresh_from_db()
-        self.assertEqual(violation.points_snapshot, 4)
+        self.assertEqual(violation.occurrence, 1)
+        self.assertEqual(violation.points_snapshot, 2)
         self.assertEqual(violation.rule_snapshot["title"], "قانون اولیه")
-        self.assertEqual(violation.rule_snapshot["points"], 4)
+        self.assertEqual(violation.rule_snapshot["points"], 2)
+
+    def test_second_violation_in_same_jalali_month_doubles_points(self):
+        rule = ViolationRule.objects.create(
+            code="V-REPEAT", title="تکرار", first_points=2, second_points=4, third_points=6,
+            base_multiplier=2,
+        )
+        self.client.force_login(self.manager_user)
+        payload = {
+            "employee": self.employee.pk, "rule": rule.pk,
+            "violation_date": "۱۴۰۵/۰۶/۰۹", "description": "بار اول",
+        }
+        self.client.post(reverse("violation_create"), payload)
+        payload["description"] = "بار دوم"
+        self.client.post(reverse("violation_create"), payload)
+        points = list(Violation.objects.filter(rule=rule).order_by("pk").values_list("occurrence", "points_snapshot"))
+        self.assertEqual(points, [(1, 2), (2, 4)])
 
     def test_employee_cannot_manage_violation_rules(self):
         self.client.force_login(self.employee_user)
@@ -456,6 +483,45 @@ class DailyShiftLogTests(BaseEmployeeTest):
         self.assertEqual(log.support_hours, Decimal("0.0"))
         self.assertEqual(log.total_hours, Decimal("6.0"))
         self.assertTrue(AuditLog.objects.filter(action="shift_log.created").exists())
+
+    def test_employee_adds_only_selected_activities(self):
+        counted = LineActivityType.objects.create(title="فاکتور", unit_multiplier=Decimal("2.0"))
+        ticked = LineActivityType.objects.create(
+            title="چیدمان",
+            count_method=LineActivityType.CountMethod.CHECKMARK,
+            unit_multiplier=Decimal("5.0"),
+        )
+        LineActivityType.objects.create(title="بدون ثبت", unit_multiplier=Decimal("9.0"))
+        self.client.force_login(self.employee_user)
+        payload = {
+            "date": self.jalali_today,
+            "shift": self.shift_morning.pk,
+            "main_department": self.department.pk,
+            "activity_ids": [str(counted.pk), str(ticked.pk)],
+            f"activity_{counted.pk}": "3",
+            f"activity_{ticked.pk}": "1",
+        }
+        response = self.client.post(reverse("shift_log_create"), payload)
+        self.assertEqual(response.status_code, 302)
+        log = DailyShiftLog.objects.get()
+        quantities = dict(log.activity_entries.values_list("activity_type_id", "quantity"))
+        self.assertEqual(quantities, {counted.pk: 3, ticked.pk: 1})
+
+    def test_manager_can_open_global_activities(self):
+        self.client.force_login(self.manager_user)
+        response = self.client.get(reverse("management_activities"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "فعالیت‌ها و تخلفات")
+        self.assertContains(response, "چند برابر در تکرار")
+        self.assertNotContains(response, "name=\"code\"")
+        response = self.client.post(reverse("management_activities"), {
+            "new_activity_title": "ورود بار",
+            "new_activity_count_method": "QUANTITY",
+            "new_activity_multiplier": "4",
+        })
+        self.assertEqual(response.status_code, 302)
+        activity = LineActivityType.objects.get(title="ورود بار")
+        self.assertEqual(activity.unit_multiplier, Decimal("4"))
 
     def test_create_shift_log_with_support_line(self):
         self.client.force_login(self.employee_user)
@@ -939,13 +1005,11 @@ class LineCommissionEngineTests(BaseEmployeeTest):
             rate_per_unit=1000,
         )
         inbound = LineActivityType.objects.create(
-            department=warehouse,
             title="بار ورودی",
             unit_label="بار",
             unit_multiplier=Decimal("10.0"),
         )
         returns = LineActivityType.objects.create(
-            department=warehouse,
             title="بازگشتی باز شده",
             unit_multiplier=Decimal("2.0"),
         )
@@ -985,7 +1049,6 @@ class LineCommissionEngineTests(BaseEmployeeTest):
             rate_per_unit=500,
         )
         daily_task = LineActivityType.objects.create(
-            department=dept,
             title="بستن صندوق",
             count_method=LineActivityType.CountMethod.CHECKMARK,
             unit_multiplier=Decimal("3.0"),

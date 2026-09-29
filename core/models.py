@@ -182,24 +182,39 @@ class ViolationRule(models.Model):
     first_points = models.PositiveIntegerField("مرتبه اول")
     second_points = models.PositiveIntegerField("مرتبه دوم")
     third_points = models.PositiveIntegerField("مرتبه سوم")
+    base_multiplier = models.PositiveIntegerField(
+        "ضریب",
+        default=1,
+        help_text="امتیاز بار اول. از بار دوم به بعد این عدد در «چند برابر» ضرب می‌شود.",
+    )
+    repeat_multiplier = models.PositiveIntegerField(
+        "چند برابر در تکرار",
+        default=2,
+        help_text="از بار دوم به بعد، امتیاز = ضریب × این عدد.",
+    )
     recurrence_window = models.CharField(
         "بازه محاسبه تکرار",
         max_length=20,
         choices=RecurrenceWindow.choices,
         default=RecurrenceWindow.SAME_MONTH,
-        help_text="این گزینه زیرساخت مدیریتی است؛ محاسبه خودکار تکرار تا نهایی‌شدن قانون کسب‌وکار فعال نمی‌شود.",
+        help_text="تکرار در همان ماه شمسی، برای همان کارمند و همان قانون، خودکار حساب می‌شود.",
     )
     all_departments = models.BooleanField("قابل استفاده برای همه لاین‌ها", default=True)
     departments = models.ManyToManyField(Department, blank=True, related_name="violation_rules")
     is_active = models.BooleanField("فعال", default=True)
     def __str__(self): return self.title
-    def points_for(self, occurrence): return [self.first_points, self.second_points, self.third_points][occurrence - 1]
+    def points_for(self, occurrence):
+        """بار اول = ضریب. از بار دوم به بعد = ضریب × چند برابر."""
+        base = int(self.base_multiplier or self.first_points or 1)
+        if int(occurrence or 1) <= 1:
+            return base
+        return base * int(self.repeat_multiplier or 1)
 
 class Violation(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="violations")
     rule = models.ForeignKey(ViolationRule, on_delete=models.PROTECT, related_name="violations")
     violation_date = models.DateField("تاریخ")
-    occurrence = models.PositiveSmallIntegerField("مرتبه", validators=[MinValueValidator(1), MaxValueValidator(3)])
+    occurrence = models.PositiveSmallIntegerField("مرتبه", validators=[MinValueValidator(1)])
     points_snapshot = models.PositiveIntegerField("امتیاز تخلف")
     rule_snapshot = models.JSONField("نسخه قانون هنگام ثبت", default=dict, blank=True)
     description = models.TextField("شرح")
@@ -499,19 +514,13 @@ class LineCommissionRate(models.Model):
 
 
 class LineActivityType(models.Model):
-    """تعریف فعالیت‌های عملیاتی لاین (انبار، صندوق و ...) با ضریب تبدیل به واحد عملکرد."""
+    """فعالیت سراسری فروشگاه؛ در کارکرد هر لاینی قابل ثبت است."""
 
     class CountMethod(models.TextChoices):
         QUANTITY = "QUANTITY", "ورود عدد"
         CHECKMARK = "CHECKMARK", "تیک انجام‌شده"
 
-    department = models.ForeignKey(
-        Department,
-        on_delete=models.CASCADE,
-        related_name="line_activity_types",
-        verbose_name="لاین / بخش",
-    )
-    title = models.CharField("نام فعالیت", max_length=120)
+    title = models.CharField("نام فعالیت", max_length=120, unique=True)
     unit_label = models.CharField("واحد شمارش", max_length=50, default="عدد")
     count_method = models.CharField(
         "نحوه ثبت در کارکرد",
@@ -525,7 +534,7 @@ class LineActivityType(models.Model):
         decimal_places=2,
         default=Decimal("1.0"),
         validators=[MinValueValidator(Decimal("0.01"))],
-        help_text="مثلاً ۱۰ یعنی هر واحد شمارش = ۱۰ واحد عملکرد در پورسانت",
+        help_text="تیک = ۱ × ضریب. عدد = تعداد × ضریب.",
     )
     sort_order = models.PositiveIntegerField("ترتیب", default=0)
     is_active = models.BooleanField("فعال", default=True)
@@ -534,12 +543,11 @@ class LineActivityType(models.Model):
 
     class Meta:
         ordering = ["sort_order", "title", "pk"]
-        verbose_name = "نوع فعالیت لاین"
-        verbose_name_plural = "انواع فعالیت لاین"
-        unique_together = [("department", "title")]
+        verbose_name = "فعالیت"
+        verbose_name_plural = "فعالیت‌ها"
 
     def __str__(self):
-        return f"{self.department.name} · {self.title}"
+        return self.title
 
 
 class ShiftLogActivityEntry(models.Model):

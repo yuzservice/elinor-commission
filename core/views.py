@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 from decimal import Decimal
+import secrets
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
@@ -54,7 +55,6 @@ from .forms import (
     ShiftForm,
     ShiftLogReviewForm,
     ViolationForm,
-    ViolationRuleForm,
 )
 from .models import (
     AuditLog,
@@ -79,9 +79,9 @@ from .services import (
     calculate_single_shift_log,
     change_employee_level,
     count_active_departments_needing_shift_sales,
-    department_has_line_activities,
     departments_needing_performance_for_logs,
     employee_metrics,
+    next_violation_occurrence,
     reject_shift_log,
     revert_shift_log_to_pending,
     save_shift_log_activity_entries,
@@ -263,20 +263,17 @@ def shift_log_snapshot(obj):
     }
 
 
-def line_activities_by_department():
-    payload = {}
-    for activity in LineActivityType.objects.filter(
-        is_active=True,
-        department__is_active=True,
-    ).select_related("department").order_by("department_id", "sort_order", "title"):
-        payload.setdefault(str(activity.department_id), []).append({
+def activity_catalog():
+    return [
+        {
             "id": activity.pk,
             "title": activity.title,
             "unit_label": activity.unit_label,
             "unit_multiplier": str(activity.unit_multiplier),
             "count_method": activity.count_method,
-        })
-    return payload
+        }
+        for activity in LineActivityType.objects.filter(is_active=True).order_by("sort_order", "title")
+    ]
 
 
 def shift_log_activity_values(log=None):
@@ -345,10 +342,7 @@ def shift_log_create(request):
                 if not formset.is_valid():
                     raise ValidationError("بازه‌های کمکی را بررسی کن.")
                 save_support_intervals(request=request, log=log, formset=formset)
-                if department_has_line_activities(log.main_department):
-                    save_shift_log_activity_entries(shift_log=log, post_data=request.POST)
-                else:
-                    log.activity_entries.all().delete()
+                save_shift_log_activity_entries(shift_log=log, post_data=request.POST)
                 audit(
                     actor=request.user,
                     action="shift_log.created",
@@ -388,7 +382,7 @@ def shift_log_create(request):
             "submit": "✅ ثبت نهایی کارکرد",
             "date_pills": date_pills,
             "standard_hours": employee.standard_daily_hours or Decimal("6.0"),
-            "line_activities_by_department": line_activities_by_department(),
+            "activity_catalog": activity_catalog(),
             "activity_values": shift_log_activity_values(),
         },
     )
@@ -475,10 +469,7 @@ def shift_log_edit(request, pk):
                 obj.total_hours = obj.shift.standard_hours
                 obj.save()
                 save_support_intervals(request=request, log=obj, formset=formset, previous=old)
-                if department_has_line_activities(obj.main_department):
-                    save_shift_log_activity_entries(shift_log=obj, post_data=request.POST)
-                else:
-                    obj.activity_entries.all().delete()
+                save_shift_log_activity_entries(shift_log=obj, post_data=request.POST)
                 new = shift_log_snapshot(obj)
                 audit(
                     actor=request.user,
@@ -514,7 +505,7 @@ def shift_log_edit(request, pk):
             "submit": "💾 ذخیره تغییرات کارکرد",
             "date_pills": date_pills,
             "standard_hours": employee.standard_daily_hours or Decimal("6.0"),
-            "line_activities_by_department": line_activities_by_department(),
+            "activity_catalog": activity_catalog(),
             "activity_values": shift_log_activity_values(log),
         },
     )
@@ -1229,6 +1220,195 @@ def management_commission_report(request):
 # Violations & Disciplines
 # ==========================================
 
+def _activity_unit_label(count_method):
+    if count_method == LineActivityType.CountMethod.CHECKMARK:
+        return "انجام"
+    return "عدد"
+
+
+def _apply_violation_coefficients(rule, base, repeat):
+    rule.base_multiplier = base
+    rule.repeat_multiplier = repeat
+    rule.first_points = base
+    rule.second_points = base * repeat
+    rule.third_points = base * repeat
+    rule.all_departments = True
+    rule.recurrence_window = ViolationRule.RecurrenceWindow.SAME_MONTH
+
+
+def _new_violation_code():
+    while True:
+        code = secrets.token_hex(4).upper()
+        if not ViolationRule.objects.filter(code=code).exists():
+            return code
+
+
+def _save_violation_rules(request):
+    rules = list(ViolationRule.objects.order_by("title", "pk"))
+    seen_titles = set()
+    for rule in rules:
+        if request.POST.get(f"delete_violation_{rule.pk}") == "on":
+            if rule.violations.exists():
+                raise ValueError(f"«{rule.title}» تخلف ثبت‌شده دارد و حذف نمی‌شود.")
+            rule.delete()
+            continue
+        title = " ".join(request.POST.get(f"violation_title_{rule.pk}", "").split())
+        base_raw = request.POST.get(f"violation_multiplier_{rule.pk}", "").strip()
+        repeat_raw = request.POST.get(f"violation_repeat_{rule.pk}", "").strip()
+        if not title:
+            raise ValueError("عنوان تخلف نمی‌تواند خالی باشد.")
+        key = title.casefold()
+        if key in seen_titles:
+            raise ValueError(f"تخلف «{title}» تکراری است.")
+        seen_titles.add(key)
+        base = int(base_raw or "0")
+        repeat = int(repeat_raw or "0")
+        if base < 1:
+            raise ValueError(f"ضریب «{title}» باید حداقل ۱ باشد.")
+        if repeat < 1:
+            raise ValueError(f"چند برابر تکرار «{title}» باید حداقل ۱ باشد.")
+        rule.title = title
+        _apply_violation_coefficients(rule, base, repeat)
+        rule.save()
+        rule.departments.clear()
+
+    new_title = " ".join(request.POST.get("new_violation_title", "").split())
+    if not new_title:
+        return
+    if new_title.casefold() in seen_titles or ViolationRule.objects.filter(title__iexact=new_title).exists():
+        raise ValueError(f"تخلف «{new_title}» از قبل وجود دارد.")
+    base = int(request.POST.get("new_violation_multiplier", "").strip() or "0")
+    repeat = int(request.POST.get("new_violation_repeat", "").strip() or "0")
+    if base < 1:
+        raise ValueError("برای تخلف جدید، ضریب الزامی است.")
+    if repeat < 1:
+        raise ValueError("برای تخلف جدید، چند برابر شدن در تکرار الزامی است.")
+    rule = ViolationRule(
+        code=_new_violation_code(),
+        title=new_title,
+        is_active=True,
+        first_points=1,
+        second_points=1,
+        third_points=1,
+    )
+    _apply_violation_coefficients(rule, base, repeat)
+    rule.save()
+    audit(
+        actor=request.user,
+        action="violation_rule.created",
+        instance=rule,
+        new_values={"title": rule.title, "base_multiplier": base, "repeat_multiplier": repeat},
+    )
+
+
+@login_required
+@manager_required
+def management_activities(request):
+    activities = list(LineActivityType.objects.order_by("sort_order", "title", "pk"))
+    rules = list(ViolationRule.objects.order_by("title", "pk"))
+    if request.method == "POST" and request.POST.get("section") == "violations":
+        try:
+            with transaction.atomic():
+                _save_violation_rules(request)
+                audit(
+                    actor=request.user,
+                    action="violation_rules.updated",
+                    instance=SystemSettings.load(),
+                    description="به‌روزرسانی فهرست تخلفات سراسری",
+                )
+        except IntegrityError:
+            messages.error(request, "عنوان تخلف تکراری است.")
+        except (TypeError, ValueError, ArithmeticError) as exc:
+            messages.error(request, str(exc) or "مقادیر تخلف معتبر نیستند.")
+        else:
+            messages.success(request, "تخلفات ذخیره شد.")
+            return redirect("management_activities")
+        rules = list(ViolationRule.objects.order_by("title", "pk"))
+    elif request.method == "POST":
+        try:
+            with transaction.atomic():
+                next_sort = 0
+                seen_titles = set()
+                for activity in activities:
+                    if request.POST.get(f"delete_activity_{activity.pk}") == "on":
+                        if activity.shift_entries.exists():
+                            raise ValueError(f"«{activity.title}» در کارکردها ثبت شده و حذف نمی‌شود. غیرفعالش کن.")
+                        activity.delete()
+                        continue
+                    title = " ".join(request.POST.get(f"activity_title_{activity.pk}", "").split())
+                    count_method = request.POST.get(
+                        f"activity_count_method_{activity.pk}",
+                        LineActivityType.CountMethod.QUANTITY,
+                    )
+                    multiplier_raw = request.POST.get(f"activity_multiplier_{activity.pk}", "").strip()
+                    sort_raw = request.POST.get(f"activity_sort_{activity.pk}", str(next_sort)).strip()
+                    is_active = request.POST.get(f"activity_active_{activity.pk}") == "on"
+                    if count_method not in LineActivityType.CountMethod.values:
+                        count_method = LineActivityType.CountMethod.QUANTITY
+                    if not title:
+                        raise ValueError("نام فعالیت نمی‌تواند خالی باشد.")
+                    key = title.casefold()
+                    if key in seen_titles:
+                        raise ValueError(f"فعالیت «{title}» تکراری است.")
+                    seen_titles.add(key)
+                    multiplier = Decimal(multiplier_raw or "0")
+                    if multiplier <= 0:
+                        raise ValueError(f"ضریب «{title}» باید بزرگ‌تر از صفر باشد.")
+                    activity.title = title
+                    activity.count_method = count_method
+                    activity.unit_label = _activity_unit_label(count_method)
+                    activity.unit_multiplier = multiplier
+                    activity.sort_order = int(sort_raw or next_sort)
+                    activity.is_active = is_active
+                    activity.save()
+                    next_sort = max(next_sort, activity.sort_order + 1)
+
+                new_title = " ".join(request.POST.get("new_activity_title", "").split())
+                new_multiplier_raw = request.POST.get("new_activity_multiplier", "").strip()
+                if new_title:
+                    if new_title.casefold() in seen_titles or LineActivityType.objects.filter(title__iexact=new_title).exists():
+                        raise ValueError(f"فعالیت «{new_title}» از قبل وجود دارد.")
+                    if not new_multiplier_raw:
+                        raise ValueError("برای فعالیت جدید، ضریب الزامی است.")
+                    new_multiplier = Decimal(new_multiplier_raw)
+                    if new_multiplier <= 0:
+                        raise ValueError("ضریب فعالیت جدید باید بزرگ‌تر از صفر باشد.")
+                    new_count_method = request.POST.get(
+                        "new_activity_count_method",
+                        LineActivityType.CountMethod.QUANTITY,
+                    )
+                    if new_count_method not in LineActivityType.CountMethod.values:
+                        new_count_method = LineActivityType.CountMethod.QUANTITY
+                    LineActivityType.objects.create(
+                        title=new_title,
+                        unit_label=_activity_unit_label(new_count_method),
+                        unit_multiplier=new_multiplier,
+                        count_method=new_count_method,
+                        sort_order=next_sort,
+                        is_active=True,
+                    )
+                audit(
+                    actor=request.user,
+                    action="activities.updated",
+                    instance=SystemSettings.load(),
+                    description="به‌روزرسانی فهرست فعالیت‌های سراسری",
+                )
+        except IntegrityError:
+            messages.error(request, "نام فعالیت تکراری است.")
+        except (TypeError, ValueError, ArithmeticError) as exc:
+            messages.error(request, str(exc) or "مقادیر فعالیت معتبر نیستند.")
+        else:
+            messages.success(request, "فعالیت‌ها ذخیره شد.")
+            return redirect("management_activities")
+        activities = list(LineActivityType.objects.order_by("sort_order", "title", "pk"))
+
+    return render(
+        request,
+        "management/activity_list.html",
+        {"activities": activities, "rules": rules},
+    )
+
+
 @login_required
 def violation_list(request):
     employee = getattr(request.user, "employee", None)
@@ -1247,6 +1427,11 @@ def violation_create(request):
         with transaction.atomic():
             obj = form.save(commit=False)
             obj.recorded_by = request.user
+            obj.occurrence = next_violation_occurrence(
+                employee=obj.employee,
+                rule=obj.rule,
+                violation_date=obj.violation_date,
+            )
             obj.points_snapshot = obj.rule.points_for(obj.occurrence)
             obj.rule_snapshot = {
                 "rule_id": obj.rule_id,
@@ -1254,6 +1439,8 @@ def violation_create(request):
                 "title": obj.rule.title,
                 "occurrence": obj.occurrence,
                 "points": obj.points_snapshot,
+                "base_multiplier": obj.rule.base_multiplier,
+                "repeat_multiplier": obj.rule.repeat_multiplier,
                 "first_points": obj.rule.first_points,
                 "second_points": obj.rule.second_points,
                 "third_points": obj.rule.third_points,
@@ -1266,62 +1453,67 @@ def violation_create(request):
                 instance=obj,
                 new_values={"employee": obj.employee.full_name, "rule": obj.rule.title, "points": obj.points_snapshot},
             )
-        messages.success(request, "تخلف ثبت شد.")
+        messages.success(
+            request,
+            f"تخلف ثبت شد. مرتبه {obj.occurrence} این ماه، امتیاز {obj.points_snapshot}.",
+        )
         return redirect("violations")
     return render(request, "core/violation_form.html", {"form": form})
 
 
 @login_required
+@reviewer_required
+def violation_occurrence_preview(request):
+    try:
+        employee = Employee.objects.get(pk=request.GET.get("employee"), is_active=True)
+        rule = ViolationRule.objects.get(pk=request.GET.get("rule"), is_active=True)
+        violation_date = JalaliDateField().clean(request.GET.get("violation_date"))
+        if not violation_date:
+            raise ValueError
+    except Exception:
+        return JsonResponse({"error": "invalid"}, status=400)
+    occurrence = next_violation_occurrence(
+        employee=employee, rule=rule, violation_date=violation_date,
+    )
+    return JsonResponse({
+        "occurrence": occurrence,
+        "points": rule.points_for(occurrence),
+        "base_multiplier": rule.base_multiplier or rule.first_points or 1,
+        "repeat_multiplier": rule.repeat_multiplier or 1,
+    })
+
+
+@login_required
 @manager_required
 def management_violation_rules(request):
-    rules = ViolationRule.objects.prefetch_related("departments").order_by("title")
-    return render(request, "management/violation_rule_list.html", {"rules": rules})
+    return redirect("management_activities")
 
 
 @login_required
 @manager_required
 def management_violation_rule_create(request):
-    form = ViolationRuleForm(request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        with transaction.atomic():
-            rule = form.save()
-            audit(actor=request.user, action="violation_rule.created", instance=rule,
-                  new_values={"code": rule.code, "title": rule.title, "is_active": rule.is_active})
-        messages.success(request, f"قانون تخلف «{rule.title}» ایجاد شد.")
-        return redirect("management_violation_rules")
-    return render(request, "management/violation_rule_form.html", {"form": form, "title": "تعریف قانون تخلف"})
+    return redirect("management_activities")
 
 
 @login_required
 @manager_required
 def management_violation_rule_edit(request, pk):
-    rule = get_object_or_404(ViolationRule, pk=pk)
-    form = ViolationRuleForm(request.POST or None, instance=rule)
-    if request.method == "POST" and form.is_valid():
-        old_values = {"code": rule.code, "title": rule.title, "is_active": rule.is_active}
-        with transaction.atomic():
-            rule = form.save()
-            audit(actor=request.user, action="violation_rule.updated", instance=rule,
-                  old_values=old_values,
-                  new_values={"code": rule.code, "title": rule.title, "is_active": rule.is_active})
-        messages.success(request, f"قانون تخلف «{rule.title}» به‌روزرسانی شد؛ سوابق قبلی بدون تغییر ماندند.")
-        return redirect("management_violation_rules")
-    return render(request, "management/violation_rule_form.html", {"form": form, "rule": rule, "title": "ویرایش قانون تخلف"})
+    return redirect("management_activities")
 
 @login_required
 @manager_required
 @require_POST
 def management_violation_rule_delete(request, pk):
     rule = get_object_or_404(ViolationRule, pk=pk)
-    blockers = [("تخلف ثبت‌شده", rule.violations.count()), ("لاین مرتبط", rule.departments.count())]
+    blockers = [("تخلف ثبت‌شده", rule.violations.count())]
     if any(count for _, count in blockers):
         messages.error(request, dependency_message("این قانون تخلف", blockers))
-        return redirect("management_violation_rule_edit", pk=pk)
+        return redirect("management_activities")
     title = rule.title
     delete_with_audit(request=request, obj=rule, action="violation_rule.deleted",
                       description=f"حذف قانون تخلف: {title}", old_values={"title": title, "code": rule.code})
     messages.success(request, f"قانون تخلف «{title}» حذف شد.")
-    return redirect("management_violation_rules")
+    return redirect("management_activities")
 
 @login_required
 @manager_required
@@ -1477,66 +1669,6 @@ def management_department_detail(request, pk):
                             defaults={"rate_per_unit": new_rate, "is_active": True},
                         )
                     action = "department.rates_updated"
-                elif section == "activities":
-                    next_sort = 0
-                    for activity in department.line_activity_types.all():
-                        if request.POST.get(f"delete_activity_{activity.pk}") == "on":
-                            activity.delete()
-                            continue
-                        title = request.POST.get(f"activity_title_{activity.pk}", "").strip()
-                        count_method = request.POST.get(
-                            f"activity_count_method_{activity.pk}",
-                            LineActivityType.CountMethod.QUANTITY,
-                        )
-                        multiplier_raw = request.POST.get(f"activity_multiplier_{activity.pk}", "").strip()
-                        sort_raw = request.POST.get(f"activity_sort_{activity.pk}", "0").strip()
-                        is_active = request.POST.get(f"activity_active_{activity.pk}") == "on"
-                        if count_method not in LineActivityType.CountMethod.values:
-                            count_method = LineActivityType.CountMethod.QUANTITY
-                        if not title:
-                            raise ValueError(f"نام فعالیت «{activity.title}» نمی‌تواند خالی باشد.")
-                        multiplier = Decimal(multiplier_raw)
-                        if multiplier <= 0:
-                            raise ValueError(f"ضریب فعالیت «{title}» باید بزرگ‌تر از صفر باشد.")
-                        activity.title = title
-                        activity.count_method = count_method
-                        activity.unit_label = (
-                            "انجام" if count_method == LineActivityType.CountMethod.CHECKMARK else "عدد"
-                        )
-                        activity.unit_multiplier = multiplier
-                        activity.sort_order = int(sort_raw or 0)
-                        next_sort = max(next_sort, activity.sort_order + 1)
-                        activity.is_active = is_active
-                        activity.save()
-
-                    new_title = request.POST.get("new_activity_title", "").strip()
-                    new_multiplier_raw = request.POST.get("new_activity_multiplier", "").strip()
-                    if new_title:
-                        if not new_multiplier_raw:
-                            raise ValueError("برای فعالیت جدید، ضریب تبدیل الزامی است.")
-                        new_multiplier = Decimal(new_multiplier_raw)
-                        if new_multiplier <= 0:
-                            raise ValueError("ضریب فعالیت جدید باید بزرگ‌تر از صفر باشد.")
-                        new_count_method = request.POST.get(
-                            "new_activity_count_method",
-                            LineActivityType.CountMethod.QUANTITY,
-                        )
-                        if new_count_method not in LineActivityType.CountMethod.values:
-                            new_count_method = LineActivityType.CountMethod.QUANTITY
-                        LineActivityType.objects.create(
-                            department=department,
-                            title=new_title,
-                            unit_label=(
-                                "انجام"
-                                if new_count_method == LineActivityType.CountMethod.CHECKMARK
-                                else "عدد"
-                            ),
-                            unit_multiplier=new_multiplier,
-                            count_method=new_count_method,
-                            sort_order=next_sort,
-                            is_active=True,
-                        )
-                    action = "department.activities_updated"
                 elif section == "target":
                     target = target or LineTarget(department=department)
                     values = {}
@@ -1570,12 +1702,10 @@ def management_department_detail(request, pk):
     rules = ViolationRule.objects.filter(Q(all_departments=True) | Q(departments=department)).distinct().order_by("title")
     history = AuditLog.objects.filter(entity_type="Department", entity_id=str(department.pk))[:20]
     recent_performances = department.shift_performances.select_related("shift")[:10]
-    line_activities = list(department.line_activity_types.all())
     return render(request, "management/department_detail.html", {
         "department": department, "rate_rows": rate_rows, "target": target,
         "performance_units": units, "target_result": target.evaluate_target(units) if target and target.is_active else None,
         "rules": rules, "history": history, "recent_performances": recent_performances,
-        "line_activities": line_activities,
         "start": start, "end": end,
     })
 
@@ -1615,7 +1745,6 @@ def department_delete_blockers(department):
         ("کارکرد ثبت‌شده در لاین کمکی", department.support_shift_logs.count()),
         ("بازه کمکی ثبت‌شده", department.support_intervals.count()),
         ("فروش روزانه ثبت‌شده", department.shift_performances.count()),
-        ("ثبت فعالیت در کارکردها", ShiftLogActivityEntry.objects.filter(activity_type__department=department).count()),
         ("اتصال قانون تخلف", department.violation_rules.count()),
     ]
 

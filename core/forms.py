@@ -310,31 +310,14 @@ class ViolationForm(forms.ModelForm):
     violation_date = JalaliDateField(label="تاریخ تخلف")
     class Meta:
         model = Violation
-        fields = ["employee", "rule", "violation_date", "occurrence", "description"]
+        fields = ["employee", "rule", "violation_date", "description"]
         widgets = {"description": forms.Textarea(attrs={"rows":3})}
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["violation_date"].initial = jdatetime.date.fromgregorian(date=timezone.localdate()).strftime("%Y/%m/%d")
         self.fields["rule"].queryset = ViolationRule.objects.filter(is_active=True).order_by("title")
+        self.fields["employee"].queryset = Employee.objects.filter(is_active=True).order_by("first_name", "last_name")
 
-
-class ViolationRuleForm(forms.ModelForm):
-    class Meta:
-        model = ViolationRule
-        fields = [
-            "code", "title", "first_points", "second_points", "third_points",
-            "recurrence_window", "all_departments", "departments", "is_active",
-        ]
-        widgets = {"departments": forms.CheckboxSelectMultiple()}
-
-    def clean(self):
-        data = super().clean()
-        points = [data.get("first_points"), data.get("second_points"), data.get("third_points")]
-        if all(value is not None for value in points) and not (points[0] <= points[1] <= points[2]):
-            self.add_error("third_points", "مقادیر تکرار باید به‌ترتیب مرتبه اول، دوم و سوم صعودی باشند.")
-        if not data.get("all_departments") and not data.get("departments"):
-            self.add_error("departments", "حداقل یک لاین را انتخاب کنید یا قانون را سراسری قرار دهید.")
-        return data
 
 class EmployeeBaseForm(forms.ModelForm):
     start_date = JalaliDateField(label="تاریخ شروع همکاری", required=False)

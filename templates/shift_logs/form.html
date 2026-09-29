@@ -48,15 +48,23 @@
     </div>
   </section>
 
-  <section class="shift-block" id="line-activities-wrap" hidden>
+  <section class="shift-block" id="line-activities-wrap">
     <header class="shift-block-head">
+      <span class="section-badge muted">اختیاری</span>
       <div class="shift-block-copy">
-        <h2 class="shift-title"><span class="sec-label" id="activity-section-label">چه کاری انجام دادی؟</span><span class="sec-icon">📋</span><span class="sec-no">۲</span></h2>
-        <p id="activity-section-hint">تیک بزن یا تعداد را بنویس.</p>
+        <h2 class="shift-title"><span class="sec-label">چه کاری انجام دادی؟</span><span class="sec-icon">📋</span><span class="sec-no">۲</span></h2>
+        <p>یک فعالیت را انتخاب کن. اگر چند کار داشتی، دوباره اضافه کن.</p>
       </div>
     </header>
     <div class="activity-panel">
       <div id="line-activities-fields" class="activity-list"></div>
+      <div class="activity-picker">
+        <select id="activity-select">
+          <option value="">انتخاب فعالیت…</option>
+        </select>
+        <div id="activity-value-slot"></div>
+        <button type="button" id="confirm-activity" class="secondary" hidden>افزودن</button>
+      </div>
     </div>
   </section>
 
@@ -168,7 +176,7 @@
   </div>
 </form>
 </article>
-{{ line_activities_by_department|json_script:"line-activities-data" }}
+{{ activity_catalog|json_script:"line-activities-data" }}
 {{ activity_values|json_script:"activity-values-data" }}
 
 <style>
@@ -207,6 +215,10 @@
 .activity-check input, .extra-toggle input { width: 20px !important; height: 20px; min-width: 20px; padding: 0; accent-color: var(--green, #237554); flex: 0 0 20px; }
 .activity-check b { display: block; font-size: 14px; }
 .activity-check small { display: block; color: #1d4ed8; font-size: 12px; font-weight: 600; margin-top: 2px; }
+.activity-picker { display: grid; grid-template-columns: 1.4fr 1fr auto; gap: 10px; align-items: center; margin-top: 10px; direction: rtl; }
+.activity-picker select, .activity-picker input[type="number"] { margin: 0; }
+.activity-row .remove-activity { margin-right: auto; width: 36px; height: 36px; border-radius: 10px; border: 1px solid #fecaca; background: #fff; color: #b42318; cursor: pointer; }
+.activity-row .activity-check { width: auto; flex: 1; }
 .activity-empty { margin: 0; color: #1e40af; font-size: 13px; line-height: 1.7; text-align: right; }
 .extra-card { border: 1.5px solid #e2e8f0; border-radius: 14px; margin-bottom: 12px; background: #fdfdfd; direction: rtl; text-align: right; }
 .extra-support.is-open { border-color: #86efac; background: #f0fdf4; }
@@ -236,6 +248,7 @@
   .date-pill { min-width: 0; width: 100%; }
   .activity-row { align-items: stretch; flex-direction: column; }
   .activity-row input[type="number"] { width: 100%; margin-right: 0; }
+  .activity-picker { grid-template-columns: 1fr; }
   .live-summary { flex-direction: column; align-items: stretch; margin-right: -16px; margin-left: -16px; }
   .shift-log-card { padding: 18px 16px 8px; }
   .shift-title { font-size: 15px; }
@@ -383,46 +396,104 @@ document.addEventListener('DOMContentLoaded', () => {
     return Math.max(0, (end - start) / 60);
   }
 
-  const lineActivitiesByDept = JSON.parse(document.getElementById('line-activities-data').textContent);
+  const activityCatalog = JSON.parse(document.getElementById('line-activities-data').textContent);
   const activityValues = JSON.parse(document.getElementById('activity-values-data').textContent);
-  const activitiesSection = document.getElementById('line-activities-wrap');
   const activitiesFields = document.getElementById('line-activities-fields');
-  const activityLabel = document.getElementById('activity-section-label');
-  const activityHint = document.getElementById('activity-section-hint');
+  const activitySelect = document.getElementById('activity-select');
+  const valueSlot = document.getElementById('activity-value-slot');
+  const confirmBtn = document.getElementById('confirm-activity');
+  const addedIds = new Set(Object.keys(activityValues).map(String));
 
-  function renderLineActivities() {
-    const deptId = String(mainDept.value || '');
-    const defs = lineActivitiesByDept[deptId] || [];
-    const lineName = mainDept.options[mainDept.selectedIndex]?.text || '';
-    activitiesFields.innerHTML = '';
-    if (!defs.length) {
-      activitiesSection.hidden = true;
-      return;
-    }
-    activitiesSection.hidden = false;
-    activityLabel.textContent = lineName ? `کارهای ${lineName}` : 'چه کاری انجام دادی؟';
-    activityHint.textContent = 'تیک بزن یا تعداد را بنویس.';
-    defs.forEach(def => {
-      const row = document.createElement('div');
-      row.className = 'activity-row';
-      const val = activityValues[String(def.id)] ?? '';
-      if (def.count_method === 'CHECKMARK') {
-        const checked = Number(val) > 0 ? 'checked' : '';
-        row.innerHTML = `
-          <label class="activity-check">
-            <input type="checkbox" name="activity_${def.id}" value="1" ${checked}>
-            <span><b>${def.title}</b><small>انجام دادم</small></span>
-          </label>
-        `;
-      } else {
-        row.innerHTML = `
-          <label for="activity-input-${def.id}">${def.title}</label>
-          <input id="activity-input-${def.id}" type="number" min="0" step="1" name="activity_${def.id}" value="${val}" inputmode="numeric" placeholder="۰">
-        `;
-      }
-      activitiesFields.appendChild(row);
-    });
+  function catalogById(id) {
+    return activityCatalog.find(item => String(item.id) === String(id));
   }
+
+  function refreshSelect() {
+    const current = activitySelect.value;
+    activitySelect.innerHTML = '<option value="">انتخاب فعالیت…</option>';
+    activityCatalog.forEach(def => {
+      if (addedIds.has(String(def.id))) return;
+      const option = document.createElement('option');
+      option.value = def.id;
+      option.textContent = def.title;
+      activitySelect.appendChild(option);
+    });
+    if (current && !addedIds.has(String(current))) activitySelect.value = current;
+  }
+
+  function addActivityRow(def, value) {
+    addedIds.add(String(def.id));
+    const row = document.createElement('div');
+    row.className = 'activity-row';
+    row.dataset.id = def.id;
+    if (def.count_method === 'CHECKMARK') {
+      const checked = Number(value) > 0 ? 'checked' : '';
+      row.innerHTML = `
+        <input type="hidden" name="activity_ids" value="${def.id}">
+        <label class="activity-check">
+          <input type="checkbox" name="activity_${def.id}" value="1" ${checked}>
+          <span><b>${def.title}</b><small>انجام دادم</small></span>
+        </label>
+        <button type="button" class="remove-activity" aria-label="حذف">×</button>
+      `;
+    } else {
+      row.innerHTML = `
+        <input type="hidden" name="activity_ids" value="${def.id}">
+        <label for="activity-input-${def.id}">${def.title}</label>
+        <input id="activity-input-${def.id}" type="number" min="1" step="1" name="activity_${def.id}" value="${value || ''}" inputmode="numeric" placeholder="تعداد">
+        <button type="button" class="remove-activity" aria-label="حذف">×</button>
+      `;
+    }
+    activitiesFields.appendChild(row);
+    refreshSelect();
+    updateSummary();
+  }
+
+  activitySelect.addEventListener('change', () => {
+    valueSlot.innerHTML = '';
+    confirmBtn.hidden = true;
+    const def = catalogById(activitySelect.value);
+    if (!def) return;
+    if (def.count_method === 'CHECKMARK') {
+      valueSlot.innerHTML = `<label class="activity-check"><input type="checkbox" id="draft-activity" value="1"><span><b>انجام دادم</b><small>${def.title}</small></span></label>`;
+    } else {
+      valueSlot.innerHTML = `<input id="draft-activity" type="number" min="1" step="1" inputmode="numeric" placeholder="تعداد ${def.title}">`;
+    }
+    confirmBtn.hidden = false;
+  });
+
+  confirmBtn.addEventListener('click', () => {
+    const def = catalogById(activitySelect.value);
+    if (!def) return;
+    const draft = document.getElementById('draft-activity');
+    if (def.count_method === 'CHECKMARK') {
+      if (!draft?.checked) return;
+      addActivityRow(def, 1);
+    } else {
+      const qty = Number(draft?.value || 0);
+      if (qty <= 0) return;
+      addActivityRow(def, qty);
+    }
+    activitySelect.value = '';
+    valueSlot.innerHTML = '';
+    confirmBtn.hidden = true;
+  });
+
+  activitiesFields.addEventListener('click', (event) => {
+    const button = event.target.closest('.remove-activity');
+    if (!button) return;
+    const row = button.closest('.activity-row');
+    addedIds.delete(String(row.dataset.id));
+    row.remove();
+    refreshSelect();
+    updateSummary();
+  });
+
+  Object.entries(activityValues).forEach(([id, value]) => {
+    const def = catalogById(id);
+    if (def && Number(value) > 0) addActivityRow(def, value);
+  });
+  refreshSelect();
 
   activitiesFields.addEventListener('input', updateSummary);
   activitiesFields.addEventListener('change', updateSummary);
@@ -474,11 +545,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const shiftName = (selectedShift?.text || 'شیفت').split('(')[0].trim();
     const dateText = dateInput.value?.trim() || 'بدون تاریخ';
     const done = filledActivityCount();
-    const activityDefs = lineActivitiesByDept[String(mainDept.value || '')] || [];
 
     document.getElementById('summary-total').textContent = `${dateText} · ${shiftName} · ${lineName}`;
     const bits = [`${totalHours.toFixed(1)} ساعت حضور`];
-    if (activityDefs.length) bits.unshift(done ? `${done} فعالیت ثبت شد` : 'فعالیتی ثبت نشده');
+    if (activityCatalog.length) bits.unshift(done ? `${done} فعالیت ثبت شد` : 'فعالیتی ثبت نشده');
     document.getElementById('summary-breakdown').textContent = bits.join(' · ');
     document.getElementById('id_has_support_line').checked = supportToggle.checked && support > 0;
   }
@@ -501,11 +571,9 @@ document.addEventListener('DOMContentLoaded', () => {
       otDept.value = mainDept.value;
     }
     mainDept.dataset.lastMain = mainDept.value;
-    renderLineActivities();
     updateSummary();
   });
 
-  renderLineActivities();
   updateSummary();
 });
 </script>
