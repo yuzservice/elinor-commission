@@ -25,12 +25,17 @@
         <div>
             <h1 style="font-size: 22px; margin-bottom: 4px;">{{ employee.full_name }}</h1>
             <p style="margin: 0; color: var(--muted); font-size: 13px;">
+                {% if employee.role == 'MANAGER' or employee.is_super_admin %}
+                {% if employee.is_super_admin %}سوپر ادمین{% else %}ادمین {{ employee.branch.name }}{% endif %}
+                {% else %}
                 کد پرسنلی: <b>{{ employee.employee_code }}</b> · موبایل: <b dir="ltr">{{ employee.mobile }}</b>
+                {% endif %}
             </p>
         </div>
     </div>
 </div>
 
+{% if employee.role != 'MANAGER' and not employee.is_super_admin %}
 <!-- بخش شماره کارت بانکی -->
 <article class="card" style="border-radius: 16px; margin-bottom: 20px;">
     <div class="card-head">
@@ -55,12 +60,17 @@
         </button>
     </form>
 </article>
+{% endif %}
 
 <article class="card info-grid" style="border-radius: 16px;">
+    {% if employee.role == 'MANAGER' or employee.is_super_admin %}
+    <div><span>دسترسی</span><b>{% if employee.is_super_admin %}سوپر ادمین همه شعبه‌ها{% else %}ادمین {{ employee.branch.name }}{% endif %}</b></div>
+    {% else %}
     <div><span>بخش / لاین اصلی</span><b>{{ employee.primary_department|default:'—' }}</b></div>
-    <div><span>گرید پورسانت</span><b>گرید {{ employee.commission_level.code }}</b></div>
+    <div><span>گرید پورسانت</span><b>{% if employee.commission_level %}گرید {{ employee.commission_level.code }}{% else %}—{% endif %}</b></div>
     <div><span>شیفت کاری پیش‌فرض</span><b>{{ employee.default_shift.title|default:'—' }} ({{ employee.standard_daily_hours|persian_digits }} ساعت)</b></div>
     <div><span>تاریخ شروع همکاری</span><b>{{ employee.start_date|jalali|default:'—' }}</b></div>
+    {% endif %}
     <div><span>وضعیت حساب</span><b>{% if employee.is_active %}<span class="status approved">فعال</span>{% else %}<span class="status rejected">غیرفعال</span>{% endif %}</b></div>
     <div><span>نام کاربری ورود</span><b>{{ employee.user.username }}</b></div>
 </article>

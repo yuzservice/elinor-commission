@@ -7,6 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 from .models import (
     AuditLog,
+    Branch,
     CommissionLevel,
     DailyShiftLog,
     Department,
@@ -1242,3 +1243,61 @@ class BackupRestoreTests(BaseEmployeeTest):
         bad_file = SimpleUploadedFile("fake.zip", b"not a valid zip content", content_type="application/zip")
         response = self.client.post(reverse("management_backup_restore"), {"backup_file": bad_file})
         self.assertEqual(response.status_code, 302)
+
+
+class BranchScopeTests(BaseEmployeeTest):
+    def test_branch_admin_only_sees_own_branch_activities(self):
+        other = Branch.objects.get(name="فروشگاه گرگان")
+        LineActivityType.objects.create(title="فعالیت ساری", unit_multiplier=Decimal("1.0"), branch=self.manager.branch)
+        LineActivityType.objects.create(title="فعالیت گرگان", unit_multiplier=Decimal("1.0"), branch=other)
+        self.client.force_login(self.manager_user)
+        response = self.client.get(reverse("management_activities"))
+        self.assertContains(response, "فعالیت ساری")
+        self.assertNotContains(response, "فعالیت گرگان")
+
+    def test_super_admin_can_switch_branch(self):
+        self.manager.is_super_admin = True
+        self.manager.branch = None
+        self.manager.save()
+        other = Branch.objects.get(name="فروشگاه گرگان")
+        LineActivityType.objects.create(title="فقط گرگان", unit_multiplier=Decimal("1.0"), branch=other)
+        self.client.force_login(self.manager_user)
+        switched = self.client.post(reverse("switch_branch"), {"branch": other.pk, "next": reverse("management_activities")})
+        self.assertEqual(switched.status_code, 302)
+        response = self.client.get(reverse("management_activities"))
+        self.assertContains(response, "فقط گرگان")
+
+    def test_super_admin_creates_branch_admin_for_active_branch(self):
+        self.manager.is_super_admin = True
+        self.manager.branch = None
+        self.manager.save()
+        gorgan = Branch.objects.get(name="فروشگاه گرگان")
+        self.client.force_login(self.manager_user)
+        switched = self.client.post(reverse("switch_branch"), {"branch": gorgan.pk, "next": "/"})
+        self.assertEqual(switched.status_code, 302)
+        response = self.client.post(
+            reverse("management_admin_create"),
+            {
+                "username": "gorganadmin",
+                "first_name": "ادمین",
+                "last_name": "گرگان",
+                "access_level": "BRANCH",
+                "is_active": "on",
+                "password": "AnotherStrong123!",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        admin = Employee._base_manager.get(user__username="gorganadmin")
+        self.assertEqual(admin.role, Employee.Role.MANAGER)
+        self.assertFalse(admin.is_super_admin)
+        self.assertIsNone(admin.commission_level_id)
+        self.assertIsNone(admin.mobile)
+        self.assertEqual(admin.branch, gorgan)
+
+        self.client.force_login(admin.user)
+        denied = self.client.post(reverse("switch_branch"), {"branch": gorgan.pk})
+        self.assertEqual(denied.status_code, 403)
+        self.assertEqual(self.client.get(reverse("management_admins")).status_code, 403)
+        page = self.client.get(reverse("management_activities"))
+        self.assertContains(page, "فروشگاه گرگان")
+        self.assertNotContains(page, reverse("switch_branch"))

@@ -3,6 +3,7 @@ from . import views
 
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
+    path("switch-branch/", views.switch_branch, name="switch_branch"),
 
     # Employee Shift Logs & Commission
     path("shift-logs/", views.shift_log_list, name="shift_logs"),
@@ -46,6 +47,10 @@ urlpatterns = [
     # Employees & Management
     path("employees/", views.employee_list, name="employees"),
     path("management/employees/", views.management_employees, name="management_employees"),
+    path("management/admins/", views.management_admins, name="management_admins"),
+    path("management/admins/create/", views.management_admin_create, name="management_admin_create"),
+    path("management/admins/<int:pk>/edit/", views.management_admin_edit, name="management_admin_edit"),
+    path("management/admins/<int:pk>/delete/", views.management_admin_delete, name="management_admin_delete"),
     path("management/employees/create/", views.management_employee_create, name="management_employee_create"),
     path("management/employees/<int:pk>/", views.management_employee_detail, name="management_employee_detail"),
     path("management/employees/<int:pk>/edit/", views.management_employee_edit, name="management_employee_edit"),

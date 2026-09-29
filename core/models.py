@@ -4,9 +4,68 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.validators import RegexValidator
 from django.db import models
+from django.db.models import Q
 
-class Department(models.Model):
-    name = models.CharField("نام بخش", max_length=100, unique=True)
+from .scoping import assign_branch, current_branch_id, current_employee_id
+
+
+class BranchManager(models.Manager):
+    def get_queryset(self):
+        qs = super().get_queryset()
+        branch_id = current_branch_id()
+        if not branch_id:
+            return qs
+        return qs.filter(branch_id=branch_id)
+
+
+class EmployeeManager(models.Manager):
+    def get_queryset(self):
+        qs = super().get_queryset()
+        branch_id = current_branch_id()
+        if not branch_id:
+            return qs
+        visible = Q(branch_id=branch_id)
+        employee_id = current_employee_id()
+        if employee_id:
+            visible |= Q(pk=employee_id)
+        return qs.filter(visible)
+
+
+class BranchScoped(models.Model):
+    branch = models.ForeignKey(
+        "Branch",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="شعبه",
+    )
+    objects = BranchManager()
+
+    class Meta:
+        abstract = True
+
+    def save(self, *args, **kwargs):
+        assign_branch(self)
+        super().save(*args, **kwargs)
+
+
+class Branch(models.Model):
+    name = models.CharField("نام شعبه", max_length=80, unique=True)
+    sort_order = models.PositiveIntegerField("ترتیب", default=0)
+    is_active = models.BooleanField("فعال", default=True)
+
+    class Meta:
+        ordering = ["sort_order", "name"]
+        verbose_name = "شعبه"
+        verbose_name_plural = "شعبه‌ها"
+
+    def __str__(self):
+        return self.name
+
+
+class Department(BranchScoped, models.Model):
+    name = models.CharField("نام بخش", max_length=100)
     is_active = models.BooleanField("فعال", default=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     updated_at = models.DateTimeField(auto_now=True, null=True)
@@ -15,23 +74,33 @@ class Department(models.Model):
         ordering = ["name"]
         verbose_name = "لاین / بخش"
         verbose_name_plural = "لاین‌ها و بخش‌ها"
+        constraints = [
+            models.UniqueConstraint(fields=["branch", "name"], name="unique_department_name_per_branch"),
+        ]
 
     def __str__(self): return self.name
 
-class CommissionLevel(models.Model):
-    code = models.CharField("سطح", max_length=1, unique=True)
+class CommissionLevel(BranchScoped, models.Model):
+    code = models.CharField("سطح", max_length=1)
     performance_rate = models.PositiveIntegerField("ضریب عملکرد")
     violation_rate = models.PositiveIntegerField("ضریب تخلف")
     morning_rate = models.DecimalField("ضریب صبح", max_digits=8, decimal_places=2, default=1)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["branch", "code"], name="unique_level_code_per_branch"),
+        ]
+        ordering = ["code"]
+
     def __str__(self): return f"سطح {self.code}"
 
-class Shift(models.Model):
+class Shift(BranchScoped, models.Model):
     class ShiftCode(models.TextChoices):
         MORNING = "MORNING", "شیفت صبح (۱۰ تا ۱۶)"
         EVENING = "EVENING", "شیفت عصر (۱۶ تا ۲۲)"
         CUSTOM = "CUSTOM", "سفارشی"
 
-    code = models.CharField("کد شیفت", max_length=20, unique=True)
+    code = models.CharField("کد شیفت", max_length=20)
     title = models.CharField("عنوان شیفت", max_length=100)
     start_time = models.TimeField("ساعت شروع")
     end_time = models.TimeField("ساعت پایان")
@@ -51,6 +120,9 @@ class Shift(models.Model):
         ordering = ["sort_order", "start_time", "title"]
         verbose_name = "شیفت"
         verbose_name_plural = "شیفت‌ها"
+        constraints = [
+            models.UniqueConstraint(fields=["branch", "code"], name="unique_shift_code_per_branch"),
+        ]
 
     def __str__(self):
         return f"{self.title} ({self.start_time.strftime('%H:%M')} تا {self.end_time.strftime('%H:%M')})"
@@ -60,7 +132,7 @@ class Shift(models.Model):
         return f"{self.standard_hours} ساعت"
 
 def generate_next_employee_code():
-    codes = Employee.objects.values_list("employee_code", flat=True)
+    codes = Employee._base_manager.values_list("employee_code", flat=True)
     numeric_codes = []
     for c in codes:
         try:
@@ -75,15 +147,39 @@ class Employee(models.Model):
     class Role(models.TextChoices):
         MANAGER = "MANAGER", "مدیر"
         EMPLOYEE = "EMPLOYEE", "کارمند"
+    objects = EmployeeManager()
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="employee")
     employee_code = models.CharField("کد کارمند", max_length=20, unique=True)
     first_name = models.CharField("نام", max_length=75)
     last_name = models.CharField("نام خانوادگی", max_length=75)
-    mobile = models.CharField("شماره موبایل", max_length=11, unique=True, validators=[RegexValidator(r"^09\d{9}$", "شماره موبایل باید ۱۱ رقم و با 09 شروع شود.")])
+    mobile = models.CharField(
+        "شماره موبایل",
+        max_length=11,
+        unique=True,
+        null=True,
+        blank=True,
+        validators=[RegexValidator(r"^09\d{9}$", "شماره موبایل باید ۱۱ رقم و با 09 شروع شود.")],
+    )
     card_number = models.CharField("شماره کارت بانکی", max_length=24, blank=True, default="", help_text="شماره کارت ۱۶ رقمی جهت واریز و تسویه پورسانت")
     profile_photo = models.ImageField("عکس پروفایل", upload_to="profiles/%Y/%m/", blank=True)
     role = models.CharField("نقش", max_length=12, choices=Role.choices, default=Role.EMPLOYEE)
-    commission_level = models.ForeignKey(CommissionLevel, on_delete=models.PROTECT, related_name="employees")
+    is_super_admin = models.BooleanField("سوپر ادمین", default=False)
+    branch = models.ForeignKey(
+        Branch,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="employees",
+        verbose_name="شعبه",
+    )
+    commission_level = models.ForeignKey(
+        CommissionLevel,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="employees",
+        verbose_name="گرید پورسانت",
+    )
     default_shift = models.ForeignKey(
         'Shift',
         on_delete=models.SET_NULL,
@@ -122,12 +218,16 @@ class Employee(models.Model):
         return []
     def __str__(self): return self.full_name
     @property
-    def can_review(self): return self.role == self.Role.MANAGER
+    def can_review(self): return self.role == self.Role.MANAGER or self.is_super_admin
     @property
     def level(self): return self.commission_level
     def save(self, *args, **kwargs):
         if not self.employee_code:
             self.employee_code = generate_next_employee_code()
+        if self.is_super_admin:
+            self.branch_id = None
+        elif not self.branch_id:
+            assign_branch(self)
         super().save(*args, **kwargs)
         if self.user_id and self.user.is_active != self.is_active:
             User.objects.filter(pk=self.user_id).update(is_active=self.is_active)
@@ -171,13 +271,13 @@ class SystemSettings(models.Model):
         return obj
     def __str__(self): return self.panel_name
 
-class ViolationRule(models.Model):
+class ViolationRule(BranchScoped, models.Model):
     class RecurrenceWindow(models.TextChoices):
         SAME_MONTH = "SAME_MONTH", "همان ماه"
         ROLLING_30_DAYS = "ROLLING_30_DAYS", "۳۰ روز گذشته"
         MANUAL_PERIOD = "MANUAL_PERIOD", "دوره قابل تنظیم"
 
-    code = models.CharField("کد", max_length=20, unique=True)
+    code = models.CharField("کد", max_length=20)
     title = models.CharField("عنوان", max_length=180)
     first_points = models.PositiveIntegerField("مرتبه اول")
     second_points = models.PositiveIntegerField("مرتبه دوم")
@@ -202,6 +302,12 @@ class ViolationRule(models.Model):
     all_departments = models.BooleanField("قابل استفاده برای همه لاین‌ها", default=True)
     departments = models.ManyToManyField(Department, blank=True, related_name="violation_rules")
     is_active = models.BooleanField("فعال", default=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["branch", "code"], name="unique_violation_code_per_branch"),
+        ]
+
     def __str__(self): return self.title
     def points_for(self, occurrence):
         """بار اول = ضریب. از بار دوم به بعد = ضریب × چند برابر."""
@@ -210,7 +316,7 @@ class ViolationRule(models.Model):
             return base
         return base * int(self.repeat_multiplier or 1)
 
-class Violation(models.Model):
+class Violation(BranchScoped, models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="violations")
     rule = models.ForeignKey(ViolationRule, on_delete=models.PROTECT, related_name="violations")
     violation_date = models.DateField("تاریخ")
@@ -230,7 +336,7 @@ class Target(models.Model):
     class Meta: ordering = ["points"]
     def __str__(self): return self.title
 
-class DailyShiftLog(models.Model):
+class DailyShiftLog(BranchScoped, models.Model):
     class ReviewStatus(models.TextChoices):
         PENDING = "PENDING", "در انتظار تأیید مدیر"
         APPROVED = "APPROVED", "تأییدشده و واریز نهایی"
@@ -475,7 +581,7 @@ class SupportLineInterval(models.Model):
         self.full_clean()
         super().save(*args, **kwargs)
 
-class LineShiftPerformance(models.Model):
+class LineShiftPerformance(BranchScoped, models.Model):
     date = models.DateField("تاریخ فروش")
     shift = models.ForeignKey(Shift, on_delete=models.PROTECT, related_name="line_performances", verbose_name="شیفت")
     department = models.ForeignKey(Department, on_delete=models.PROTECT, related_name="shift_performances", verbose_name="لاین / بخش")
@@ -513,14 +619,14 @@ class LineCommissionRate(models.Model):
         return f"{self.department.name} - گرید {self.commission_level.code}: {self.rate_per_unit}"
 
 
-class LineActivityType(models.Model):
-    """فعالیت سراسری فروشگاه؛ در کارکرد هر لاینی قابل ثبت است."""
+class LineActivityType(BranchScoped, models.Model):
+    """فعالیت‌های یک شعبه. کارمند همان شعبه در کارکرد انتخاب‌شان می‌کند."""
 
     class CountMethod(models.TextChoices):
         QUANTITY = "QUANTITY", "ورود عدد"
         CHECKMARK = "CHECKMARK", "تیک انجام‌شده"
 
-    title = models.CharField("نام فعالیت", max_length=120, unique=True)
+    title = models.CharField("نام فعالیت", max_length=120)
     unit_label = models.CharField("واحد شمارش", max_length=50, default="عدد")
     count_method = models.CharField(
         "نحوه ثبت در کارکرد",
@@ -545,6 +651,9 @@ class LineActivityType(models.Model):
         ordering = ["sort_order", "title", "pk"]
         verbose_name = "فعالیت"
         verbose_name_plural = "فعالیت‌ها"
+        constraints = [
+            models.UniqueConstraint(fields=["branch", "title"], name="unique_activity_title_per_branch"),
+        ]
 
     def __str__(self):
         return self.title

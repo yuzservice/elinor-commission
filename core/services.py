@@ -730,7 +730,8 @@ def employee_metrics(employee, start, end):
     violation_points = employee.violations.filter(violation_date__range=(start, end)).aggregate(
         v=Coalesce(Sum("points_snapshot"), 0)
     )["v"]
-    deduction = int(violation_points * employee.level.violation_rate)
+    violation_rate = employee.commission_level.violation_rate if employee.commission_level_id else 0
+    deduction = int(violation_points * violation_rate)
 
     # ۴. تارگت عملکرد لاین اصلی بر اساس مجموع سهم واقعی کالا در ماه
     total_effective_score = float(total_sales_units_share)

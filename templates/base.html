@@ -61,6 +61,7 @@
             <summary><span>⚙</span> تعاریف و تنظیمات <i>⌄</i></summary>
             <div>
                 <a href="{% url 'management_employees' %}">👥 مدیریت کارکنان</a>
+                {% if is_super_admin %}<a href="{% url 'management_admins' %}">🛡️ ادمین‌ها</a>{% endif %}
                 <a href="{% url 'management_departments' %}">👔 لاین‌ها (بخش‌ها)</a>
                 <a href="{% url 'management_activities' %}">📋 فعالیت‌ها و تخلفات</a>
                 <a href="{% url 'management_shifts' %}">⏰ شیفت‌های کاری</a>
@@ -88,8 +89,19 @@
         <button class="menu" type="button" onclick="event.stopPropagation(); document.body.classList.toggle('nav-open')">☰</button>
         <div>
             <strong>{{ user.employee.full_name }}</strong>
-            <small>{{ user.employee.get_role_display }} · سطح {{ user.employee.level.code }}</small>
+            <small>{{ user.employee.get_role_display }}{% if user.employee.is_super_admin %} · سوپر ادمین{% elif active_branch %} · {{ active_branch.name }}{% endif %}</small>
         </div>
+        {% if is_super_admin and all_branches %}
+        <form method="post" action="{% url 'switch_branch' %}" style="margin-right:auto">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <select name="branch" onchange="this.form.submit()" aria-label="شعبه فعال">
+                {% for branch in all_branches %}
+                <option value="{{ branch.pk }}" {% if active_branch.pk == branch.pk %}selected{% endif %}>{{ branch.name }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        {% endif %}
     </header>
     {% endif %}
     

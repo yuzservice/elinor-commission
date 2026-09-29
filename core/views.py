@@ -47,6 +47,7 @@ from .forms import (
     DepartmentForm,
     EmployeeCreateForm,
     EmployeeEditForm,
+    AdminAccountForm,
     JalaliDateField,
     LineShiftPerformanceForm,
     ManagerPasswordResetForm,
@@ -58,6 +59,7 @@ from .forms import (
 )
 from .models import (
     AuditLog,
+    Branch,
     CommissionLevel,
     DailyShiftLog,
     Department,
@@ -91,6 +93,20 @@ from .services import (
 def health(request):
     return JsonResponse({"status": "ok"})
 
+
+@login_required
+@require_POST
+def switch_branch(request):
+    employee = getattr(request, "branch_employee", None)
+    if not employee or not employee.is_super_admin:
+        raise PermissionDenied
+    branch = get_object_or_404(Branch, pk=request.POST.get("branch"), is_active=True)
+    request.session["active_branch_id"] = branch.pk
+    next_url = request.POST.get("next") or "/"
+    if not str(next_url).startswith("/"):
+        next_url = "/"
+    return redirect(next_url)
+
 def month_range(day=None):
     day = day or timezone.localdate()
     start = day.replace(day=1)
@@ -98,8 +114,7 @@ def month_range(day=None):
     return start, end
 
 def supervised_employees(employee):
-    qs = Employee.objects.filter(is_active=True)
-    return qs
+    return Employee.objects.filter(is_active=True, role=Employee.Role.EMPLOYEE)
 
 @login_required
 def dashboard(request):
@@ -1814,7 +1829,7 @@ def employee_snapshot(employee):
 def _employee_file_url(pk, tab="summary"):
     return f"{reverse('management_employee_detail', args=[pk])}?tab={tab}"
 
-def _employee_file_context(employee, tab="summary", form=None):
+def _employee_file_context(employee, tab="summary", form=None, actor=None):
     allowed = {"summary", "shift_logs", "edit", "violations", "levels"}
     legacy = {"info": "summary", "performance": "summary", "commission": "summary"}
     tab = legacy.get(tab, tab)
@@ -1853,7 +1868,7 @@ def _employee_file_context(employee, tab="summary", form=None):
                 commission_level_id=employee.commission_level_id,
             ).first()
     if tab == "edit" and form is None:
-        ctx["form"] = EmployeeEditForm(instance=employee)
+        ctx["form"] = EmployeeEditForm(instance=employee, actor=actor)
     return ctx
 
 def _save_employee_edit(request, employee, form):
@@ -1892,6 +1907,136 @@ def _save_employee_edit(request, employee, form):
             )
     return obj
 
+def _is_admin_account(employee):
+    return bool(employee and (employee.is_super_admin or employee.role == Employee.Role.MANAGER))
+
+
+def _admin_accounts():
+    return Employee._base_manager.filter(
+        Q(role=Employee.Role.MANAGER) | Q(is_super_admin=True)
+    ).select_related("user", "branch")
+
+
+def _require_super_admin(request):
+    employee = getattr(request, "branch_employee", None)
+    if not employee or not employee.is_super_admin:
+        raise PermissionDenied("ساخت و ویرایش ادمین فقط برای سوپر ادمین است.")
+    return employee
+
+
+def _save_admin_account(form, branch):
+    from django.contrib.auth.models import User
+
+    access = form.cleaned_data["access_level"]
+    is_super = access == "SUPER"
+    target_branch = None if is_super else branch
+    if not is_super and target_branch is None:
+        form.add_error("access_level", "اول از بالای صفحه یک شعبه را انتخاب کنید.")
+        return None
+    data = form.cleaned_data
+    instance = form.instance
+    if instance is None:
+        user = User.objects.create_user(
+            username=data["username"],
+            password=data["password"],
+            first_name=data["first_name"],
+            last_name=data["last_name"],
+            is_active=data["is_active"],
+        )
+        employee = Employee(
+            user=user,
+            first_name=data["first_name"],
+            last_name=data["last_name"],
+            role=Employee.Role.MANAGER,
+            is_super_admin=is_super,
+            branch=target_branch,
+            is_active=data["is_active"],
+        )
+        employee.save()
+        return employee
+    employee = instance
+    employee.first_name = data["first_name"]
+    employee.last_name = data["last_name"]
+    employee.role = Employee.Role.MANAGER
+    employee.is_super_admin = is_super
+    employee.branch = target_branch
+    employee.is_active = data["is_active"]
+    employee.commission_level = None
+    employee.save()
+    user = employee.user
+    user.first_name = data["first_name"]
+    user.last_name = data["last_name"]
+    user.username = data["username"]
+    user.is_active = data["is_active"]
+    if data["password"]:
+        user.set_password(data["password"])
+    user.save()
+    return employee
+
+
+@login_required
+def management_admins(request):
+    _require_super_admin(request)
+    admins = _admin_accounts().order_by("last_name", "first_name")
+    return render(request, "management/admin_list.html", {"admins": admins})
+
+
+@login_required
+def management_admin_create(request):
+    _require_super_admin(request)
+    form = AdminAccountForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            employee = _save_admin_account(form, getattr(request, "branch", None))
+        if employee:
+            scope = "سوپر ادمین" if employee.is_super_admin else employee.branch.name
+            messages.success(request, f"ادمین {employee.full_name} با دسترسی {scope} ساخته شد.")
+            return redirect("management_admins")
+    return render(
+        request,
+        "management/admin_form.html",
+        {"form": form, "title": "ساخت ادمین", "submit": "ساخت ادمین"},
+    )
+
+
+@login_required
+def management_admin_edit(request, pk):
+    _require_super_admin(request)
+    employee = get_object_or_404(_admin_accounts(), pk=pk)
+    form = AdminAccountForm(request.POST or None, instance=employee)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            saved = _save_admin_account(form, getattr(request, "branch", None))
+        if saved:
+            messages.success(request, "حساب ادمین به‌روزرسانی شد.")
+            return redirect("management_admins")
+    return render(
+        request,
+        "management/admin_form.html",
+        {"form": form, "title": "ویرایش ادمین", "submit": "ذخیره", "admin_account": employee},
+    )
+
+
+@login_required
+@require_POST
+def management_admin_delete(request, pk):
+    _require_super_admin(request)
+    employee = get_object_or_404(_admin_accounts(), pk=pk)
+    if employee.user_id == request.user.id:
+        messages.error(request, "نمی‌توانید حسابی را که با آن وارد شده‌اید حذف کنید.")
+        return redirect("management_admin_edit", pk=pk)
+    if DailyShiftLog._base_manager.filter(employee=employee).exists() or Violation._base_manager.filter(employee=employee).exists():
+        messages.error(request, "این حساب کارکرد یا تخلف ثبت‌شده دارد و حذف نمی‌شود. می‌توانید آن را غیرفعال کنید.")
+        return redirect("management_admin_edit", pk=pk)
+    name = employee.full_name
+    user = employee.user
+    employee.delete()
+    if user and not user.is_superuser:
+        user.delete()
+    messages.success(request, f"حساب ادمین «{name}» حذف شد.")
+    return redirect("management_admins")
+
+
 @login_required
 @manager_required
 def employee_list(request):
@@ -1900,7 +2045,9 @@ def employee_list(request):
 @login_required
 @manager_required
 def management_employees(request):
-    qs = Employee.objects.select_related("commission_level", "primary_department", "default_shift", "user").prefetch_related("departments")
+    qs = Employee.objects.filter(role=Employee.Role.EMPLOYEE).select_related(
+        "commission_level", "primary_department", "default_shift", "user"
+    ).prefetch_related("departments")
     q = request.GET.get("q", "").strip()
     status = request.GET.get("status", "")
     level = request.GET.get("level", "")
@@ -1948,7 +2095,7 @@ def management_employees(request):
 @login_required
 @manager_required
 def management_employee_create(request):
-    form = EmployeeCreateForm(request.POST or None, request.FILES or None)
+    form = EmployeeCreateForm(request.POST or None, request.FILES or None, actor=getattr(request, "branch_employee", None))
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
             username = form.cleaned_data["username"]
@@ -1961,6 +2108,8 @@ def management_employee_create(request):
             )
             employee = form.save(commit=False)
             employee.user = user
+            employee.role = Employee.Role.EMPLOYEE
+            employee.is_super_admin = False
             employee.save()
             form.save_m2m()
             audit(actor=request.user, action="employee.created", instance=employee, new_values=employee_snapshot(employee))
@@ -1977,10 +2126,16 @@ def management_employee_detail(request, pk):
         ),
         pk=pk,
     )
+    if _is_admin_account(employee):
+        return redirect("management_admin_edit", pk=employee.pk)
     return render(
         request,
         "management/employee_detail.html",
-        _employee_file_context(employee, request.GET.get("tab", "summary")),
+        _employee_file_context(
+            employee,
+            request.GET.get("tab", "summary"),
+            actor=getattr(request, "branch_employee", None),
+        ),
     )
 
 @login_required
@@ -1992,9 +2147,11 @@ def management_employee_edit(request, pk):
         ),
         pk=pk,
     )
+    if _is_admin_account(employee):
+        return redirect("management_admin_edit", pk=employee.pk)
     if request.method != "POST":
         return redirect(_employee_file_url(pk, "edit"))
-    form = EmployeeEditForm(request.POST, request.FILES, instance=employee)
+    form = EmployeeEditForm(request.POST, request.FILES, instance=employee, actor=getattr(request, "branch_employee", None))
     if form.is_valid():
         obj = _save_employee_edit(request, employee, form)
         messages.success(request, "اطلاعات کارمند و نام کاربری به‌روزرسانی شد.")

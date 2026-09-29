@@ -316,7 +316,9 @@ class ViolationForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["violation_date"].initial = jdatetime.date.fromgregorian(date=timezone.localdate()).strftime("%Y/%m/%d")
         self.fields["rule"].queryset = ViolationRule.objects.filter(is_active=True).order_by("title")
-        self.fields["employee"].queryset = Employee.objects.filter(is_active=True).order_by("first_name", "last_name")
+        self.fields["employee"].queryset = Employee.objects.filter(
+            is_active=True, role=Employee.Role.EMPLOYEE
+        ).order_by("first_name", "last_name")
 
 
 class EmployeeBaseForm(forms.ModelForm):
@@ -344,8 +346,11 @@ class EmployeeBaseForm(forms.ModelForm):
             "card_number": forms.TextInput(attrs={"placeholder": "۶۰۳۷-xxxx-xxxx-xxxx", "dir": "ltr", "inputmode": "numeric"}),
         }
     def __init__(self, *args, **kwargs):
+        self.actor = kwargs.pop("actor", None)
         super().__init__(*args, **kwargs)
         self.fields["commission_level"].label = "گرید پورسانت"
+        self.fields["commission_level"].required = True
+        self.fields["mobile"].required = True
         self.fields["primary_departments"].label = "لاین‌های اصلی"
         self.fields["primary_departments"].help_text = "یک یا چند لاین را به عنوان لاین اصلی انتخاب کنید."
         self.fields["departments"].label = "لاین‌های مجاز (حضور اصلی و کمکی)"
@@ -456,6 +461,64 @@ class EmployeeEditForm(EmployeeBaseForm):
         if qs.exists():
             raise forms.ValidationError("این نام کاربری قبلاً توسط کاربر دیگری ثبت شده است.")
         return username
+
+class AdminAccountForm(forms.Form):
+    first_name = forms.CharField(label="نام", max_length=75)
+    last_name = forms.CharField(label="نام خانوادگی", max_length=75)
+    username = forms.CharField(
+        label="نام کاربری",
+        max_length=150,
+        help_text="نام کاربری انگلیسی برای ورود به سامانه",
+    )
+    access_level = forms.ChoiceField(
+        label="نوع دسترسی",
+        choices=[
+            ("BRANCH", "ادمین همین شعبه"),
+            ("SUPER", "سوپر ادمین همه شعبه‌ها"),
+        ],
+        help_text="ادمین شعبه فقط شعبه فعال را می‌بیند. سوپر ادمین بین شعبه‌ها جابه‌جا می‌شود.",
+    )
+    is_active = forms.BooleanField(label="حساب فعال باشد", required=False, initial=True)
+    password = forms.CharField(label="رمز عبور", widget=forms.PasswordInput, required=False, strip=False)
+
+    def __init__(self, *args, instance=None, **kwargs):
+        self.instance = instance
+        super().__init__(*args, **kwargs)
+        if instance is None:
+            self.fields["password"].required = True
+            self.fields["password"].label = "رمز عبور اولیه"
+        else:
+            self.fields["password"].help_text = "اگر خالی بماند، رمز فعلی تغییر نمی‌کند."
+            if not self.is_bound:
+                self.initial.update({
+                    "first_name": instance.first_name,
+                    "last_name": instance.last_name,
+                    "username": instance.user.username,
+                    "access_level": "SUPER" if instance.is_super_admin else "BRANCH",
+                    "is_active": instance.is_active,
+                })
+
+    def clean_username(self):
+        username = self.cleaned_data.get("username", "").strip()
+        from django.contrib.auth.models import User
+        qs = User.objects.filter(username__iexact=username)
+        if self.instance and self.instance.user_id:
+            qs = qs.exclude(pk=self.instance.user_id)
+        if qs.exists():
+            raise forms.ValidationError("این نام کاربری قبلاً ثبت شده است.")
+        return username
+
+    def clean_password(self):
+        password = self.cleaned_data.get("password") or ""
+        if not password:
+            if self.instance is None:
+                raise forms.ValidationError("رمز عبور را وارد کنید.")
+            return ""
+        try:
+            validate_password(password)
+        except ValidationError as exc:
+            raise forms.ValidationError(exc.messages)
+        return password
 
 class ManagerPasswordResetForm(SetPasswordForm):
     pass
