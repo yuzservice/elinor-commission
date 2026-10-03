@@ -6,6 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 from .models import (
     AuditLog,
+    Branch,
     CommissionLevel,
     DailyShiftLog,
     Department,
@@ -19,6 +20,7 @@ from .models import (
     ShiftLogActivityEntry,
     Violation,
 )
+from .scoping import without_branch_scope
 
 def audit(*, actor, action, instance, description="", old_values=None, new_values=None):
     return AuditLog.objects.create(
@@ -252,10 +254,10 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
     employee = shift_log.employee
     level = employee.commission_level
 
-    # تمام کارکردهای همان تاریخ و شیفت برای تسهیم ساعات (به جز کارکردهای ردشده)
+    # ساعت هر لاین فقط از کارکرد واقعی همان لاین می‌آید، نه از لاین‌های دیگر پرونده کارمند.
     sibling_logs = list(
         DailyShiftLog.objects.filter(date=date, shift=shift).exclude(
-            status=DailyShiftLog.Status.REJECTED
+            status__in=[DailyShiftLog.Status.REJECTED, DailyShiftLog.Status.LEAVE]
         ).select_related(
             "employee", "main_department"
         ).prefetch_related("support_departments", "support_intervals__department")
@@ -280,15 +282,11 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
     dept_base_hours = {}
     dept_support_hours = {}
     for log in sibling_logs:
-        log_emp = log.employee
         log_main_h = log.main_hours
         if (log_main_h is None or log_main_h <= Decimal("0.0")) and log.shift:
             log_main_h = max(Decimal("0.0"), (log.shift.standard_hours or Decimal("6.0")) - (log.support_hours or Decimal("0.0")))
 
-        # تمام لاین‌های اصلی کارمند در شیفت منظور می‌شوند
-        p_depts = log_emp.get_primary_departments() if hasattr(log_emp, "get_primary_departments") else []
-        if not p_depts and log.main_department:
-            p_depts = [log.main_department]
+        p_depts = [log.main_department] if log.main_department_id else []
 
         for p_dept in p_depts:
             if log_main_h > Decimal("0.0"):
@@ -302,7 +300,9 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
         date=date,
         has_overtime=True,
         overtime_hours__gt=Decimal("0.0"),
-    ).exclude(shift=shift).exclude(status=DailyShiftLog.Status.REJECTED).select_related("overtime_department", "main_department")
+    ).exclude(shift=shift).exclude(
+        status__in=[DailyShiftLog.Status.REJECTED, DailyShiftLog.Status.LEAVE]
+    ).select_related("overtime_department", "main_department")
 
     for o_log in other_logs_with_ot:
         ot_target = find_target_shift_for_overtime(o_log.overtime_start_time, o_log.shift)
@@ -378,10 +378,7 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
     if (shift_log_main_h is None or shift_log_main_h <= Decimal("0.0")) and shift_log.shift:
         shift_log_main_h = max(Decimal("0.0"), (shift_log.shift.standard_hours or Decimal("6.0")) - (shift_log.support_hours or Decimal("0.0")))
 
-    # محاسبه برای تمام لاین‌های اصلی کارمند
-    emp_p_depts = employee.get_primary_departments() if hasattr(employee, "get_primary_departments") else []
-    if not emp_p_depts and shift_log.main_department:
-        emp_p_depts = [shift_log.main_department]
+    emp_p_depts = [shift_log.main_department] if shift_log.main_department_id else []
 
     primary_infos = []
     for p_dept in emp_p_depts:
@@ -420,7 +417,7 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
         if ot_dept and ot_target_shift:
             target_sibling_logs = list(
                 DailyShiftLog.objects.filter(date=date, shift=ot_target_shift).exclude(
-                    status=DailyShiftLog.Status.REJECTED
+                    status__in=[DailyShiftLog.Status.REJECTED, DailyShiftLog.Status.LEAVE]
                 ).select_related("employee", "main_department").prefetch_related("support_departments", "support_intervals__department")
             )
             target_base_hours = Decimal("0.0")
@@ -429,10 +426,7 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
                 t_main_h = t_log.main_hours
                 if (t_main_h is None or t_main_h <= Decimal("0.0")) and t_log.shift:
                     t_main_h = max(Decimal("0.0"), (t_log.shift.standard_hours or Decimal("6.0")) - (t_log.support_hours or Decimal("0.0")))
-                t_p_depts = t_log.employee.get_primary_departments() if hasattr(t_log.employee, "get_primary_departments") else []
-                if not t_p_depts and t_log.main_department:
-                    t_p_depts = [t_log.main_department]
-                if any(p.pk == ot_dept.pk for p in t_p_depts):
+                if t_log.main_department_id == ot_dept.pk:
                     target_base_hours += t_main_h
                 for department_id, hours in support_hours_by_department(t_log).items():
                     if department_id == ot_dept.pk:
@@ -442,7 +436,9 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
                 date=date,
                 has_overtime=True,
                 overtime_hours__gt=Decimal("0.0"),
-            ).exclude(shift=ot_target_shift).exclude(status=DailyShiftLog.Status.REJECTED).select_related("overtime_department", "main_department")
+            ).exclude(shift=ot_target_shift).exclude(
+                status__in=[DailyShiftLog.Status.REJECTED, DailyShiftLog.Status.LEAVE]
+            ).select_related("overtime_department", "main_department")
 
             for t_ot_log in target_ot_logs:
                 if find_target_shift_for_overtime(t_ot_log.overtime_start_time, t_ot_log.shift) == ot_target_shift:
@@ -496,26 +492,110 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
         "is_frozen": False,
     }
 
-def check_shift_completion(date, shift):
-    """بررسی پیش‌شرط مرحله اول: همه کارمندان موظف این شیفت باید تعیین تکلیف شده باشند."""
-    expected_employees = list(Employee.objects.filter(
-        is_active=True,
-        role=Employee.Role.EMPLOYEE,
-        default_shift=shift,
-    ))
-    if not expected_employees:
+def employee_home_lines(employee):
+    """لاین‌هایی که این کارمند در شیفت پیش‌فرض خودش باید پوشش بدهد."""
+    try:
+        lines = list(employee.primary_departments.all())
+    except Exception:
+        lines = []
+    if lines:
+        return lines
+    if employee.primary_department_id:
+        return [employee.primary_department]
+    return []
+
+
+def log_departments(log):
+    departments = []
+    if log.main_department_id:
+        departments.append(log.main_department)
+    departments.extend(list(log.support_departments.all()))
+    return departments
+
+
+def missing_staff_for_department(shift, department, resolved_ids, employees):
+    missing = []
+    for employee in employees:
+        if employee.default_shift_id != shift.pk:
+            continue
+        if department.pk not in {line.pk for line in employee_home_lines(employee)}:
+            continue
+        if employee.pk not in resolved_ids:
+            missing.append(employee)
+    return missing
+
+
+def unresolved_lines_for_log(log):
+    """فقط لاین‌های همین کارکرد باید تعیین تکلیف شوند، نه کل شیفت."""
+    employees = list(
+        Employee.objects.filter(
+            is_active=True,
+            role=Employee.Role.EMPLOYEE,
+            default_shift=log.shift,
+        ).select_related("primary_department").prefetch_related("primary_departments")
+    )
+    resolved_ids = set(
+        DailyShiftLog.objects.filter(date=log.date, shift=log.shift)
+        .exclude(status=DailyShiftLog.Status.REJECTED)
+        .values_list("employee_id", flat=True)
+    )
+    gaps = []
+    seen = set()
+    for department in log_departments(log):
+        if department.pk in seen:
+            continue
+        seen.add(department.pk)
+        missing = missing_staff_for_department(log.shift, department, resolved_ids, employees)
+        if missing:
+            gaps.append((department, missing))
+    return gaps
+
+
+def check_log_lines_resolved(log):
+    gaps = unresolved_lines_for_log(log)
+    if not gaps:
         return
+    parts = []
+    for department, missing in gaps:
+        names = "، ".join(employee.full_name for employee in missing)
+        parts.append(f"{department.name}: {names}")
+    raise ValidationError(
+        "تأیید این کارکرد ممکن نیست تا کارکرد یا مرخصی نفرات همین لاین مشخص شود: " + " | ".join(parts)
+    )
 
-    logged_emp_ids = set(DailyShiftLog.objects.filter(
-        date=date, shift=shift
-    ).values_list("employee_id", flat=True))
 
-    missing = [emp for emp in expected_employees if emp.pk not in logged_emp_ids]
-    if missing:
-        missing_names = "، ".join(emp.full_name for emp in missing)
-        raise ValidationError(
-            f"تأیید نهایی امکان‌پذیر نیست: هنوز تمام کارمندان این شیفت تعیین تکلیف نشده‌اند. پرسنل ثبت‌نشده: {missing_names} (باید کارکرد ثبت شود یا مرخصی رد گردد)."
-        )
+def mark_employee_leave(*, employee, shift, day, department, actor):
+    """مرخصی فقط همان کارمند را از محاسبه لاین خودش خارج می‌کند."""
+    existing = DailyShiftLog.objects.filter(employee=employee, date=day, shift=shift).first()
+    if existing and existing.status not in (DailyShiftLog.Status.REJECTED, DailyShiftLog.Status.LEAVE):
+        raise ValidationError("برای این کارمند در این شیفت کارکرد ثبت شده و به‌جای مرخصی باید همان کارکرد بررسی شود.")
+    if existing:
+        existing.status = DailyShiftLog.Status.LEAVE
+        existing.main_department = department
+        existing.main_hours = Decimal("0")
+        existing.support_hours = Decimal("0")
+        existing.has_support_line = False
+        existing.has_overtime = False
+        existing.manager_note = "مرخصی"
+        existing.reviewed_by = actor
+        existing.reviewed_at = timezone.now()
+        existing.save()
+        existing.support_intervals.all().delete()
+        existing.support_departments.clear()
+        return existing
+    return DailyShiftLog.objects.create(
+        employee=employee,
+        date=day,
+        shift=shift,
+        main_department=department,
+        main_hours=Decimal("0"),
+        support_hours=Decimal("0"),
+        has_support_line=False,
+        status=DailyShiftLog.Status.LEAVE,
+        manager_note="مرخصی",
+        reviewed_by=actor,
+        reviewed_at=timezone.now(),
+    )
 
 def sync_shift_logs_for_performance(date, shift, exclude_log_id=None):
     """به‌روزرسانی خودکار سهم کالا و پورسانت تمام کارکردهای تأییدشده شیفت پس از تغییر ساعات یا ثبت فروش لاین."""
@@ -581,7 +661,9 @@ def sync_shift_logs_for_performance(date, shift, exclude_log_id=None):
 @transaction.atomic
 def approve_shift_log(shift_log, actor, manager_note=""):
     """تأیید کارکرد روزانه شیفت و فریز کردن قطعی محاسبات سهم فروش و پورسانت."""
-    check_shift_completion(shift_log.date, shift_log.shift)
+    if shift_log.status == DailyShiftLog.Status.LEAVE:
+        raise ValidationError("رکورد مرخصی پورسانت ندارد و جداگانه تأیید نمی‌شود.")
+    check_log_lines_resolved(shift_log)
 
     calc = calculate_single_shift_log(shift_log, force_dynamic=True)
 
@@ -786,3 +868,128 @@ def employee_metrics(employee, start, end):
         "shift_log_details": shift_log_details,
         "approved_count": 0,
     }
+
+
+def _count_target_level(bucket, result):
+    if not result:
+        bucket["no_target"] += 1
+        return
+    level = result.get("achieved_level") or 0
+    if level >= 3:
+        bucket["gold"] += 1
+    elif level == 2:
+        bucket["silver"] += 1
+    elif level == 1:
+        bucket["bronze"] += 1
+    else:
+        bucket["progress"] += 1
+
+
+def _empty_target_counts():
+    return {"gold": 0, "silver": 0, "bronze": 0, "progress": 0, "no_target": 0}
+
+
+def branch_comparison_report(start, end):
+    """مقایسه فروش لاین‌ها، عملکرد کارکنان و وضعیت تارگت در همه شعبه‌ها."""
+    with without_branch_scope():
+        branches = list(Branch.objects.order_by("sort_order", "name", "pk"))
+        branch_rows = {
+            branch.pk: {
+                "branch": branch,
+                "employee_count": 0,
+                "shift_logs": 0,
+                "sold_units": 0,
+                "sales_share": Decimal("0"),
+                "gross": 0,
+                "deduction": 0,
+                "reward": 0,
+                "commission": 0,
+                "violation_points": 0,
+                "line_targets": _empty_target_counts(),
+                "employee_targets": _empty_target_counts(),
+            }
+            for branch in branches
+        }
+
+        employees = Employee.objects.filter(
+            role=Employee.Role.EMPLOYEE,
+            is_active=True,
+        ).select_related("commission_level", "primary_department", "branch")
+        employee_rows = []
+        for employee in employees:
+            metrics = employee_metrics(employee, start, end)
+            metrics.pop("shift_log_details", None)
+            employee_rows.append({"employee": employee, "metrics": metrics})
+            bucket = branch_rows.get(employee.branch_id)
+            if not bucket:
+                continue
+            bucket["employee_count"] += 1
+            bucket["shift_logs"] += metrics["shift_logs_count"]
+            bucket["sales_share"] += Decimal(str(metrics["total_sales_units_share"] or 0))
+            bucket["gross"] += metrics["gross"] or 0
+            bucket["deduction"] += metrics["deduction"] or 0
+            bucket["reward"] += metrics["reward"] or 0
+            bucket["commission"] += metrics["commission"] or 0
+            bucket["violation_points"] += metrics["violation_points"] or 0
+            _count_target_level(bucket["employee_targets"], metrics.get("line_target_result"))
+        employee_rows.sort(
+            key=lambda row: Decimal(str(row["metrics"]["total_sales_units_share"] or 0)),
+            reverse=True,
+        )
+
+        sales = dict(
+            LineShiftPerformance.objects.filter(date__range=(start, end))
+            .values_list("department_id")
+            .annotate(total=Coalesce(Sum("sold_units"), 0))
+        )
+        departments = list(
+            Department.objects.select_related("branch", "target_settings").order_by("name", "branch__sort_order", "pk")
+        )
+        line_cells = {}
+        for department in departments:
+            units = int(sales.get(department.pk) or 0)
+            if not department.is_active and units <= 0:
+                continue
+            target = getattr(department, "target_settings", None)
+            result = target.evaluate_target(units) if target and target.is_active else None
+            cell = {
+                "department": department,
+                "sold_units": units,
+                "target_result": result,
+            }
+            line_cells[(department.name, department.branch_id)] = cell
+            bucket = branch_rows.get(department.branch_id)
+            if not bucket:
+                continue
+            bucket["sold_units"] += units
+            _count_target_level(bucket["line_targets"], result)
+
+        names = sorted({name for name, _branch_id in line_cells})
+        line_matrix = []
+        for name in names:
+            cells = [line_cells.get((name, branch.pk)) for branch in branches]
+            total_units = sum(cell["sold_units"] for cell in cells if cell)
+            line_matrix.append({"name": name, "cells": cells, "total_units": total_units})
+        line_matrix.sort(key=lambda row: (-row["total_units"], row["name"]))
+
+        ordered = sorted(
+            branch_rows.values(),
+            key=lambda row: (-row["sold_units"], row["branch"].sort_order, row["branch"].name),
+        )
+        total_sold = sum(row["sold_units"] for row in ordered) or 0
+        for index, row in enumerate(ordered, start=1):
+            row["rank"] = index
+            row["sales_percent"] = int(round((row["sold_units"] / total_sold) * 100)) if total_sold else 0
+
+        return {
+            "branches": ordered,
+            "employees": employee_rows,
+            "line_matrix": line_matrix,
+            "totals": {
+                "sold_units": total_sold,
+                "sales_share": sum((row["sales_share"] for row in ordered), Decimal("0")),
+                "commission": sum(row["commission"] for row in ordered),
+                "deduction": sum(row["deduction"] for row in ordered),
+                "employee_count": sum(row["employee_count"] for row in ordered),
+            },
+        }

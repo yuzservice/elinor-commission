@@ -78,7 +78,10 @@ from .models import (
 )
 from .services import (
     approve_shift_log,
+    mark_employee_leave,
+    missing_staff_for_department,
     audit,
+    branch_comparison_report,
     calculate_single_shift_log,
     change_employee_level,
     count_active_departments_needing_shift_sales,
@@ -573,7 +576,11 @@ def management_shift_log_reviews(request):
     )
 
     all_shifts = {s.pk: s for s in Shift.objects.all()}
-    active_employees = list(Employee.objects.filter(is_active=True, role=Employee.Role.EMPLOYEE).select_related("default_shift"))
+    active_employees = list(
+        Employee.objects.filter(is_active=True, role=Employee.Role.EMPLOYEE)
+        .select_related("default_shift", "primary_department")
+        .prefetch_related("primary_departments")
+    )
 
     session_cards = []
     for s_date, s_shift_id in session_keys:
@@ -588,16 +595,56 @@ def management_shift_log_reviews(request):
         )
 
         expected = [e for e in active_employees if e.default_shift_id == s_shift_id]
-        logged_emp_ids = {l.employee_id for l in logs}
-        missing = [e for e in expected if e.pk not in logged_emp_ids]
+        work_logs = [log for log in logs if log.status != DailyShiftLog.Status.LEAVE]
+        resolved_ids = {log.employee_id for log in logs if log.status != DailyShiftLog.Status.REJECTED}
 
         performances = list(
             LineShiftPerformance.objects.filter(date=s_date, shift_id=s_shift_id).select_related("department")
         )
         total_sold = sum(p.sold_units for p in performances)
-        needed_perf_dept_ids = departments_needing_performance_for_logs(logs)
+        needed_perf_dept_ids = departments_needing_performance_for_logs(work_logs)
         perf_dept_ids = {p.department_id for p in performances}
         has_required_performance = not (needed_perf_dept_ids - perf_dept_ids)
+
+        department_map = {}
+        for employee in expected:
+            for line in employee.get_primary_departments():
+                department_map[line.pk] = line
+        for log in work_logs:
+            if log.main_department_id:
+                department_map[log.main_department_id] = log.main_department
+            for department in log.support_departments.all():
+                department_map[department.pk] = department
+        line_gaps = []
+        gaps_by_department = {}
+        for department in department_map.values():
+            missing_here = missing_staff_for_department(s_shift, department, resolved_ids, expected)
+            if missing_here:
+                line_gaps.append({"department": department, "missing": missing_here})
+                gaps_by_department[department.pk] = missing_here
+        missing = []
+        leave_candidates = []
+        seen_missing = set()
+        for gap in line_gaps:
+            for employee in gap["missing"]:
+                if employee.pk not in seen_missing:
+                    seen_missing.add(employee.pk)
+                    missing.append(employee)
+                    leave_candidates.append({"employee": employee, "department": gap["department"]})
+
+        ready_pending = []
+        for log in work_logs:
+            if log.status != DailyShiftLog.Status.PENDING:
+                continue
+            dept_ids = set()
+            if log.main_department_id:
+                dept_ids.add(log.main_department_id)
+            dept_ids.update(department.pk for department in log.support_departments.all())
+            if any(pk in gaps_by_department for pk in dept_ids):
+                continue
+            if dept_ids - perf_dept_ids:
+                continue
+            ready_pending.append(log)
 
         log_rows = []
         session_total_comm = 0
@@ -613,12 +660,16 @@ def management_shift_log_reviews(request):
                 any_pending = True
             elif log.status == DailyShiftLog.Status.REJECTED:
                 any_rejected = True
-            if log.status != DailyShiftLog.Status.APPROVED:
+            if log.status not in (DailyShiftLog.Status.APPROVED, DailyShiftLog.Status.LEAVE):
                 all_approved = False
 
-        if all_approved and logs:
+        if all_approved and work_logs:
             session_status = "APPROVED"
             status_badge = "✅ تأیید و فریز شده"
+            status_class = "approved"
+        elif missing and ready_pending:
+            session_status = "PARTIAL"
+            status_badge = "✨ بعضی لاین‌ها آماده‌اند"
             status_class = "approved"
         elif missing:
             session_status = "INCOMPLETE"
@@ -651,6 +702,8 @@ def management_shift_log_reviews(request):
             "missing_employees": missing,
             "missing_names": "، ".join(e.full_name for e in missing),
             "is_complete": len(missing) == 0,
+            "line_gaps": line_gaps,
+            "leave_candidates": leave_candidates,
             "performances": performances,
             "has_performance": len(performances) > 0,
             "total_sold": total_sold,
@@ -658,7 +711,7 @@ def management_shift_log_reviews(request):
             "session_status": session_status,
             "status_badge": status_badge,
             "status_class": status_class,
-            "can_approve": (len(missing) == 0 and any_pending and has_required_performance),
+            "can_approve": bool(ready_pending),
             "any_pending": any_pending,
             "all_approved": all_approved,
         })
@@ -707,33 +760,62 @@ def management_shift_session_approve(request):
 
     target_shift = get_object_or_404(Shift, pk=shift_id)
 
-    try:
-        check_shift_completion(target_date, target_shift)
-    except ValidationError as exc:
-        err_msg = exc.message if hasattr(exc, "message") else (exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc))
-        messages.error(request, err_msg)
-        return redirect("management_shift_log_reviews")
-
-    logs = DailyShiftLog.objects.filter(
+    logs = list(DailyShiftLog.objects.filter(
         date=target_date, shift=target_shift, status=DailyShiftLog.Status.PENDING
-    )
-    if not logs.exists():
+    ).select_related("main_department").prefetch_related("support_departments"))
+    if not logs:
         messages.info(request, "هیچ کارکرد در انتظار تأییدی برای این شیفت وجود ندارد.")
         return redirect("management_shift_log_reviews")
 
     count = 0
     total_comm = 0
+    blocked = []
     with transaction.atomic():
         for log in logs:
-            approved = approve_shift_log(log, request.user, "تأیید یکجای شیفت توسط مدیر")
+            try:
+                approved = approve_shift_log(log, request.user, "تأیید لاین‌های آماده توسط مدیر")
+            except ValidationError as exc:
+                err_msg = exc.message if hasattr(exc, "message") else (exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc))
+                blocked.append(f"{log.employee.full_name}: {err_msg}")
+                continue
             count += 1
             total_comm += approved.frozen_commission_amount
 
     j_date = jdatetime.date.fromgregorian(date=target_date).strftime("%Y/%m/%d")
-    messages.success(
-        request,
-        f"جلسه شیفت «{target_shift.title}» در تاریخ {j_date} با موفقیت برای {count} کارمند تأیید شد و مجموع پورسانت قطعی به مبلغ {total_comm:,} ریال واریز گردید."
-    )
+    if count:
+        messages.success(
+            request,
+            f"در تاریخ {j_date} کارکرد {count} نفر تأیید شد و مجموع پورسانت قطعی {total_comm:,} ریال واریز گردید."
+        )
+    if blocked:
+        messages.error(request, "این لاین‌ها هنوز منتظر کارکرد یا مرخصی هستند: " + " — ".join(blocked))
+    if not count and not blocked:
+        messages.info(request, "کارکرد آماده‌ای برای تأیید نبود.")
+    return redirect("management_shift_log_reviews")
+
+@login_required
+@manager_required
+@require_POST
+def management_shift_log_mark_leave(request):
+    """ثبت مرخصی یک کارمند برای لاین خودش، بدون قفل کردن بقیه لاین‌های شیفت."""
+    employee = get_object_or_404(Employee, pk=request.POST.get("employee_id"), role=Employee.Role.EMPLOYEE)
+    shift = get_object_or_404(Shift, pk=request.POST.get("shift_id"))
+    department = get_object_or_404(Department, pk=request.POST.get("department_id"))
+    try:
+        day = JalaliDateField().clean(request.POST.get("date"))
+    except ValidationError:
+        messages.error(request, "تاریخ مرخصی نامعتبر است.")
+        return redirect("management_shift_log_reviews")
+    if not day:
+        messages.error(request, "تاریخ مرخصی نامعتبر است.")
+        return redirect("management_shift_log_reviews")
+    try:
+        mark_employee_leave(employee=employee, shift=shift, day=day, department=department, actor=request.user)
+    except ValidationError as exc:
+        err_msg = exc.message if hasattr(exc, "message") else (exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc))
+        messages.error(request, err_msg)
+    else:
+        messages.success(request, f"مرخصی {employee.full_name} در لاین {department.name} ثبت شد.")
     return redirect("management_shift_log_reviews")
 
 @login_required
@@ -1230,6 +1312,29 @@ def management_commission_report(request):
             "total_deductions": total_deductions,
             "total_net_payout": total_net_payout,
             "total_wallet_payout": total_wallet_payout,
+            "filters": request.GET,
+        },
+    )
+
+
+@login_required
+def management_branch_comparison(request):
+    _require_super_admin(request)
+    start, end = month_range()
+    date_val = request.GET.get("date", "")
+    if date_val:
+        try:
+            start, end = month_range(JalaliDateField().clean(date_val))
+        except ValidationError:
+            pass
+    report = branch_comparison_report(start, end)
+    return render(
+        request,
+        "management/branch_comparison.html",
+        {
+            **report,
+            "start": start,
+            "end": end,
             "filters": request.GET,
         },
     )

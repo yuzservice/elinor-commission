@@ -1,0 +1,212 @@
+{% extends 'base.html' %}
+{% load persian %}
+{% block title %}گزارش مقایسه‌ای شعبه‌ها{% endblock %}
+{% block content %}
+<div class="admin-page-head">
+    <div>
+        <span class="admin-kicker">سوپر ادمین</span>
+        <h1>گزارش مقایسه‌ای شعبه‌ها</h1>
+        <p>عملکرد کارکنان، فروش لاین‌ها و وضعیت تارگت همه شعبه‌ها در یک دوره. از {{ start|jalali }} تا {{ end|jalali }}.</p>
+    </div>
+</div>
+
+<form class="admin-toolbar" method="get">
+    <div class="toolbar-search">
+        <span>📅</span>
+        <input name="date" value="{{ filters.date }}" placeholder="تاریخ داخل ماه موردنظر (۱۴۰۵/۰۶/۰۱)" class="jalali-date">
+    </div>
+    <button class="primary" style="padding: 8px 18px;">مشاهده دوره</button>
+    <a class="text-action" href="{% url 'management_branch_comparison' %}">ماه جاری</a>
+</form>
+
+<div class="admin-stat-grid">
+    <article>
+        <span class="stat-icon blue">🏢</span>
+        <div>
+            <small>شعبه‌ها</small>
+            <strong>{{ branches|length|persian_digits }}</strong>
+            <span>{{ totals.employee_count|persian_digits }} کارمند فعال</span>
+        </div>
+    </article>
+    <article>
+        <span class="stat-icon green">🛍️</span>
+        <div>
+            <small>فروش ثبت‌شده لاین‌ها</small>
+            <strong>{{ totals.sold_units|persian_digits }}</strong>
+            <span>کالا در همه شعبه‌ها</span>
+        </div>
+    </article>
+    <article>
+        <span class="stat-icon gold">◎</span>
+        <div>
+            <small>سهم عملکرد کارکنان</small>
+            <strong>{{ totals.sales_share|persian_digits }}</strong>
+            <span>واحد تسهیم‌شده</span>
+        </div>
+    </article>
+    <article>
+        <span class="stat-icon rose">﷼</span>
+        <div>
+            <small>پورسانت خالص</small>
+            <strong>{{ totals.commission|persian_int }}</strong>
+            <span>کسورات {{ totals.deduction|persian_int }} ریال</span>
+        </div>
+    </article>
+</div>
+
+<article class="card admin-table-card">
+    <div class="section-heading">
+        <div>
+            <h2>مقایسه شعبه‌ها</h2>
+            <p>رتبه بر اساس فروش ثبت‌شده لاین‌هاست. سهم عملکرد، پورسانت و تارگت کارکنان جدا محاسبه شده است.</p>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>رتبه</th>
+                    <th>شعبه</th>
+                    <th>کارکنان</th>
+                    <th>فروش لاین‌ها</th>
+                    <th>سهم از کل</th>
+                    <th>سهم عملکرد</th>
+                    <th>پورسانت خالص</th>
+                    <th>کسورات</th>
+                    <th>تارگت لاین‌ها</th>
+                    <th>تارگت کارکنان</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in branches %}
+                <tr>
+                    <td><strong>{{ row.rank|persian_digits }}</strong></td>
+                    <td>
+                        <b>{{ row.branch.name }}</b>
+                        {% if not row.branch.is_active %}<small style="color:var(--muted)">غیرفعال</small>{% endif %}
+                    </td>
+                    <td>{{ row.employee_count|persian_digits }}</td>
+                    <td><strong style="color:var(--green, #237554)">{{ row.sold_units|persian_digits }}</strong></td>
+                    <td style="min-width:120px">
+                        <div class="progress-track"><i style="width:{{ row.sales_percent }}%"></i></div>
+                        <small>{{ row.sales_percent|persian_digits }}٪</small>
+                    </td>
+                    <td>{{ row.sales_share|persian_digits }}</td>
+                    <td>{{ row.commission|persian_int }}</td>
+                    <td>{% if row.deduction %}<span style="color:var(--red)">{{ row.deduction|persian_int }}</span>{% else %}۰{% endif %}</td>
+                    <td>
+                        <small>🥇 {{ row.line_targets.gold|persian_digits }} · 🥈 {{ row.line_targets.silver|persian_digits }} · 🥉 {{ row.line_targets.bronze|persian_digits }}</small>
+                        <small style="display:block;color:var(--muted)">در مسیر {{ row.line_targets.progress|persian_digits }} · بدون تارگت {{ row.line_targets.no_target|persian_digits }}</small>
+                    </td>
+                    <td>
+                        <small>🥇 {{ row.employee_targets.gold|persian_digits }} · 🥈 {{ row.employee_targets.silver|persian_digits }} · 🥉 {{ row.employee_targets.bronze|persian_digits }}</small>
+                        <small style="display:block;color:var(--muted)">در مسیر {{ row.employee_targets.progress|persian_digits }} · بدون تارگت {{ row.employee_targets.no_target|persian_digits }}</small>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="10" class="empty">شعبه‌ای ثبت نشده است.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</article>
+
+<article class="card admin-table-card" style="margin-top:22px">
+    <div class="section-heading">
+        <div>
+            <h2>فروش لاین‌ها در شعبه‌ها</h2>
+            <p>هر ردیف یک نام لاین است و ستون‌ها شعبه‌ها هستند. اگر شعبه‌ای آن لاین را نداشته باشد، خانه خالی می‌ماند.</p>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>لاین</th>
+                    {% for row in branches %}
+                    <th>{{ row.branch.name }}</th>
+                    {% endfor %}
+                    <th>جمع</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for line in line_matrix %}
+                <tr>
+                    <td><b>{{ line.name }}</b></td>
+                    {% for cell in line.cells %}
+                    <td>
+                        {% if cell %}
+                        <strong>{{ cell.sold_units|persian_digits }}</strong> کالا
+                        {% if cell.target_result %}
+                        <small style="display:block">{{ cell.target_result.achieved_title }}</small>
+                        <div class="progress-track"><i style="width:{{ cell.target_result.progress_percent }}%"></i></div>
+                        {% else %}
+                        <small style="display:block;color:var(--muted)">بدون تارگت</small>
+                        {% endif %}
+                        {% else %}
+                        <span style="color:var(--muted)">—</span>
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                    <td><b>{{ line.total_units|persian_digits }}</b></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="{{ branches|length|add:2 }}" class="empty">لاینی برای مقایسه ثبت نشده است.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</article>
+
+<article class="card admin-table-card" style="margin-top:22px">
+    <div class="section-heading">
+        <div>
+            <h2>عملکرد و تارگت کارکنان</h2>
+            <p>همه کارمندان فعال، از پرتلاش‌ترین سهم فروش به بعد. ادمین‌ها در این فهرست نیستند.</p>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>کارمند</th>
+                    <th>شعبه</th>
+                    <th>لاین</th>
+                    <th>شیفت</th>
+                    <th>سهم کالا</th>
+                    <th>پورسانت خالص</th>
+                    <th>کسورات</th>
+                    <th>وضعیت تارگت</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in employees %}
+                <tr>
+                    <td>
+                        <b>{{ row.employee.full_name }}</b>
+                        <small style="display:block;color:var(--muted)">{{ row.employee.employee_code }}{% if row.employee.commission_level %} · سطح {{ row.employee.commission_level.code }}{% endif %}</small>
+                    </td>
+                    <td>{{ row.employee.branch.name|default:"—" }}</td>
+                    <td>{{ row.employee.primary_department.name|default:"—" }}</td>
+                    <td>{{ row.metrics.shift_logs_count|persian_digits }}</td>
+                    <td><strong style="color:var(--green, #237554)">{{ row.metrics.total_sales_units_share|persian_digits }}</strong></td>
+                    <td>{{ row.metrics.commission|persian_int }}</td>
+                    <td>{% if row.metrics.deduction %}<span style="color:var(--red)">{{ row.metrics.deduction|persian_int }}</span>{% else %}۰{% endif %}</td>
+                    <td style="min-width:160px">
+                        {% if row.metrics.line_target_result %}
+                        <small>{{ row.metrics.line_target_result.achieved_title }}</small>
+                        <div class="progress-track"><i style="width:{{ row.metrics.line_target_result.progress_percent }}%"></i></div>
+                        <small style="color:var(--muted)">{{ row.metrics.line_target_result.progress_percent|persian_digits }}٪ تا تارگت بعدی</small>
+                        {% else %}
+                        <span style="color:var(--muted)">تارگت لاین تعریف نشده</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="8" class="empty">کارمند فعالی برای مقایسه نیست.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</article>
+{% endblock %}

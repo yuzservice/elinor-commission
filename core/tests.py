@@ -847,6 +847,7 @@ class ManagementMenuSmokeTests(BaseEmployeeTest):
             response = self.client.get(reverse(name, args=[pk]), follow=True)
             self.assertEqual(response.status_code, 200, name)
         self.assertEqual(self.client.get(reverse("management_admins")).status_code, 403)
+        self.assertEqual(self.client.get(reverse("management_branch_comparison")).status_code, 403)
 
         self.client.force_login(self.employee_user)
         for name in ("dashboard", "shift_log_create", "shift_logs", "my_commission_report", "violations", "profile"):
@@ -865,7 +866,7 @@ class ManagementMenuSmokeTests(BaseEmployeeTest):
             is_active=True,
         )
         self.client.force_login(super_user)
-        for name in ("dashboard", "management_admins", "management_admin_create", "management_branch_create", "management_line_performances"):
+        for name in ("dashboard", "management_admins", "management_admin_create", "management_branch_create", "management_line_performances", "management_branch_comparison"):
             response = self.client.get(reverse(name))
             self.assertEqual(response.status_code, 200, name)
 
@@ -1426,3 +1427,164 @@ class BranchScopeTests(BaseEmployeeTest):
         admin = Employee._base_manager.get(user__username="labadmin")
         self.assertEqual(admin.branch, gorgan)
         self.assertNotEqual(admin.branch, sari)
+
+
+class BranchComparisonTests(BaseEmployeeTest):
+    def test_only_super_admin_can_open_comparison(self):
+        self.client.force_login(self.employee_user)
+        self.assertEqual(self.client.get(reverse("management_branch_comparison")).status_code, 403)
+        self.client.force_login(self.manager_user)
+        self.assertEqual(self.client.get(reverse("management_branch_comparison")).status_code, 403)
+
+    def test_super_admin_compares_all_branches_while_another_branch_is_active(self):
+        from core.services import branch_comparison_report
+        from core.scoping import activate_scope
+
+        sari = Branch.objects.get(name="فروشگاه ساری")
+        gorgan = Branch.objects.get(name="فروشگاه گرگان")
+        gorgan_level = CommissionLevel.objects.create(
+            code="A", performance_rate=1000, violation_rate=1000, branch=gorgan,
+        )
+        gorgan_department = Department.objects.create(name="مقایسه گرگان", branch=gorgan)
+        gorgan_shift = Shift.objects.create(
+            code="MORNING",
+            title="شیفت صبح گرگان",
+            start_time=time(10, 0),
+            end_time=time(16, 0),
+            standard_hours=Decimal("6.0"),
+            sort_order=1,
+            branch=gorgan,
+        )
+        gorgan_user = User.objects.create_user("gorgan-emp", password="StrongPass123!")
+        gorgan_employee = Employee.objects.create(
+            user=gorgan_user,
+            employee_code="G100",
+            first_name="نیروی",
+            last_name="گرگان",
+            mobile="09120000991",
+            role=Employee.Role.EMPLOYEE,
+            commission_level=gorgan_level,
+            primary_department=gorgan_department,
+            branch=gorgan,
+        )
+        today = date.today()
+        LineTarget.objects.create(
+            department=gorgan_department,
+            bronze_units=10, bronze_reward=1000,
+            silver_units=50, silver_reward=2000,
+            gold_units=200, gold_reward=3000,
+        )
+        LineShiftPerformance.objects.create(
+            date=today, shift=gorgan_shift, department=gorgan_department,
+            sold_units=80, recorded_by=self.manager_user, branch=gorgan,
+        )
+        DailyShiftLog.objects.create(
+            employee=gorgan_employee, date=today, shift=gorgan_shift,
+            main_department=gorgan_department, main_hours=Decimal("6.0"), branch=gorgan,
+        )
+        LineShiftPerformance.objects.create(
+            date=today, shift=self.shift_morning, department=self.department,
+            sold_units=20, recorded_by=self.manager_user, branch=sari,
+        )
+
+        activate_scope(branch_id=sari.pk, employee_id=self.manager.pk)
+        start = today.replace(day=1)
+        report = branch_comparison_report(start, today)
+        by_name = {row["branch"].name: row for row in report["branches"]}
+        self.assertEqual(by_name["فروشگاه گرگان"]["sold_units"], 80)
+        self.assertEqual(by_name["فروشگاه ساری"]["sold_units"], 20)
+        self.assertEqual(by_name["فروشگاه گرگان"]["employee_targets"]["silver"], 1)
+        matched = [row for row in report["employees"] if row["employee"].pk == gorgan_employee.pk]
+        self.assertEqual(matched[0]["metrics"]["total_sales_units_share"], Decimal("80.00"))
+        self.assertIn("مقایسه گرگان", [line["name"] for line in report["line_matrix"]])
+
+        self.manager.is_super_admin = True
+        self.manager.branch = None
+        self.manager.save()
+        self.client.force_login(self.manager_user)
+        self.client.post(reverse("switch_branch"), {"branch": sari.pk, "next": "/"})
+        page = self.client.get(reverse("management_branch_comparison"))
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "گزارش مقایسه‌ای شعبه‌ها")
+        self.assertContains(page, "فروشگاه گرگان")
+        self.assertContains(page, "مقایسه گرگان")
+        self.assertContains(page, "نیروی گرگان")
+        self.assertContains(page, "تارگت نقره‌ای")
+
+
+class ShiftLineLeaveTests(BaseEmployeeTest):
+    def test_other_line_absence_does_not_block_and_solo_support_gets_full_share(self):
+        from django.core.exceptions import ValidationError
+        import jdatetime
+        from core.services import approve_shift_log, calculate_single_shift_log
+
+        accessories = Department.objects.create(name="اکسسوری")
+        warehouse = Department.objects.create(name="انبار")
+        self.employee.primary_department = self.department
+        self.employee.default_shift = self.shift_morning
+        self.employee.first_name = "مهسا"
+        self.employee.last_name = "غفوری"
+        self.employee.save()
+
+        fatemeh_user = User.objects.create_user("fatemeh", password="StrongPass123!")
+        fatemeh = Employee.objects.create(
+            user=fatemeh_user, employee_code="F100", first_name="فاطمه", last_name="ظاهری",
+            mobile="09120000881", commission_level=self.level_a, primary_department=self.department,
+            default_shift=self.shift_morning,
+        )
+        warehouse_user = User.objects.create_user("warehouse", password="StrongPass123!")
+        warehouse_emp = Employee.objects.create(
+            user=warehouse_user, employee_code="W100", first_name="کارمند", last_name="انبار",
+            mobile="09120000882", commission_level=self.level_a, primary_department=warehouse,
+            default_shift=self.shift_morning,
+        )
+        warehouse_emp.primary_departments.add(warehouse)
+
+        day = date(2026, 8, 29)
+        mahsa = DailyShiftLog.objects.create(
+            employee=self.employee, date=day, shift=self.shift_morning,
+            main_department=self.department, main_hours=Decimal("0"),
+            has_support_line=True, support_hours=Decimal("6.0"),
+        )
+        mahsa.support_departments.add(accessories)
+        DailyShiftLog.objects.create(
+            employee=warehouse_emp, date=day, shift=self.shift_morning,
+            main_department=warehouse, main_hours=Decimal("6.0"),
+        )
+        LineShiftPerformance.objects.create(
+            date=day, shift=self.shift_morning, department=accessories,
+            sold_units=40, recorded_by=self.manager_user,
+        )
+
+        calc = calculate_single_shift_log(mahsa)
+        self.assertEqual(len(calc["support_infos"]), 1)
+        self.assertEqual(calc["support_infos"][0]["share_units"], Decimal("40.0"))
+        self.assertEqual(calc["support_infos"][0]["total_dept_hours"], Decimal("6.0"))
+        self.assertEqual(calc["total_units_share"], Decimal("40.0"))
+        DailyShiftLog.objects.filter(employee=warehouse_emp).delete()
+
+        with self.assertRaises(ValidationError) as blocked:
+            approve_shift_log(mahsa, self.manager_user, "زود")
+        self.assertIn("فاطمه ظاهری", str(blocked.exception))
+        self.assertNotIn("انبار", str(blocked.exception))
+
+        jalali = jdatetime.date.fromgregorian(date=day).strftime("%Y/%m/%d")
+        self.client.force_login(self.manager_user)
+        page = self.client.get(reverse("management_shift_log_reviews"))
+        self.assertContains(page, "ثبت مرخصی")
+        self.assertContains(page, "فاطمه ظاهری")
+        self.assertNotContains(page, "تمام کارمندان این شیفت")
+        marked = self.client.post(reverse("management_shift_log_mark_leave"), {
+            "employee_id": fatemeh.pk,
+            "shift_id": self.shift_morning.pk,
+            "date": jalali,
+            "department_id": self.department.pk,
+        })
+        self.assertEqual(marked.status_code, 302)
+        leave = DailyShiftLog.objects.get(employee=fatemeh)
+        self.assertEqual(leave.status, DailyShiftLog.Status.LEAVE)
+
+        approved = approve_shift_log(mahsa, self.manager_user, "بعد از مرخصی وسط")
+        self.assertEqual(approved.status, DailyShiftLog.Status.APPROVED)
+        self.assertEqual(approved.frozen_total_units_share, Decimal("40.0"))
+        self.assertFalse(DailyShiftLog.objects.filter(employee=warehouse_emp, status=DailyShiftLog.Status.LEAVE).exists())

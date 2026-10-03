@@ -15,6 +15,7 @@ urlpatterns = [
     # Manager Shift Log Reviews & Approvals
     path("management/shift-log-reviews/", views.management_shift_log_reviews, name="management_shift_log_reviews"),
     path("management/shift-log-reviews/session-approve/", views.management_shift_session_approve, name="management_shift_session_approve"),
+    path("management/shift-log-reviews/mark-leave/", views.management_shift_log_mark_leave, name="management_shift_log_mark_leave"),
     path("management/shift-log-reviews/<int:pk>/", views.management_shift_log_review_detail, name="management_shift_log_review_detail"),
     path("management/shift-log-reviews/<int:pk>/quick-approve/", views.management_shift_log_quick_approve, name="management_shift_log_quick_approve"),
     path("management/shift-log-reviews/<int:pk>/revert/", views.management_shift_log_revert, name="management_shift_log_revert"),
@@ -31,6 +32,7 @@ urlpatterns = [
     # Manager Line Rates & Commissions Settlement
     path("management/line-rates/", views.management_line_rates, name="management_line_rates"),
     path("management/commissions/", views.management_commission_report, name="management_commission_report"),
+    path("management/branch-comparison/", views.management_branch_comparison, name="management_branch_comparison"),
 
     # Violations
     path("violations/", views.violation_list, name="violations"),

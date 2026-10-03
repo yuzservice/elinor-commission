@@ -341,6 +341,7 @@ class DailyShiftLog(BranchScoped, models.Model):
         PENDING = "PENDING", "در انتظار تأیید مدیر"
         APPROVED = "APPROVED", "تأییدشده و واریز نهایی"
         REJECTED = "REJECTED", "ردشده"
+        LEAVE = "LEAVE", "مرخصی"
 
     # Backward-compatible public name used throughout the shift-log workflow.
     Status = ReviewStatus

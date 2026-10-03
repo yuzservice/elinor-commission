@@ -54,6 +54,7 @@
                 <a href="{% url 'management_shift_log_reviews' %}">✅ بررسی و تأیید کارکردها</a>
                 <a href="{% url 'management_line_performances' %}">🛍️ فروش روزانه لاین‌ها</a>
                 <a href="{% url 'management_commission_report' %}">💰 تسویه و گزارش پورسانت</a>
+                {% if is_super_admin %}<a href="{% url 'management_branch_comparison' %}">📊 گزارش مقایسه‌ای شعبه‌ها</a>{% endif %}
                 <a href="{% url 'violation_create' %}">⚠️ ثبت تخلف پرسنل</a>
             </div>
         </details>

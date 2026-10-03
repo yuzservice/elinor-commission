@@ -1,4 +1,5 @@
 import contextvars
+from contextlib import contextmanager
 
 _branch_id = contextvars.ContextVar("active_branch_id", default=None)
 _employee_id = contextvars.ContextVar("active_employee_id", default=None)
@@ -20,6 +21,18 @@ def activate_scope(*, branch_id, employee_id):
 def clear_scope():
     _branch_id.set(None)
     _employee_id.set(None)
+
+
+@contextmanager
+def without_branch_scope():
+    """محاسبه روی همه شعبه‌ها، بدون اینکه شعبه فعال درخواست عوض بماند."""
+    branch_id = current_branch_id()
+    employee_id = current_employee_id()
+    clear_scope()
+    try:
+        yield
+    finally:
+        activate_scope(branch_id=branch_id, employee_id=employee_id)
 
 
 def assign_branch(instance):

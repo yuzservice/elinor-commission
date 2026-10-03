@@ -81,13 +81,12 @@
                 </div>
 
                 {% if session.can_approve %}
-                <!-- دکمه تأیید یکجای شیفت -->
-                <form method="post" action="{% url 'management_shift_session_approve' %}" style="margin: 0;" onsubmit="return confirm('تمامی کارکردهای این شیفت تأیید و پورسانت‌ها قطعی و فریز شوند؟');">
+                <form method="post" action="{% url 'management_shift_session_approve' %}" style="margin: 0;" onsubmit="return confirm('کارکرد لاین‌هایی که نفراتشان مشخص شده تأیید و فریز شود؟');">
                     {% csrf_token %}
                     <input type="hidden" name="date" value="{{ session.date_jalali }}">
                     <input type="hidden" name="shift_id" value="{{ session.shift.pk }}">
                     <button class="primary" type="submit" style="padding: 8px 18px; font-size: 13px; font-weight: 800; background: var(--green, #237554); border-radius: 8px;">
-                        ✅ تأیید و واریز کل شیفت
+                        ✅ تأیید لاین‌های آماده
                     </button>
                 </form>
                 {% elif not session.has_performance %}
@@ -99,13 +98,25 @@
         </div>
 
         <!-- هشدار در صورت عدم تکمیل ثبت کارکرد پرسنل -->
-        {% if not session.is_complete %}
-        <div style="background: #fffbeb; border-bottom: 1px solid #fef3c7; color: #92400e; padding: 10px 22px; font-size: 12.5px; display: flex; align-items: center; gap: 8px;">
-            <span>⚠️</span>
-            <span>
-                <b>پرسنل موظف زیر هنوز کارکرد ثبت نکرده‌اند:</b> {{ session.missing_names }}
-                <small style="display: block; color: #b45309; margin-top: 2px;">(طبق سناریوی محاسبات، تا زمان تعیین تکلیف تمام کارمندان این شیفت، امکان تأیید نهایی وجود ندارد).</small>
-            </span>
+        {% if session.line_gaps %}
+        <div style="background: #fffbeb; border-bottom: 1px solid #fef3c7; color: #92400e; padding: 12px 22px; font-size: 12.5px;">
+            <b>فقط همان لاین منتظر این نفرات است. لاین دیگر معطل نمی‌ماند.</b>
+            {% for gap in session.line_gaps %}
+            <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px;">
+                <span>لاین {{ gap.department.name }}:</span>
+                {% for emp in gap.missing %}
+                <form method="post" action="{% url 'management_shift_log_mark_leave' %}" style="margin: 0; display: inline-flex; gap: 6px; align-items: center;">
+                    {% csrf_token %}
+                    <input type="hidden" name="employee_id" value="{{ emp.pk }}">
+                    <input type="hidden" name="shift_id" value="{{ session.shift.pk }}">
+                    <input type="hidden" name="date" value="{{ session.date_jalali }}">
+                    <input type="hidden" name="department_id" value="{{ gap.department.pk }}">
+                    <span>{{ emp.full_name }}</span>
+                    <button class="primary" type="submit" style="padding: 6px 12px; font-size: 12.5px; font-weight: 800; border-radius: 8px;">ثبت مرخصی</button>
+                </form>
+                {% endfor %}
+            </div>
+            {% endfor %}
         </div>
         {% endif %}
 
@@ -125,6 +136,35 @@
                     </tr>
                 </thead>
                 <tbody>
+                    {% for item in session.leave_candidates %}
+                    <tr>
+                        <td>
+                            <div class="person-cell">
+                                <span class="avatar small" style="width: 36px; height: 36px; border-radius: 10px; font-size: 16px;">{{ item.employee.first_name|slice:':1' }}</span>
+                                <div>
+                                    <b>{{ item.employee.full_name }}</b>
+                                    <small>کد {{ item.employee.employee_code }}</small>
+                                </div>
+                            </div>
+                        </td>
+                        <td><b>{{ item.department.name }}</b></td>
+                        <td><span style="color: var(--muted);">—</span></td>
+                        <td><span style="color: var(--muted);">نیامده</span></td>
+                        <td><span style="color: var(--muted);">—</span></td>
+                        <td><span style="color: var(--muted);">—</span></td>
+                        <td><span class="status pending" style="font-size: 11px;">بدون کارکرد</span></td>
+                        <td>
+                            <form method="post" action="{% url 'management_shift_log_mark_leave' %}" style="margin: 0;">
+                                {% csrf_token %}
+                                <input type="hidden" name="employee_id" value="{{ item.employee.pk }}">
+                                <input type="hidden" name="shift_id" value="{{ session.shift.pk }}">
+                                <input type="hidden" name="date" value="{{ session.date_jalali }}">
+                                <input type="hidden" name="department_id" value="{{ item.department.pk }}">
+                                <button class="primary" type="submit" style="padding: 7px 14px; font-size: 12.5px; font-weight: 800; border-radius: 8px;">ثبت مرخصی</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
                     {% for row in session.log_rows %}
                     <tr>
                         <td>
@@ -158,6 +198,9 @@
                             {% if row.log.has_support_line %}
                             <span style="color: var(--green, #237554); font-weight: 600; font-size: 12.5px;">{{ row.log.support_departments_display }}</span>
                             <small style="color: var(--muted); display: block;">{{ row.log.support_hours }} ساعت</small>
+                            {% for support in row.calc.support_infos %}
+                            <small style="display: block;">{{ support.department_name }}: {{ support.share_units }} کالا از {{ support.hours }} ساعت</small>
+                            {% endfor %}
                             {% else %}
                             <span style="color: var(--muted);">—</span>
                             {% endif %}
@@ -184,6 +227,8 @@
                         <td>
                             {% if row.log.status == 'APPROVED' %}
                             <span class="status approved" style="font-size: 11px;">✅ واریز شد</span>
+                            {% elif row.log.status == 'LEAVE' %}
+                            <span class="status" style="font-size: 11px;">مرخصی</span>
                             {% elif row.log.status == 'REJECTED' %}
                             <span class="status rejected" style="font-size: 11px;">❌ رد شد</span>
                             {% else %}
