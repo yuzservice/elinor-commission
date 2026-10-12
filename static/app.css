@@ -1213,9 +1213,11 @@ dd {
   aside {
     transform: translateX(100%);
     transition: transform 0.2s ease-in-out;
+    z-index: 1050;
   }
   .nav-open aside {
     transform: none;
+    z-index: 1050;
   }
   main {
     margin-right: 0;
@@ -1663,7 +1665,7 @@ dd {
     background: rgba(0, 0, 0, 0.45);
     backdrop-filter: blur(2px);
     -webkit-backdrop-filter: blur(2px);
-    z-index: 45;
+    z-index: 1040;
     opacity: 0;
     pointer-events: none;
     cursor: pointer;
@@ -1673,6 +1675,13 @@ dd {
     opacity: 1;
     pointer-events: auto;
   }
+}
+
+body.nav-open .mobile-bottom-bar,
+body.nav-open .live-summary {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 /* Centered Login Logo */

@@ -235,7 +235,7 @@
         <p>هنوز فعالیتی برای این شیفت ثبت نشده است (اختیاری).</p>
         <button type="button" id="btn-initial-add-activity" class="btn-action-add">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-          <span>افزودن فعالیت</span>
+          <span>ثبت فعالیت</span>
         </button>
       </div>
 
@@ -1042,8 +1042,15 @@
   align-items: center !important;
   justify-content: space-between !important;
   gap: 14px !important;
-  z-index: 50 !important;
+  z-index: 30 !important;
   box-shadow: 0 4px 18px rgba(15, 23, 42, 0.08) !important;
+  transition: opacity 0.2s ease, visibility 0.2s ease !important;
+}
+
+body.nav-open .mobile-bottom-bar {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 .bottom-summary-info small {
@@ -1090,11 +1097,54 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+  // --- Form & General Inputs ---
+  const form = document.getElementById('shift-log-form');
   const dateInput = document.getElementById('id_date');
   const custom = document.getElementById('custom-date-container');
+  const toggleCustomBtn = document.getElementById('toggle-custom-date');
   const mainDept = document.getElementById('id_main_department');
   const shift = document.getElementById('id_shift');
-  const form = document.getElementById('shift-log-form');
+
+  // --- Step 2: Support Lines Elements ---
+  const supportList = document.getElementById('support-intervals-list');
+  const supportEmptyPrompt = document.getElementById('support-empty-prompt');
+  const addAnotherSupportBtn = document.getElementById('add-another-support-btn');
+  const btnInitialAddSupport = document.getElementById('btn-initial-add-support');
+  const supportCountPill = document.getElementById('support-count-pill');
+  const totalForms = document.getElementById('id_support-TOTAL_FORMS');
+  const hasSupportLineInput = document.getElementById('id_has_support_line');
+
+  // --- Step 3: Dynamic Activities Elements ---
+  const activityCatalog = JSON.parse(document.getElementById('line-activities-data')?.textContent || '[]');
+  const activityValues = JSON.parse(document.getElementById('activity-values-data')?.textContent || '{}');
+  const activitiesList = document.getElementById('activities-dynamic-list');
+  const activitiesEmptyPrompt = document.getElementById('activities-empty-prompt');
+  const addAnotherActivityBtn = document.getElementById('add-another-activity-btn');
+  const btnInitialAddActivity = document.getElementById('btn-initial-add-activity');
+  const activitiesSummaryPill = document.getElementById('activities-summary-pill');
+
+  // --- Step 4: Overtime Elements ---
+  const otCheckbox = document.getElementById('id_has_overtime');
+  const otActiveCard = document.getElementById('overtime-active-card');
+  const otEmptyPrompt = document.getElementById('overtime-empty-prompt');
+  const btnAddOvertime = document.getElementById('btn-add-overtime');
+  const btnRemoveOvertime = document.getElementById('btn-remove-overtime');
+  const otCountPill = document.getElementById('overtime-count-pill');
+  const otStart = document.getElementById('id_overtime_start_time');
+  const otEnd = document.getElementById('id_overtime_end_time');
+  const otDept = document.getElementById('id_overtime_department');
+
+  // --- Summary Elements ---
+  const hoursSummaryEl = document.getElementById('bottom-hours-summary');
+  const metaSummaryEl = document.getElementById('bottom-meta-summary');
+
+  // --- Utility Functions ---
+  function timeToMins(t) {
+    if (!t) return null;
+    const parts = t.split(':');
+    if (parts.length < 2) return null;
+    return Number(parts[0]) * 60 + Number(parts[1]);
+  }
 
   // --- Date Pills Controller ---
   document.querySelectorAll('.date-chip[data-date]').forEach(btn => btn.addEventListener('click', () => {
@@ -1107,7 +1157,6 @@ document.addEventListener('DOMContentLoaded', () => {
     updateSummary();
   }));
 
-  const toggleCustomBtn = document.getElementById('toggle-custom-date');
   if (toggleCustomBtn && custom) {
     toggleCustomBtn.addEventListener('click', () => {
       custom.style.display = (custom.style.display === 'none' || custom.style.display === '' ? 'block' : 'none');
@@ -1142,24 +1191,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   }
-  syncDates();
 
-  function timeToMins(t) {
-    if (!t) return null;
-    const parts = t.split(':');
-    if (parts.length < 2) return null;
-    return Number(parts[0]) * 60 + Number(parts[1]);
-  }
-
-  // --- STEP 2: Support Lines Controller ---
-  const supportList = document.getElementById('support-intervals-list');
-  const supportEmptyPrompt = document.getElementById('support-empty-prompt');
-  const addAnotherSupportBtn = document.getElementById('add-another-support-btn');
-  const btnInitialAddSupport = document.getElementById('btn-initial-add-support');
-  const supportCountPill = document.getElementById('support-count-pill');
-  const totalForms = document.getElementById('id_support-TOTAL_FORMS');
-  const hasSupportLineInput = document.getElementById('id_has_support_line');
-
+  // --- Step 2: Support Lines Logic ---
   function bindRemoveInterval(card) {
     const removeBtn = card.querySelector('.remove-interval');
     if (removeBtn) {
@@ -1181,8 +1214,6 @@ document.addEventListener('DOMContentLoaded', () => {
       el.addEventListener('input', updateSummary);
     });
   }
-
-  document.querySelectorAll('.interval-card').forEach(bindRemoveInterval);
 
   function visibleIntervalCards() {
     if (!supportList) return [];
@@ -1239,19 +1270,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (btnInitialAddSupport) btnInitialAddSupport.addEventListener('click', addNewSupportInterval);
   if (addAnotherSupportBtn) addAnotherSupportBtn.addEventListener('click', addNewSupportInterval);
+  document.querySelectorAll('.interval-card').forEach(bindRemoveInterval);
 
-  syncSupportUIState();
-  updateSummary();
-
-  // --- STEP 3: Dynamic Activities Controller ---
-  const activityCatalog = JSON.parse(document.getElementById('line-activities-data')?.textContent || '[]');
-  const activityValues = JSON.parse(document.getElementById('activity-values-data')?.textContent || '{}');
-  const activitiesList = document.getElementById('activities-dynamic-list');
-  const activitiesEmptyPrompt = document.getElementById('activities-empty-prompt');
-  const addAnotherActivityBtn = document.getElementById('add-another-activity-btn');
-  const btnInitialAddActivity = document.getElementById('btn-initial-add-activity');
-  const activitiesSummaryPill = document.getElementById('activities-summary-pill');
-
+  // --- Step 3: Dynamic Activities Logic ---
   function renderActivityInputSlot(def, currentVal) {
     if (def.count_method === 'CHECKMARK') {
       const isChecked = currentVal && (currentVal === '1' || currentVal === 1 || currentVal === true || currentVal === 'true' || currentVal === 'on');
@@ -1314,39 +1335,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function bindActivityCardEvents(card) {
-    const select = card.querySelector('.activity-select');
-    const slot = card.querySelector('.activity-input-slot');
-    const hiddenId = card.querySelector('input[name="activity_ids"]');
-    const removeBtn = card.querySelector('.remove-activity');
-
-    if (select) {
-      select.addEventListener('change', () => {
-        const newDef = activityCatalog.find(d => String(d.id) === String(select.value));
-        if (newDef) {
-          hiddenId.value = newDef.id;
-          slot.innerHTML = renderActivityInputSlot(newDef, newDef.count_method === 'CHECKMARK' ? '1' : 1);
-          bindSlotControls(slot, newDef);
-          syncActivitiesUIState();
-          updateSummary();
-        }
-      });
-    }
-
-    if (removeBtn) {
-      removeBtn.addEventListener('click', () => {
-        card.remove();
-        syncActivitiesUIState();
-        updateSummary();
-      });
-    }
-
-    const initialDef = activityCatalog.find(d => String(d.id) === String(select?.value));
-    if (initialDef) {
-      bindSlotControls(slot, initialDef);
-    }
-  }
-
   function bindSlotControls(slot, def) {
     if (!slot) return;
 
@@ -1385,8 +1373,45 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function bindActivityCardEvents(card) {
+    const select = card.querySelector('.activity-select');
+    const slot = card.querySelector('.activity-input-slot');
+    const hiddenId = card.querySelector('input[name="activity_ids"]');
+    const removeBtn = card.querySelector('.remove-activity');
+
+    if (select) {
+      select.addEventListener('change', () => {
+        const newDef = activityCatalog.find(d => String(d.id) === String(select.value));
+        if (newDef) {
+          hiddenId.value = newDef.id;
+          slot.innerHTML = renderActivityInputSlot(newDef, newDef.count_method === 'CHECKMARK' ? '1' : 1);
+          bindSlotControls(slot, newDef);
+          syncActivitiesUIState();
+          updateSummary();
+        }
+      });
+    }
+
+    if (removeBtn) {
+      removeBtn.addEventListener('click', () => {
+        card.remove();
+        syncActivitiesUIState();
+        updateSummary();
+      });
+    }
+
+    const initialDef = activityCatalog.find(d => String(d.id) === String(select?.value));
+    if (initialDef) {
+      bindSlotControls(slot, initialDef);
+    }
+  }
+
   function addActivityCard(initialDefId, initialVal) {
-    if (!activityCatalog.length || !activitiesList) return;
+    if (!activitiesList) return;
+    if (!activityCatalog || !activityCatalog.length) {
+      alert('هنوز هیچ نوع فعالیتی در سامانه تعریف نشده است. لطفاً ابتدا در بخش مدیریت فعالیت‌ها، فعالیت‌های لاین را تعریف فرمایید.');
+      return;
+    }
 
     let def = activityCatalog.find(d => String(d.id) === String(initialDefId));
     if (!def) {
@@ -1435,24 +1460,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnInitialAddActivity) btnInitialAddActivity.addEventListener('click', () => addActivityCard());
   if (addAnotherActivityBtn) addAnotherActivityBtn.addEventListener('click', () => addActivityCard());
 
-  if (activityValues && Object.keys(activityValues).length > 0) {
-    Object.entries(activityValues).forEach(([id, val]) => {
-      addActivityCard(id, val);
-    });
-  }
-  syncActivitiesUIState();
-
-  // --- STEP 4: Overtime Controller (Symmetrical to Support Line) ---
-  const otCheckbox = document.getElementById('id_has_overtime');
-  const otActiveCard = document.getElementById('overtime-active-card');
-  const otEmptyPrompt = document.getElementById('overtime-empty-prompt');
-  const btnAddOvertime = document.getElementById('btn-add-overtime');
-  const btnRemoveOvertime = document.getElementById('btn-remove-overtime');
-  const otCountPill = document.getElementById('overtime-count-pill');
-  const otStart = document.getElementById('id_overtime_start_time');
-  const otEnd = document.getElementById('id_overtime_end_time');
-  const otDept = document.getElementById('id_overtime_department');
-
+  // --- Step 4: Overtime Logic ---
   function syncOvertimeUIState() {
     const hasData = otCheckbox && otCheckbox.checked;
     if (hasData) {
@@ -1480,6 +1488,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       syncOvertimeUIState();
       updateSummary();
+      if (otStart) otStart.focus();
     });
   }
 
@@ -1498,12 +1507,6 @@ document.addEventListener('DOMContentLoaded', () => {
     el.addEventListener('input', updateSummary);
     el.addEventListener('change', updateSummary);
   });
-
-  // Check initial overtime state
-  if ((otCheckbox && otCheckbox.checked) || (otStart && otStart.value && otEnd && otEnd.value)) {
-    if (otCheckbox) otCheckbox.checked = true;
-    syncOvertimeUIState();
-  }
 
   function getOvertimeHours() {
     if (!otCheckbox || !otCheckbox.checked || !otStart || !otEnd || !otStart.value || !otEnd.value) return 0;
@@ -1555,7 +1558,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const dateText = (dateInput && dateInput.value) ? dateInput.value.trim() : 'امروز';
 
     // Pinned distribution breakdown
-    const hoursSummaryEl = document.getElementById('bottom-hours-summary');
     if (hoursSummaryEl) {
       let text = '';
       const fmtNum = (n) => (Math.round(n * 100) / 100).toString();
@@ -1571,7 +1573,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Pinned meta breakdown
-    const metaSummaryEl = document.getElementById('bottom-meta-summary');
     const actCount = activitiesList ? activitiesList.querySelectorAll('.activity-card').length : 0;
     if (metaSummaryEl) {
       const actBit = actCount > 0 ? `${actCount} فعالیت ثبت شد` : 'بدون فعالیت';
@@ -1608,6 +1609,22 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // --- Initial Setup / Synchronization ---
+  syncDates();
+  syncSupportUIState();
+
+  if (activityValues && Object.keys(activityValues).length > 0) {
+    Object.entries(activityValues).forEach(([id, val]) => {
+      addActivityCard(id, val);
+    });
+  }
+  syncActivitiesUIState();
+
+  if ((otCheckbox && otCheckbox.checked) || (otStart && otStart.value && otEnd && otEnd.value)) {
+    if (otCheckbox) otCheckbox.checked = true;
+  }
+  syncOvertimeUIState();
 
   updateSummary();
 });
