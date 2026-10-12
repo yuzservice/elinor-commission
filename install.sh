@@ -143,35 +143,75 @@ echo -e "\n${BLUE}▶ [3/5] Domain & Security (SSL / HTTPS) Configuration...${NC
 HAS_SSL="n"
 DOMAIN_NAME=""
 SERVER_IP=""
-
-echo -e "Do you want to configure a domain name with automatic free SSL (HTTPS)? (y/n) [Default: y]: "
-read -r ssl_choice < /dev/tty || ssl_choice="y"
-ssl_choice=${ssl_choice:-y}
-
-if [[ "$ssl_choice" =~ ^[Yy]$ ]]; then
-    HAS_SSL="y"
-    while [ -z "$DOMAIN_NAME" ]; do
-        echo -e "Enter your domain name (e.g. commission.example.com): "
-        read -r DOMAIN_NAME < /dev/tty
-        DOMAIN_NAME=$(echo "$DOMAIN_NAME" | tr -d ' ' | tr '[:upper:]' '[:lower:]')
-    done
-    echo -e "${GREEN}✓ Domain configured: https://${DOMAIN_NAME}${NC}"
-else
-    echo -e "Enter server IP address or hostname (Press Enter for localhost): "
-    read -r SERVER_IP < /dev/tty || SERVER_IP="localhost"
-    SERVER_IP=${SERVER_IP:-localhost}
-    echo -e "${YELLOW}Running in HTTP mode without SSL on port 8010: http://${SERVER_IP}:8010${NC}"
-fi
-
-# Preserve existing credentials if .env exists, or generate new secure ones
 SECRET_KEY=""
 POSTGRES_PASSWORD=""
+EXISTING_DOMAIN=""
 
+# Preserve existing credentials & settings if .env exists
 if [ -f .env ]; then
-    echo -e "${YELLOW}Found existing .env file. Preserving existing database credentials...${NC}"
+    echo -e "${YELLOW}Found existing .env file. Checking configuration...${NC}"
     SECRET_KEY=$(grep -E '^SECRET_KEY=' .env | cut -d '=' -f2- | tr -d '\r' || true)
     POSTGRES_PASSWORD=$(grep -E '^POSTGRES_PASSWORD=' .env | cut -d '=' -f2- | tr -d '\r' || true)
+    EXISTING_DOMAIN=$(grep -E '^DOMAIN_NAME=' .env | cut -d '=' -f2- | tr -d '\r' || true)
     cp .env .env.bak
+fi
+
+if [ -n "$EXISTING_DOMAIN" ]; then
+    echo -e "Found previously configured domain: ${BOLD}${EXISTING_DOMAIN}${NC}"
+    echo -e "Do you want to use this domain with automatic free SSL (HTTPS on port 443)? (y/n) [Default: y]: "
+    read -r ssl_choice < /dev/tty 2>/dev/null || read -r ssl_choice || ssl_choice="y"
+    ssl_choice=${ssl_choice:-y}
+    if [[ "$ssl_choice" =~ ^[Yy]$ ]]; then
+        HAS_SSL="y"
+        DOMAIN_NAME="$EXISTING_DOMAIN"
+    fi
+fi
+
+if [ "$HAS_SSL" = "n" ]; then
+    echo -e "Do you want to configure a domain name with automatic free SSL (HTTPS on port 443)? (y/n) [Default: y]: "
+    read -r ssl_choice < /dev/tty 2>/dev/null || read -r ssl_choice || ssl_choice="y"
+    ssl_choice=${ssl_choice:-y}
+
+    if [[ "$ssl_choice" =~ ^[Yy]$ ]]; then
+        HAS_SSL="y"
+        while [ -z "$DOMAIN_NAME" ]; do
+            echo -e "Enter your domain name (e.g. commission.example.com): "
+            read -r DOMAIN_NAME < /dev/tty 2>/dev/null || read -r DOMAIN_NAME
+            DOMAIN_NAME="${DOMAIN_NAME#http://}"
+            DOMAIN_NAME="${DOMAIN_NAME#https://}"
+            DOMAIN_NAME="${DOMAIN_NAME%%/*}"
+            DOMAIN_NAME="${DOMAIN_NAME%%:*}"
+            DOMAIN_NAME=$(echo "$DOMAIN_NAME" | tr -d ' ' | tr '[:upper:]' '[:lower:]')
+        done
+        echo -e "${GREEN}✓ Domain configured: https://${DOMAIN_NAME}${NC}"
+    else
+        echo -e "Enter server IP address or hostname (Press Enter for localhost): "
+        read -r SERVER_IP < /dev/tty 2>/dev/null || read -r SERVER_IP || SERVER_IP="localhost"
+        SERVER_IP=${SERVER_IP:-localhost}
+        echo -e "${YELLOW}Running in HTTP mode without SSL on port 8010: http://${SERVER_IP}:8010${NC}"
+    fi
+fi
+
+if [ "$HAS_SSL" = "y" ]; then
+    echo -e "${GREEN}✓ SSL enabled for domain: https://${DOMAIN_NAME}${NC}"
+    # Open UFW firewall ports 80 and 443 if UFW is active
+    if command -v ufw &>/dev/null && sudo ufw status 2>/dev/null | grep -q "Status: active"; then
+        echo -e "${YELLOW}Allowing HTTP (port 80) and HTTPS (port 443) in UFW firewall...${NC}"
+        sudo ufw allow 80/tcp >/dev/null 2>&1 || true
+        sudo ufw allow 443/tcp >/dev/null 2>&1 || true
+    fi
+
+    # Check and stop conflicting host services that might occupy port 80/443
+    if systemctl is-active --quiet apache2 2>/dev/null; then
+        echo -e "${YELLOW}Stopping conflicting host service: apache2...${NC}"
+        sudo systemctl stop apache2 >/dev/null 2>&1 || true
+        sudo systemctl disable apache2 >/dev/null 2>&1 || true
+    fi
+    if systemctl is-active --quiet nginx 2>/dev/null; then
+        echo -e "${YELLOW}Stopping conflicting host service: nginx...${NC}"
+        sudo systemctl stop nginx >/dev/null 2>&1 || true
+        sudo systemctl disable nginx >/dev/null 2>&1 || true
+    fi
 fi
 
 if [ -z "$SECRET_KEY" ]; then
@@ -183,11 +223,13 @@ fi
 
 if [ "$HAS_SSL" = "y" ]; then
     cat <<EOF > .env
+COMPOSE_FILE=compose.yaml:compose.prod.yaml
 DEBUG=false
 SECRET_KEY=${SECRET_KEY}
 ALLOWED_HOSTS=${DOMAIN_NAME},localhost,127.0.0.1
 CSRF_TRUSTED_ORIGINS=https://${DOMAIN_NAME}
 APP_PORT=8010
+WEB_PORT_BINDING=127.0.0.1:8010:8000
 DOMAIN_NAME=${DOMAIN_NAME}
 POSTGRES_DB=elinor
 POSTGRES_USER=elinor
@@ -198,11 +240,14 @@ SERVE_MEDIA=true
 EOF
 else
     cat <<EOF > .env
+COMPOSE_FILE=compose.yaml
 DEBUG=false
 SECRET_KEY=${SECRET_KEY}
 ALLOWED_HOSTS=${SERVER_IP},localhost,127.0.0.1
 CSRF_TRUSTED_ORIGINS=http://${SERVER_IP}:8010,http://localhost:8010
 APP_PORT=8010
+WEB_PORT_BINDING=8010:8000
+DOMAIN_NAME=
 POSTGRES_DB=elinor
 POSTGRES_USER=elinor
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -242,6 +287,15 @@ fi
 
 echo -e "Waiting for database and auto-migrations to initialize..."
 sleep 6
+
+if [ "$HAS_SSL" = "y" ]; then
+    if ! $COMPOSE_CMD ps --services --filter "status=running" 2>/dev/null | grep -q "caddy"; then
+        echo -e "${RED}Warning: Caddy (SSL Proxy) is not running! Checking caddy logs:${NC}"
+        $COMPOSE_CMD logs --tail=30 caddy || true
+    else
+        echo -e "${GREEN}✓ Caddy SSL Proxy is running on ports 80 and 443.${NC}"
+    fi
+fi
 
 # 5. Superuser & Initial Data
 echo -e "\n${BLUE}▶ [5/5] Initial Setup & Admin User...${NC}"

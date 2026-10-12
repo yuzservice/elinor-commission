@@ -21,7 +21,7 @@ services:
     restart: unless-stopped
     env_file: .env
     ports:
-      - "${APP_PORT:-8000}:8000"
+      - "${WEB_PORT_BINDING:-${APP_PORT:-8000}:8000}"
     depends_on:
       db:
         condition: service_healthy
