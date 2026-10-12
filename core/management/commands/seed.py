@@ -170,25 +170,25 @@ class Command(BaseCommand):
             date=yesterday,
             shift=morning_shift,
             department=depts["شلوار"],
-            defaults={"sold_units": 40, "sales_amount": 200000000, "recorded_by": mgr_user}
+            defaults={"sold_units": 40, "sales_amount": 20000000, "recorded_by": mgr_user}
         )
         LineShiftPerformance.objects.update_or_create(
             date=today,
             shift=morning_shift,
             department=depts["شلوار"],
-            defaults={"sold_units": 50, "sales_amount": 250000000, "recorded_by": mgr_user, "description": "فروش عالی شلوار"}
+            defaults={"sold_units": 50, "sales_amount": 25000000, "recorded_by": mgr_user, "description": "فروش عالی شلوار"}
         )
         LineShiftPerformance.objects.update_or_create(
             date=today,
             shift=morning_shift,
             department=depts["پیراهن"],
-            defaults={"sold_units": 35, "sales_amount": 180000000, "recorded_by": mgr_user, "description": "فروش پیراهن"}
+            defaults={"sold_units": 35, "sales_amount": 18000000, "recorded_by": mgr_user, "description": "فروش پیراهن"}
         )
         LineShiftPerformance.objects.update_or_create(
             date=today,
             shift=morning_shift,
             department=depts["اکسسوری"],
-            defaults={"sold_units": 20, "sales_amount": 60000000, "recorded_by": mgr_user, "description": "فروش اکسسوری"}
+            defaults={"sold_units": 20, "sales_amount": 6000000, "recorded_by": mgr_user, "description": "فروش اکسسوری"}
         )
 
         # کارکرد دیروز سارا (تأییدشده و فریز شده توسط مدیر)

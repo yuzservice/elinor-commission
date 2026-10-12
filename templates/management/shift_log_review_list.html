@@ -1,274 +1,1840 @@
 {% extends 'base.html' %}
 {% load persian %}
-{% block title %}بررسی و تأیید جلسات شیفت کاری{% endblock %}
+{% block title %}صف بررسی و فریز قطعی پورسانت‌ها | مدیریت عملکرد الینور{% endblock %}
 {% block content %}
-<div class="page-head">
-    <div>
-        <p class="eyebrow">مدیریت عملیات و تسهیم فروش</p>
-        <h1>بررسی و تأیید شیفت‌های کاری</h1>
-        <p>تفکیک بر اساس تاریخ و شیفت · تطبیق حضور پرسنل، تسهیم فروش لاین‌ها و واریز قطعی پورسانت</p>
-    </div>
-    <div class="head-actions">
-        <a class="secondary" href="{% url 'management_line_performance_batch' %}">🛍️ ثبت دسته‌ای فروش لاین‌ها</a>
-    </div>
-</div>
 
-<!-- Tabs for Approval Status -->
-<div class="tabs" style="margin-bottom: 16px;">
-    <a class="{% if status_filter == 'PENDING' %}active{% endif %}" href="?status=PENDING">
-        ⏳ شیفت‌های در انتظار بررسی
-        <span class="badge" style="background: rgba(0,0,0,0.15); margin-right: 4px;">{{ pending_count }}</span>
-    </a>
-    <a class="{% if status_filter == 'APPROVED' %}active{% endif %}" href="?status=APPROVED">
-        ✅ شیفت‌های تأیید و فریز شده
-        <span class="badge" style="background: rgba(0,0,0,0.15); margin-right: 4px;">{{ approved_count }}</span>
-    </a>
-    <a class="{% if not status_filter %}active{% endif %}" href="?status=">
-        📋 همه شیفت‌ها
-    </a>
-</div>
+<!-- ============================================================== -->
+<!-- 100% EVERSTAGE MANAGER APPROVAL QUEUE - RESPONSIVE CARDS & DRAWER-->
+<!-- ============================================================== -->
+<div class="ever-manager-container">
 
-<!-- Filters -->
-<article class="card filter-card" style="margin-bottom: 20px;">
-    <form method="get" class="filters">
-        <input type="hidden" name="status" value="{{ status_filter }}">
-        <input name="q" value="{{ filters.q }}" placeholder="جستجو نام کارمند یا کد پرسنلی">
-        <input name="date" value="{{ filters.date }}" placeholder="تاریخ شیفت (۱۴۰۵/۰۶/۱۵)" class="jalali-date">
-        <select name="shift">
-            <option value="">همه شیفت‌ها</option>
-            {% for s in shifts %}
-            <option value="{{ s.pk }}" {% if filters.shift == s.pk|stringformat:'s' %}selected{% endif %}>{{ s.title }}</option>
-            {% endfor %}
-        </select>
-        <button class="primary" type="submit">اعمال فیلتر</button>
-        <a class="secondary" href="{% url 'management_shift_log_reviews' %}?status={{ status_filter }}">پاک‌کردن</a>
+  <!-- Page Header -->
+  <div class="page-head" style="margin-bottom: 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 14px; width: 100%;">
+      <div>
+        <span class="kicker-tag">پنل مدیریت عملیات و پورسانت</span>
+        <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin: 4px 0 6px;">صف بررسی و فریز قطعی پورسانت‌ها</h1>
+        <p style="color: #64748b; font-size: 13.5px; margin: 0; line-height: 1.6;">تسهیم ساعتی لاین‌ها، ثبت مستقیم فعالیت‌ها، بررسی کشویی و تأیید فوری با کلید Enter</p>
+      </div>
+      <div class="page-head-actions">
+        <a class="btn btn-secondary btn-sm" href="{% url 'management_line_performance_batch' %}" style="text-decoration:none;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          ثبت فروش روزانه لاین‌ها
+        </a>
+        <button type="button" class="btn btn-primary btn-sm desktop-only-btn" onclick="openSelectedRowDrawer()">
+          ⚡ بررسی ردیف انتخابی (Enter)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Manager Toolbar & Filters (Tidy 2-Tier Layout) -->
+  <div class="manager-toolbar">
+    <!-- Tier 1: Search, Date, Shift Filters & Actions -->
+    <form method="get" class="toolbar-primary-row">
+      <input type="hidden" name="status" value="{{ status_filter }}">
+      
+      <div class="filter-search">
+        <input type="text" name="q" value="{{ filters.q }}" placeholder="جستجوی نام یا کد پرسنلی...">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      </div>
+
+      <div class="date-input-holder">
+        <input type="text" name="date" value="{{ filters.date }}" placeholder="تاریخ شیفت (۱۴۰۵/۰۶/۱۵)" class="jalali-date form-input">
+      </div>
+
+      <select name="shift" class="form-select filter-shift-select">
+        <option value="">همه شیفت‌ها</option>
+        {% for s in shifts %}
+        <option value="{{ s.pk }}" {% if filters.shift == s.pk|stringformat:'s' %}selected{% endif %}>{{ s.title }}</option>
+        {% endfor %}
+      </select>
+
+      <div class="filter-btn-group">
+        <button type="submit" class="btn btn-primary btn-sm">فیلتر</button>
+        <a class="btn btn-secondary btn-sm" href="{% url 'management_shift_log_reviews' %}?status={{ status_filter }}" style="text-decoration:none;">پاک‌کردن</a>
+      </div>
     </form>
-</article>
 
-<!-- Shift Sessions Cards (تفکیک بر اساس تاریخ و شیفت) -->
-<div class="shift-sessions-list" style="display: flex; flex-direction: column; gap: 24px;">
+    <!-- Tier 2: Status Tabs, Expand All, Keyboard Shortcuts Guide -->
+    <div class="toolbar-secondary-row">
+      <div class="status-tab-pills">
+        <a class="status-pill-btn {% if status_filter == 'PENDING' %}active{% endif %}" href="?status=PENDING">
+          در انتظار بررسی ({{ pending_count|persian_digits }})
+        </a>
+        <a class="status-pill-btn {% if status_filter == 'APPROVED' %}active{% endif %}" href="?status=APPROVED">
+          تأیید و فریز شده ({{ approved_count|persian_digits }})
+        </a>
+        <a class="status-pill-btn {% if not status_filter %}active{% endif %}" href="?status=">
+          همه ({{ page.paginator.count|persian_digits }})
+        </a>
+      </div>
+
+      <div class="toolbar-actions-left">
+        <button type="button" id="btn-toggle-all" class="btn btn-secondary btn-sm" onclick="toggleAllSessions()">
+          <span>باز کردن همه</span>
+        </button>
+
+        <!-- Keyboard Shortcut Guide (Desktop Only) -->
+        <div class="kbd-shortcut-chip desktop-only">
+          <span>راهنما:</span>
+          <span class="kbd-key">↑</span>
+          <span class="kbd-key">↓</span> سطرها |
+          <span class="kbd-key">Enter</span> بررسی و فریز |
+          <span class="kbd-key">Esc</span> بستن
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shift Sessions List (Accordion Cards - Collapsed by Default) -->
+  <div class="shift-sessions-list">
     {% for session in session_cards %}
-    <article class="card shift-session-card" style="border-radius: 18px; padding: 0; overflow: hidden; border: 1.5px solid {% if session.session_status == 'READY' %}#86efac{% elif session.session_status == 'APPROVED' %}var(--line){% else %}#fde68a{% endif %}; box-shadow: 0 4px 20px rgba(0,0,0,0.04);">
-        <!-- هدر جلسه شیفت -->
-        <div style="background: {% if session.session_status == 'READY' %}#f0fdf4{% elif session.session_status == 'APPROVED' %}#f8faf9{% else %}#fffbeb{% endif %}; padding: 18px 22px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
-            <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
-                <div style="width: 46px; height: 46px; border-radius: 14px; background: #fff; display: grid; place-items: center; font-size: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid var(--line);">
-                    {% if session.shift.code == 'MORNING' %}☀️{% elif session.shift.code == 'EVENING' %}🌙{% else %}⏰{% endif %}
-                </div>
-                <div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <h2 style="margin: 0; font-size: 17px; font-weight: 800;">
-                            {{ session.date_jalali }} · {{ session.shift.title }}
-                        </h2>
-                        <span class="status {{ session.status_class }}" style="font-size: 11.5px; padding: 3px 9px;">
-                            {{ session.status_badge }}
-                        </span>
-                    </div>
-                    <small style="color: var(--muted); font-size: 12px; margin-top: 2px; display: block;">
-                        ساعت شیفت: {{ session.shift.start_time|time:'H:i' }} تا {{ session.shift.end_time|time:'H:i' }} ({{ session.shift.standard_hours|persian_digits }} ساعت استاندارد)
-                    </small>
-                </div>
+    <div class="session-card is-collapsed" data-session-index="{{ forloop.counter0 }}">
+      
+      <!-- Session Card Header (Clickable Accordion Trigger) -->
+      <div class="session-card-header" onclick="toggleSession(this.closest('.session-card'))" title="کلیک برای باز یا بسته کردن این جلسه شیفت">
+        <div class="session-info">
+          <div class="session-date-box">
+            <strong>{{ session.date_jalali|persian_digits }}</strong>
+            <small>{{ session.shift.title }}</small>
+          </div>
+          <div class="session-title-block">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <h3 style="font-size: 15.5px; font-weight: 800; margin: 0; color: #0f172a;">
+                {{ session.shift.title }} · {{ session.shift.start_time|time:'H:i'|persian_digits }} تا {{ session.shift.end_time|time:'H:i'|persian_digits }} ({{ session.shift.standard_hours|persian_digits }} ساعت)
+              </h3>
+              <span class="status {{ session.status_class }}">{{ session.status_badge }}</span>
             </div>
-
-            <!-- خلاصه آمار و دکمه‌های عملیات شیفت -->
-            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-                <div style="display: flex; gap: 8px; background: #fff; padding: 6px 14px; border-radius: 10px; border: 1px solid var(--line); font-size: 12.5px;">
-                    <span>👥 حضور: <b>{{ session.logged_count|persian_digits }} از {{ session.expected_count|persian_digits }} نفر</b></span>
-                    <span>·</span>
-                    <span>🛍️ فروش کل: <b>{{ session.total_sold|persian_digits }} کالا</b></span>
-                    <span>·</span>
-                    <span style="color: var(--green, #237554); font-weight: 700;">💰 پورسانت شیفت: {{ session.total_commission|persian_int }} ریال</span>
-                </div>
-
-                {% if session.can_approve %}
-                <form method="post" action="{% url 'management_shift_session_approve' %}" style="margin: 0;" onsubmit="return confirm('کارکرد لاین‌هایی که نفراتشان مشخص شده تأیید و فریز شود؟');">
-                    {% csrf_token %}
-                    <input type="hidden" name="date" value="{{ session.date_jalali }}">
-                    <input type="hidden" name="shift_id" value="{{ session.shift.pk }}">
-                    <button class="primary" type="submit" style="padding: 8px 18px; font-size: 13px; font-weight: 800; background: var(--green, #237554); border-radius: 8px;">
-                        ✅ تأیید لاین‌های آماده
-                    </button>
-                </form>
-                {% elif not session.has_performance %}
-                <a class="secondary" href="{% url 'management_line_performance_batch' %}?date={{ session.date_jalali }}&shift={{ session.shift.pk }}" style="padding: 8px 16px; font-size: 12.5px; border-radius: 8px; color: #b45309; border-color: #fcd34d;">
-                    🛍️ ثبت فروش لاین‌های این شیفت
-                </a>
-                {% endif %}
+            <div class="session-metrics-chips">
+              <span class="sess-chip">👥 حضور: <b>{{ session.logged_count|persian_digits }} از {{ session.expected_count|persian_digits }} نفر</b></span>
+              <span class="sess-chip">🛍️ فروش: <b>{{ session.total_sold|persian_digits }} کالا</b></span>
+              <span class="sess-chip highlight">💰 پورسانت: <b>{{ session.total_commission|persian_int }} تومان</b></span>
             </div>
+          </div>
         </div>
 
-        <!-- هشدار در صورت عدم تکمیل ثبت کارکرد پرسنل -->
+        <div class="session-header-actions">
+          {% if session.can_approve %}
+          <form method="post" action="{% url 'management_shift_session_approve' %}" onsubmit="return confirm('کارکرد تمام لاین‌های آماده در این شیفت تأیید و پورسانت آنها فریز شود؟');" style="margin: 0;" onclick="event.stopPropagation();">
+            {% csrf_token %}
+            <input type="hidden" name="date" value="{{ session.date_jalali }}">
+            <input type="hidden" name="shift_id" value="{{ session.shift.pk }}">
+            <button class="btn btn-primary btn-sm session-batch-approve-btn" type="submit">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              تأیید دسته‌ای لاین‌های آماده
+            </button>
+          </form>
+          {% elif not session.has_performance %}
+          <a class="btn btn-secondary btn-sm" href="{% url 'management_line_performance_batch' %}?date={{ session.date_jalali }}&shift={{ session.shift.pk }}" style="color: #b45309; border-color: #fcd34d; text-decoration: none;" onclick="event.stopPropagation();">
+            🛍️ ثبت فروش لاین‌های این شیفت
+          </a>
+          {% endif %}
+
+          <div class="session-chevron-wrap" title="باز / بسته کردن">
+            <svg class="chevron-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Collapsible Body (Hidden by default when .is-collapsed) -->
+      <div class="session-body-wrap">
+        <!-- Missing Staff Gap Notice (if any) -->
         {% if session.line_gaps %}
-        <div style="background: #fffbeb; border-bottom: 1px solid #fef3c7; color: #92400e; padding: 12px 22px; font-size: 12.5px;">
-            <b>فقط همان لاین منتظر این نفرات است. لاین دیگر معطل نمی‌ماند.</b>
+        <div class="session-gaps-alert">
+          <div style="font-size: 12.5px; font-weight: 700; color: #92400e; margin-bottom: 6px;">
+            ⚠️ پرسنل ثبت‌نشده در این شیفت (فقط همان لاین منتظر است، لاین‌های دیگر معطل نمی‌مانند):
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
             {% for gap in session.line_gaps %}
-            <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px;">
-                <span>لاین {{ gap.department.name }}:</span>
-                {% for emp in gap.missing %}
-                <form method="post" action="{% url 'management_shift_log_mark_leave' %}" style="margin: 0; display: inline-flex; gap: 6px; align-items: center;">
-                    {% csrf_token %}
-                    <input type="hidden" name="employee_id" value="{{ emp.pk }}">
-                    <input type="hidden" name="shift_id" value="{{ session.shift.pk }}">
-                    <input type="hidden" name="date" value="{{ session.date_jalali }}">
-                    <input type="hidden" name="department_id" value="{{ gap.department.pk }}">
-                    <span>{{ emp.full_name }}</span>
-                    <button class="primary" type="submit" style="padding: 6px 12px; font-size: 12.5px; font-weight: 800; border-radius: 8px;">ثبت مرخصی</button>
-                </form>
-                {% endfor %}
-            </div>
+              {% for emp in gap.missing %}
+              <form method="post" action="{% url 'management_shift_log_mark_leave' %}" style="display: inline-flex; align-items: center; gap: 6px; background: #fff; padding: 4px 8px; border-radius: 8px; border: 1px solid #fde68a; margin: 0;">
+                {% csrf_token %}
+                <input type="hidden" name="employee_id" value="{{ emp.pk }}">
+                <input type="hidden" name="shift_id" value="{{ session.shift.pk }}">
+                <input type="hidden" name="date" value="{{ session.date_jalali }}">
+                <input type="hidden" name="department_id" value="{{ gap.department.pk }}">
+                <span style="font-size: 12px; font-weight: 700; color: #78350f;">{{ emp.full_name }} ({{ gap.department.name }})</span>
+                <button class="btn btn-sm" type="submit" style="padding: 2px 8px; font-size: 11px; background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; border-radius: 6px;">ثبت مرخصی</button>
+              </form>
+              {% endfor %}
             {% endfor %}
+          </div>
         </div>
         {% endif %}
 
-        <!-- جدول پرسنل حاضر در این شیفت -->
-        <div class="table-wrap" style="padding: 0 10px 10px;">
-            <table>
-                <thead>
-                    <tr style="background: transparent;">
-                        <th>کارمند حاضر در شیفت</th>
-                        <th>لاین(های) اصلی</th>
-                        <th>لاین(های) کمکی</th>
-                        <th>ساعات حضور</th>
-                        <th>سهم کالا از شیفت</th>
-                        <th>پورسانت شیفت</th>
-                        <th>وضعیت</th>
-                        <th>عملیات</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in session.leave_candidates %}
-                    <tr>
-                        <td>
-                            <div class="person-cell">
-                                <span class="avatar small" style="width: 36px; height: 36px; border-radius: 10px; font-size: 16px;">{{ item.employee.first_name|slice:':1' }}</span>
-                                <div>
-                                    <b>{{ item.employee.full_name }}</b>
-                                    <small>کد {{ item.employee.employee_code }}</small>
-                                </div>
-                            </div>
-                        </td>
-                        <td><b>{{ item.department.name }}</b></td>
-                        <td><span style="color: var(--muted);">—</span></td>
-                        <td><span style="color: var(--muted);">نیامده</span></td>
-                        <td><span style="color: var(--muted);">—</span></td>
-                        <td><span style="color: var(--muted);">—</span></td>
-                        <td><span class="status pending" style="font-size: 11px;">بدون کارکرد</span></td>
-                        <td>
-                            <form method="post" action="{% url 'management_shift_log_mark_leave' %}" style="margin: 0;">
-                                {% csrf_token %}
-                                <input type="hidden" name="employee_id" value="{{ item.employee.pk }}">
-                                <input type="hidden" name="shift_id" value="{{ session.shift.pk }}">
-                                <input type="hidden" name="date" value="{{ session.date_jalali }}">
-                                <input type="hidden" name="department_id" value="{{ item.department.pk }}">
-                                <button class="primary" type="submit" style="padding: 7px 14px; font-size: 12.5px; font-weight: 800; border-radius: 8px;">ثبت مرخصی</button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                    {% for row in session.log_rows %}
-                    <tr>
-                        <td>
-                            <div class="person-cell">
-                                {% if row.log.employee.profile_photo %}
-                                <img src="{{ row.log.employee.profile_photo.url }}" alt="" style="width: 36px; height: 36px; border-radius: 10px; object-fit: cover;">
-                                {% else %}
-                                <span class="avatar small" style="width: 36px; height: 36px; border-radius: 10px; font-size: 16px;">{{ row.log.employee.first_name|slice:':1' }}</span>
-                                {% endif %}
-                                <div>
-                                    <b>{{ row.log.employee.full_name }}</b>
-                                    <small>گرید {{ row.log.employee.commission_level.code }} · کد {{ row.log.employee.employee_code }}</small>
-                                </div>
-                            </div>
-                        </td>
-                        <td>
-                            {% if row.calc.primary_infos %}
-                                {% for p in row.calc.primary_infos %}
-                                <div style="font-size: 12px; margin-bottom: 2px;">
-                                    <b>{{ p.department.name }}</b>
-                                    <small style="color: var(--muted);">({{ p.hours }}h از کل {{ p.total_dept_hours }}h)</small>
-                                </div>
-                                {% endfor %}
-                            {% elif row.log.main_department %}
-                                <b>{{ row.log.main_department.name }}</b>
-                            {% else %}
-                                —
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if row.log.has_support_line %}
-                            <span style="color: var(--green, #237554); font-weight: 600; font-size: 12.5px;">{{ row.log.support_departments_display }}</span>
-                            <small style="color: var(--muted); display: block;">{{ row.log.support_hours }} ساعت</small>
-                            {% for support in row.calc.support_infos %}
-                            <small style="display: block;">{{ support.department_name }}: {{ support.share_units }} کالا از {{ support.hours }} ساعت</small>
-                            {% endfor %}
-                            {% else %}
-                            <span style="color: var(--muted);">—</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <strong>{{ row.log.total_hours }} ساعت</strong>
-                            {% if row.log.overtime_hours > 0 %}
-                            <small style="color: #b45309; display: block; font-weight: 700;">+ {{ row.log.overtime_hours }}h اضافه کاری</small>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <span class="badge" style="background: var(--green2, #dff4e9); color: var(--green, #237554); font-weight: 800; font-size: 13px; padding: 4px 10px;">
-                                {{ row.calc.total_units_share }} کالا
-                            </span>
-                        </td>
-                        <td>
-                            <strong style="color: var(--green, #237554); font-size: 14px;">
-                                {{ row.calc.total_commission|persian_int }} ریال
-                            </strong>
-                            {% if row.log.is_frozen %}
-                            <small style="color: #059669; display: block; font-size: 11px;">🔒 فریز شده</small>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if row.log.status == 'APPROVED' %}
-                            <span class="status approved" style="font-size: 11px;">✅ واریز شد</span>
-                            {% elif row.log.status == 'LEAVE' %}
-                            <span class="status" style="font-size: 11px;">مرخصی</span>
-                            {% elif row.log.status == 'REJECTED' %}
-                            <span class="status rejected" style="font-size: 11px;">❌ رد شد</span>
-                            {% else %}
-                            <span class="status pending" style="font-size: 11px;">⏳ در انتظار</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <div style="display: flex; gap: 6px;">
-                                <a class="table-link" href="{% url 'management_shift_log_review_detail' row.log.pk %}" style="padding: 4px 8px; border-radius: 6px; background: #f0fdf4; font-size: 11.5px;">
-                                    بررسی دقیق
-                                </a>
-                            </div>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="8" class="empty">هنوز کارکردی برای این شیفت ثبت نشده است.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </article>
-    {% empty %}
-    <article class="card" style="text-align: center; padding: 40px; border-radius: 16px;">
-        <p class="empty" style="font-size: 15px; color: var(--muted); margin-bottom: 12px;">هیچ جلسه شیفتی با فیلترهای انتخابی یافت نشد.</p>
-        <a class="secondary" href="{% url 'management_shift_log_reviews' %}">مشاهده همه شیفت‌ها</a>
-    </article>
-    {% endfor %}
-</div>
+        <!-- Review Table (Desktop Tabular / Mobile Card View) -->
+        <div class="table-wrap">
+          <table class="review-table">
+            <thead>
+              <tr>
+                <th>کارمند حاضر در شیفت</th>
+                <th>لاین اصلی</th>
+                <th>لاین کمکی</th>
+                <th>فعالیت‌های ثبت‌شده</th>
+                <th>ساعت حضور</th>
+                <th>سهم کالا</th>
+                <th>پورسانت شیفت</th>
+                <th>وضعیت</th>
+                <th style="text-align: left;">عملیات و بررسی</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in session.leave_candidates %}
+              <tr class="leave-candidate-row" style="background: #fafafa;">
+                <td class="cell-emp">
+                  <div class="table-employee-cell">
+                    <div class="table-avatar" style="background:#f1f5f9; color:#64748b;">{{ item.employee.first_name|slice:':1' }}</div>
+                    <div>
+                      <strong>{{ item.employee.full_name }}</strong>
+                      <div style="font-size:11px; color:#94a3b8;">کد {{ item.employee.employee_code|persian_digits }}</div>
+                    </div>
+                  </div>
+                </td>
+                <td class="cell-main-dept"><b>{{ item.department.name }}</b></td>
+                <td class="cell-support-dept"><span style="color:#94a3b8;">—</span></td>
+                <td class="cell-acts"><span style="color:#94a3b8;">—</span></td>
+                <td class="cell-hours"><span style="color:#94a3b8;">نیامده</span></td>
+                <td class="cell-units"><span style="color:#94a3b8;">—</span></td>
+                <td class="cell-commission"><span style="color:#94a3b8;">—</span></td>
+                <td class="cell-status"><span class="status pending">بدون کارکرد</span></td>
+                <td class="cell-action" style="text-align: left;">
+                  <form method="post" action="{% url 'management_shift_log_mark_leave' %}" style="margin: 0; width: 100%;">
+                    {% csrf_token %}
+                    <input type="hidden" name="employee_id" value="{{ item.employee.pk }}">
+                    <input type="hidden" name="shift_id" value="{{ session.shift.pk }}">
+                    <input type="hidden" name="date" value="{{ session.date_jalali }}">
+                    <input type="hidden" name="department_id" value="{{ item.department.pk }}">
+                    <button class="btn btn-secondary btn-sm" type="submit" style="font-size: 11.5px; padding: 6px 12px; width: 100%;">ثبت مرخصی</button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
 
-{% if page.paginator.num_pages > 1 %}
-<div class="pagination" style="margin-top: 24px;">
+              {% for row in session.log_rows %}
+              <tr class="review-row"
+                  data-pk="{{ row.log.pk }}"
+                  data-name="{{ row.log.employee.full_name }}"
+                  data-avatar="{{ row.log.employee.first_name|slice:':1' }}"
+                  data-code="{{ row.log.employee.employee_code|persian_digits }}"
+                  data-grade="{{ row.log.employee.commission_level.code }}"
+                  data-shift="{{ session.date_jalali|persian_digits }} · {{ session.shift.title }}"
+                  data-commission="{{ row.calc.total_commission|persian_int }}"
+                  data-is-frozen="{% if row.log.is_frozen or row.log.status == 'APPROVED' %}1{% else %}0{% endif %}"
+                  data-detail-url="{% url 'management_shift_log_review_detail' row.log.pk %}"
+                  data-edit-url="{% url 'shift_log_edit' row.log.pk %}?next={{ request.get_full_path|urlencode }}"
+                  data-quick-approve-url="{% url 'management_shift_log_quick_approve' row.log.pk %}"
+                  data-hours-main="{% if row.log.main_department %}{{ row.log.main_department.name }}: {{ row.log.main_hours|persian_digits }} ساعت{% else %}—{% endif %}"
+                  data-hours-support="{% if row.log.has_support_line %}{{ row.log.support_departments_display }}: {{ row.log.support_hours|persian_digits }} ساعت{% else %}ثبت نشده{% endif %}"
+                  data-hours-overtime="{% if row.log.overtime_hours > 0 %}{{ row.log.overtime_hours|persian_digits }} ساعت اضافه‌کاری{% endif %}"
+                  data-hours-total="{{ row.log.total_hours|persian_digits }} ساعت"
+                  data-activities="{% for a in row.log.activity_entries.all %}• <strong>{{ a.activity_type.title }}:</strong> {{ a.quantity|persian_digits }} {{ a.activity_type.unit_label|default:'واحد' }} (ضریب {{ a.unit_multiplier_snapshot|persian_digits }})<br>{% empty %}فعالیتی برای این شیفت ثبت نشده است.{% endfor %}"
+                  data-units-share="{{ row.calc.total_units_share|persian_digits }} کالا"
+                  data-grade-rate="{{ row.calc.level_rate|default:'1.0' }}×"
+                  data-note="{{ row.log.employee_note|default:'' }}">
+                
+                <!-- 1. Employee Cell -->
+                <td class="cell-emp">
+                  <div class="table-employee-cell">
+                    <div class="table-avatar" style="background:#eaf5ef; color:#186343;">
+                      {% if row.log.employee.profile_photo %}
+                      <img src="{{ row.log.employee.profile_photo.url }}" alt="" style="width:100%; height:100%; border-radius:8px; object-fit:cover;">
+                      {% else %}
+                      {{ row.log.employee.first_name|slice:':1' }}
+                      {% endif %}
+                    </div>
+                    <div>
+                      <strong>{{ row.log.employee.full_name }}</strong>
+                      <div class="emp-sub-badge-row">
+                        <span class="emp-grade-chip">گرید {{ row.log.employee.commission_level.code }}</span>
+                        <span class="emp-code-text">کد {{ row.log.employee.employee_code|persian_digits }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+
+                <!-- 2. Main Department -->
+                <td class="cell-main-dept" data-label="لاین اصلی">
+                  {% if row.calc.primary_infos %}
+                    {% for p in row.calc.primary_infos %}
+                    <div>
+                      <b>{{ p.department.name }}</b>
+                      <small style="color:#64748b; display:block; font-size:11px;">{{ p.hours|persian_digits }} از {{ p.total_dept_hours|persian_digits }} ساعت</small>
+                    </div>
+                    {% endfor %}
+                  {% elif row.log.main_department %}
+                    <b>{{ row.log.main_department.name }}</b>
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+
+                <!-- 3. Support Department -->
+                <td class="cell-support-dept" data-label="لاین کمکی">
+                  {% if row.log.has_support_line %}
+                  <span class="pill pill-blue">{{ row.log.support_departments_display }} ({{ row.log.support_hours|persian_digits }} س)</span>
+                  {% else %}
+                  <span style="color:#94a3b8;">— (بدون کمکی)</span>
+                  {% endif %}
+                </td>
+
+                <!-- 4. Activities -->
+                <td class="cell-acts" data-label="فعالیت‌ها">
+                  {% with act_count=row.log.activity_entries.count %}
+                  {% if act_count > 0 %}
+                  <span class="pill pill-blue">{{ act_count|persian_digits }} فعالیت</span>
+                  {% else %}
+                  <span class="pill pill-slate">بدون فعالیت</span>
+                  {% endif %}
+                  {% endwith %}
+                </td>
+
+                <!-- 5. Hours -->
+                <td class="cell-hours" data-label="ساعات">
+                  <strong>{{ row.log.total_hours|persian_digits }} ساعت</strong>
+                  {% if row.log.overtime_hours > 0 %}
+                  <small style="color:#b45309; display:block; font-weight:700; font-size:11px;">+ {{ row.log.overtime_hours|persian_digits }} ساعت اضافه‌کاری</small>
+                  {% endif %}
+                </td>
+
+                <!-- 6. Units Share -->
+                <td class="cell-units" data-label="سهم کالا">
+                  <b class="units-badge">{{ row.calc.total_units_share|persian_digits }} کالا</b>
+                </td>
+
+                <!-- 7. Commission -->
+                <td class="cell-commission" data-label="پورسانت">
+                  <strong class="comm-amount-text">{{ row.calc.total_commission|persian_int }} تومان</strong>
+                  {% if row.log.is_frozen %}
+                  <small style="color:#059669; display:block; font-size:11px; font-weight:700;">فریز شده ✓</small>
+                  {% endif %}
+                </td>
+
+                <!-- 8. Status Badge -->
+                <td class="cell-status" data-label="وضعیت">
+                  {% if row.log.status == 'APPROVED' %}
+                  <span class="status approved">واریز شد</span>
+                  {% elif row.log.status == 'LEAVE' %}
+                  <span class="status">مرخصی</span>
+                  {% elif row.log.status == 'REJECTED' %}
+                  <span class="status rejected">رد شد</span>
+                  {% else %}
+                  <span class="status pending">در انتظار بررسی</span>
+                  {% endif %}
+                </td>
+
+                <!-- 9. Actions Button -->
+                <td class="cell-action" style="text-align: left; white-space: nowrap;">
+                  <button type="button" class="btn btn-secondary btn-sm row-review-btn" onclick="event.stopPropagation(); openDrawerForRow(this.closest('.review-row'));">
+                    بررسی و فریز 👈
+                  </button>
+                  <a href="{% url 'shift_log_edit' row.log.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-secondary btn-sm" title="ویرایش کارکرد این کارمند" style="text-decoration:none; padding: 6px 10px; margin-right: 4px; display:inline-flex; align-items:center; gap:3px;" onclick="event.stopPropagation();">
+                    <span>✏️</span>
+                  </a>
+
+                  <div class="drawer-payload" style="display:none;">
+                    <div class="payload-lines-badge">
+                      {% if row.calc.main_info %}
+                        {{ row.calc.main_info.share_units|persian_digits }} کالا
+                      {% endif %}
+                    </div>
+                    <div class="payload-lines-html">
+                      <div class="drawer-payload-item" style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px dashed #e2e8f0;">
+                        <div>• <strong>لاین اصلی:</strong> {{ row.calc.main_info.department_name|default:row.log.main_department.name }}: {{ row.log.main_hours|persian_digits }} ساعت</div>
+                        {% if row.calc.main_info %}
+                        <span class="badge badge-main-line" style="font-size:12px; font-weight:800; padding:2px 8px; border-radius:6px; background:#e6f4ea; color:#137333;">
+                          {{ row.calc.main_info.share_units|persian_digits }} کالا
+                        </span>
+                        {% endif %}
+                      </div>
+
+                      {% if row.calc.support_infos %}
+                        {% for s in row.calc.support_infos %}
+                        <div class="drawer-payload-item" style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px dashed #e2e8f0;">
+                          <div>• <strong style="color:var(--elinor-primary, #186343);">لاین کمکی:</strong> {{ s.department_name }}: {{ s.hours|persian_digits }} ساعت</div>
+                          <span class="badge badge-support" style="font-size:12px; font-weight:800; padding:2px 8px; border-radius:6px; background:#e8f0fe; color:#1a73e8;">
+                            {{ s.share_units|persian_digits }} کالا
+                          </span>
+                        </div>
+                        {% endfor %}
+                      {% else %}
+                        <div style="color:#94a3b8; padding:6px 0;">• لاین کمکی: ثبت نشده</div>
+                      {% endif %}
+
+                      {% if row.calc.overtime_info and row.calc.overtime_info.hours > 0 %}
+                      <div class="drawer-payload-item" style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px dashed #e2e8f0;">
+                        <div>• <strong style="color:#b45309;">اضافه‌کاری:</strong> {{ row.calc.overtime_info.hours|persian_digits }} ساعت</div>
+                        <span class="badge badge-overtime" style="font-size:12px; font-weight:800; padding:2px 8px; border-radius:6px; background:#fef3c7; color:#92400e;">
+                          {{ row.calc.overtime_info.share_units|persian_digits }} کالا
+                        </span>
+                      </div>
+                      {% endif %}
+                    </div>
+
+                    <div class="payload-acts-badge">
+                      {% if row.calc.activity_info and row.calc.activity_info.share_units > 0 %}
+                        {{ row.calc.activity_info.share_units|persian_digits }} کالا
+                      {% endif %}
+                    </div>
+                    <div class="payload-acts-html">
+                      {% if row.calc.activity_info and row.calc.activity_info.activity_details %}
+                        {% for d in row.calc.activity_info.activity_details %}
+                        <div class="drawer-payload-item" style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px dashed #e2e8f0;">
+                          <div>• <strong>{{ d.title }}:</strong> {{ d.quantity|persian_digits }} {{ d.unit_label|default:'عدد' }} (ضریب {{ d.unit_multiplier|persian_digits }})</div>
+                          <span class="badge badge-activity" style="font-size:12px; font-weight:800; padding:2px 8px; border-radius:6px; background:#dbeafe; color:#1d4ed8;">
+                            {{ d.performance_units|persian_digits }} کالا
+                          </span>
+                        </div>
+                        {% endfor %}
+                      {% elif row.log.activity_entries.all %}
+                        {% for a in row.log.activity_entries.all %}
+                        <div class="drawer-payload-item" style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px dashed #e2e8f0;">
+                          <div>• <strong>{{ a.activity_type.title }}:</strong> {{ a.quantity|persian_digits }} {{ a.activity_type.unit_label|default:'واحد' }} (ضریب {{ a.unit_multiplier_snapshot|persian_digits }})</div>
+                          <span class="badge badge-activity" style="font-size:12px; font-weight:800; padding:2px 8px; border-radius:6px; background:#dbeafe; color:#1d4ed8;">
+                            {{ a.performance_units|persian_digits }} کالا
+                          </span>
+                        </div>
+                        {% endfor %}
+                      {% else %}
+                        <div style="color:#94a3b8; padding:6px 0;">فعالیتی برای این شیفت ثبت نشده است.</div>
+                      {% endif %}
+                    </div>
+
+                    <div class="payload-formula-main">
+                      {% if row.calc.main_info %}
+                        {{ row.calc.main_info.share_units|persian_digits }} کالا ({{ row.calc.main_info.commission|persian_int }} تومان)
+                      {% else %}۰ کالا{% endif %}
+                    </div>
+                    <div class="payload-formula-support">
+                      {% if row.calc.support_infos %}
+                        {% for s in row.calc.support_infos %}
+                          {{ s.department_name }}: {{ s.share_units|persian_digits }} کالا ({{ s.commission|persian_int }} تومان){% if not forloop.last %} + {% endif %}
+                        {% endfor %}
+                      {% endif %}
+                    </div>
+                    <div class="payload-formula-acts">
+                      {% if row.calc.activity_info and row.calc.activity_info.share_units > 0 %}
+                        {{ row.calc.activity_info.share_units|persian_digits }} کالا ({{ row.calc.activity_info.commission|persian_int }} تومان)
+                      {% endif %}
+                    </div>
+                    <div class="payload-formula-ot">
+                      {% if row.calc.overtime_info and row.calc.overtime_info.hours > 0 %}
+                        {{ row.calc.overtime_info.share_units|persian_digits }} کالا ({{ row.calc.overtime_info.commission|persian_int }} تومان)
+                      {% endif %}
+                    </div>
+                  </div>
+                </td>
+              </tr>
+              {% empty %}
+              {% if not session.leave_candidates %}
+              <tr>
+                <td colspan="9" style="text-align: center; padding: 24px; color: #64748b;">
+                  هنوز کارکردی برای این شیفت ثبت نشده است.
+                </td>
+              </tr>
+              {% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% empty %}
+    <div class="empty-step-box" style="padding: 40px; background: #fff;">
+      <p style="font-size: 15px; color: #64748b; margin-bottom: 12px;">هیچ جلسه شیفتی با فیلترهای انتخابی یافت نشد.</p>
+      <a class="btn btn-secondary btn-sm" href="{% url 'management_shift_log_reviews' %}" style="text-decoration:none;">مشاهده همه شیفت‌ها</a>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Pagination -->
+  {% if page.paginator.num_pages > 1 %}
+  <nav class="pagination" aria-label="صفحه‌بندی شیفت‌ها" style="margin-top: 24px;">
     {% if page.has_previous %}
     <a href="?page={{ page.previous_page_number }}&status={{ status_filter }}">قبلی</a>
     {% endif %}
-    <span>صفحه {{ page.number }} از {{ page.paginator.num_pages }}</span>
+    <span>صفحه {{ page.number|persian_digits }} از {{ page.paginator.num_pages|persian_digits }}</span>
     {% if page.has_next %}
     <a href="?page={{ page.next_page_number }}&status={{ status_filter }}">بعدی</a>
     {% endif %}
+  </nav>
+  {% endif %}
+
 </div>
-{% endif %}
+
+<!-- ============================================================== -->
+<!-- EVERSTAGE SLIDE-OVER REVIEW DRAWER (PINNED TO LEFT VIEWPORT)   -->
+<!-- ============================================================== -->
+<div id="drawer-overlay" class="drawer-overlay" onclick="closeDrawer()"></div>
+
+<div id="slide-drawer" class="slide-drawer">
+  <!-- Drawer Header -->
+  <div class="drawer-header">
+    <div class="drawer-title-wrap">
+      <div id="drawer-avatar" class="table-avatar" style="background:#eaf5ef; color:#186343; width:42px; height:42px; font-size:17px; font-weight:800; border-radius:10px; display:grid; place-items:center;">ف</div>
+      <div>
+        <h2 id="drawer-name" style="font-size: 16px; font-weight: 800; margin: 0; color: #0f172a;">نام کارمند</h2>
+        <small id="drawer-sub" style="color: #64748b; font-size: 11.5px; margin-top: 2px; display: block;">گرید A · کد پرسنلی · شیفت کاری</small>
+      </div>
+    </div>
+    <button type="button" class="drawer-close-btn" onclick="closeDrawer()" title="بستن کشو (Esc)">✕</button>
+  </div>
+
+  <!-- Drawer Body Cards -->
+  <div class="drawer-body">
+    <!-- 1. Financial Highlight Card -->
+    <div class="drawer-card" style="background: linear-gradient(135deg, #f0fdf4 0%, #e6f4ea 100%); border-color: #bbf7d0;">
+      <span class="kicker-tag">پورسانت قطعی محاسبه‌شده</span>
+      <div style="display: flex; align-items: baseline; gap: 8px; margin: 6px 0 8px;">
+        <strong id="drawer-commission" style="font-size: 28px; font-weight: 900; color: var(--elinor-primary, #186343);">۰</strong>
+        <span style="font-size: 13px; color: #475569; font-weight: 700;">تومان</span>
+      </div>
+      <div style="font-size: 12px; color: #166534; line-height: 1.6;">
+        🔒 با تأیید مدیر، این مبلغ در دیتابیس قفل شده و بلافاصله به کیف پول کارمند واریز می‌شود.
+      </div>
+    </div>
+
+    <!-- 2. Attendance & Lines Block -->
+    <div class="drawer-card">
+      <div class="drawer-card-title">
+        <span>ساعات کارکرد و لاین‌ها</span>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span id="drawer-hours-badge" class="pill pill-slate">۶ ساعت حضور</span>
+          <span id="drawer-lines-summary-badge" class="pill" style="display:none; font-weight:800; font-size:11.5px; background:#e6f4ea; color:#137333;"></span>
+        </div>
+      </div>
+      <div id="drawer-hours-text" style="font-size: 12.5px; line-height: 1.9; color: #334155;">
+        <!-- Dynamic Lines -->
+      </div>
+    </div>
+
+    <!-- 3. Activities Block -->
+    <div class="drawer-card">
+      <div class="drawer-card-title">
+        <span>فعالیت‌های ثبت‌شده توسط پرسنل</span>
+        <span id="drawer-activities-badge" class="pill" style="display:none; font-weight:800; font-size:11.5px; background:#dbeafe; color:#1d4ed8;"></span>
+      </div>
+      <div id="drawer-activities-content" style="font-size: 12.5px; line-height: 1.8; color: #475569;">
+        <!-- Dynamic Activities -->
+      </div>
+    </div>
+
+    <!-- 4. Formula Breakdown Block -->
+    <div class="drawer-card">
+      <div class="drawer-card-title">
+        <span>فرمول و ریز محاسبات پورسانت</span>
+      </div>
+      <div class="formula-row" id="drawer-formula-main-row">
+        <span>سهم لاین اصلی:</span>
+        <b id="drawer-formula-main">۰ کالا</b>
+      </div>
+      <div class="formula-row" id="drawer-formula-support-row" style="display:none;">
+        <span>سهم لاین‌های کمکی:</span>
+        <b id="drawer-formula-support">۰ کالا</b>
+      </div>
+      <div class="formula-row" id="drawer-formula-acts-row" style="display:none;">
+        <span>سهم فعالیت‌ها:</span>
+        <b id="drawer-formula-acts">۰ کالا</b>
+      </div>
+      <div class="formula-row" id="drawer-formula-ot-row" style="display:none;">
+        <span>سهم اضافه‌کاری:</span>
+        <b id="drawer-formula-ot">۰ کالا</b>
+      </div>
+      <div class="formula-row" style="border-top: 1px dashed #e2e8f0; padding-top: 5px;">
+        <span>مجموع سهم کالا:</span>
+        <b id="drawer-formula-units">۰ کالا</b>
+      </div>
+      <div class="formula-row">
+        <span>ضریب گرید پرسنلی:</span>
+        <b id="drawer-formula-rate">۱.۰×</b>
+      </div>
+      <div class="formula-row" style="border-top: 1.5px solid #cbd5e1; margin-top: 4px; padding-top: 6px;">
+        <span style="font-weight: 800;">مبلغ نهایی قابل واریز:</span>
+        <strong id="drawer-formula-total" style="font-size: 16px; color: var(--elinor-primary, #186343);">۰ تومان</strong>
+      </div>
+    </div>
+
+    <!-- 5. Employee Note (if any) -->
+    <div id="drawer-note-card" class="drawer-card" style="display:none; background:#fffbeb; border-color:#fef08a;">
+      <div class="drawer-card-title">
+        <span style="color:#b45309;">📝 یادداشت کارمند برای مدیر</span>
+      </div>
+      <div id="drawer-note-text" style="font-size: 12.5px; color: #78350f; line-height: 1.7;">
+        <!-- Dynamic Note -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Drawer Footer Actions -->
+  <div class="drawer-footer">
+    <a id="drawer-detail-link" href="#" class="btn btn-secondary btn-sm" style="text-decoration:none;">
+      پرونده کامل
+    </a>
+
+    <a id="drawer-edit-link" href="#" class="btn btn-secondary btn-sm" style="text-decoration:none; display:inline-flex; align-items:center; gap:5px; color:#1e293b;">
+      ✏️ ویرایش کارکرد
+    </a>
+
+    <form id="drawer-freeze-form" method="post" action="" style="margin:0;">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <button id="drawer-freeze-btn" class="btn btn-primary" type="submit">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+        <span>تأیید و فریز پورسانت (Enter)</span>
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- ============================================================== -->
+<!-- EXACT EVERSTAGE VIEW 2 CSS STYLES (TIDY TOOLBAR & ACCORDIONS)  -->
+<!-- ============================================================== -->
+<style>
+:root {
+  --elinor-primary: #186343;
+  --elinor-primary-hover: #124d34;
+  --elinor-primary-light: #eaf5ef;
+  --slate-50: #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-900: #0f172a;
+}
+
+.ever-manager-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 10px 16px 60px;
+  direction: rtl;
+  text-align: right;
+  font-family: inherit;
+}
+
+/* Manager Toolbar - Tidy 2-Tier Architecture */
+.manager-toolbar {
+  background: #ffffff !important;
+  border: 1.5px solid var(--slate-200) !important;
+  border-radius: 18px !important;
+  padding: 14px 18px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  margin-bottom: 22px !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+
+.toolbar-primary-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  flex-wrap: wrap !important;
+  width: 100% !important;
+  margin: 0 !important;
+}
+
+.filter-search {
+  position: relative !important;
+  flex: 1 1 240px !important;
+  min-width: 200px !important;
+  max-width: 340px !important;
+}
+
+.filter-search input {
+  width: 100% !important;
+  padding: 8px 36px 8px 12px !important;
+  border: 1.5px solid var(--slate-200) !important;
+  border-radius: 10px !important;
+  font-family: inherit !important;
+  font-size: 13px !important;
+  box-sizing: border-box !important;
+  background: #fff !important;
+}
+
+.filter-search svg {
+  position: absolute !important;
+  right: 12px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  color: var(--slate-400) !important;
+}
+
+.date-input-holder {
+  width: 165px !important;
+  flex: 0 0 165px !important;
+}
+
+.date-input-holder input,
+.filter-shift-select {
+  height: 38px !important;
+  border: 1.5px solid var(--slate-200) !important;
+  border-radius: 10px !important;
+  font-family: inherit !important;
+  font-size: 13px !important;
+  padding: 6px 12px !important;
+  background: #fff !important;
+  box-sizing: border-box !important;
+}
+
+.filter-shift-select {
+  width: 170px !important;
+  flex: 0 0 170px !important;
+}
+
+.filter-btn-group {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+/* Ensure Jalali datepicker wrap inside toolbar stays tidy */
+.date-input-holder .datepicker-input-wrap {
+  width: 100% !important;
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.date-input-holder .datepicker-input-wrap input {
+  width: 100% !important;
+  padding-left: 34px !important;
+}
+
+.date-input-holder .datepicker-icon-btn {
+  position: absolute !important;
+  left: 6px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  border: none !important;
+  background: transparent !important;
+  cursor: pointer !important;
+  font-size: 15px !important;
+  line-height: 1 !important;
+}
+
+/* Tier 2: Tabs and Guide */
+.toolbar-secondary-row {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 12px !important;
+  padding-top: 10px !important;
+  border-top: 1px solid var(--slate-100) !important;
+}
+
+.status-tab-pills {
+  display: flex !important;
+  background: var(--slate-100) !important;
+  padding: 3px !important;
+  border-radius: 10px !important;
+  gap: 4px !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+.status-pill-btn {
+  padding: 6px 14px !important;
+  border-radius: 8px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  color: var(--slate-600) !important;
+  text-decoration: none !important;
+  white-space: nowrap !important;
+  transition: all 0.15s !important;
+}
+
+.status-pill-btn.active {
+  background: #ffffff !important;
+  color: var(--slate-900) !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08) !important;
+}
+
+.toolbar-actions-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  flex-wrap: wrap !important;
+}
+
+.kbd-shortcut-chip {
+  background: #ffffff !important;
+  border: 1px solid var(--slate-300) !important;
+  color: var(--slate-600) !important;
+  padding: 5px 12px !important;
+  border-radius: 8px !important;
+  font-size: 12px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+.kbd-key {
+  background: var(--slate-200) !important;
+  color: var(--slate-800) !important;
+  padding: 1px 6px !important;
+  border-radius: 4px !important;
+  font-family: monospace !important;
+  font-weight: 700 !important;
+  font-size: 11px !important;
+}
+
+/* Session Accordion Cards */
+.session-card {
+  background: #ffffff !important;
+  border: 1.5px solid var(--slate-200) !important;
+  border-radius: 18px !important;
+  margin-bottom: 18px !important;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04) !important;
+  overflow: hidden !important;
+  transition: border-color 0.2s !important;
+}
+
+.session-card:hover {
+  border-color: #cbd5e1 !important;
+}
+
+.session-card-header {
+  background: #ffffff !important;
+  padding: 16px 20px !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 14px !important;
+  cursor: pointer !important;
+  user-select: none !important;
+  transition: background 0.15s !important;
+}
+
+.session-card-header:hover {
+  background: #f8fafc !important;
+}
+
+.session-card:not(.is-collapsed) .session-card-header {
+  border-bottom: 1px solid var(--slate-100) !important;
+  background: #fafbfc !important;
+}
+
+.session-info {
+  display: flex !important;
+  align-items: center !important;
+  gap: 14px !important;
+}
+
+.session-date-box {
+  background: var(--slate-100) !important;
+  border-radius: 12px !important;
+  padding: 8px 14px !important;
+  text-align: center !important;
+  min-width: 90px !important;
+  border: 1px solid var(--slate-200) !important;
+  flex-shrink: 0 !important;
+}
+
+.session-date-box strong {
+  display: block !important;
+  font-size: 14.5px !important;
+  color: var(--slate-900) !important;
+  font-weight: 800 !important;
+}
+
+.session-date-box small {
+  font-size: 11px !important;
+  color: var(--slate-500) !important;
+  font-weight: 600 !important;
+}
+
+.session-metrics-chips {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  flex-wrap: wrap !important;
+  margin-top: 4px !important;
+}
+
+.sess-chip {
+  font-size: 12.5px !important;
+  color: #64748b !important;
+}
+
+.sess-chip.highlight {
+  color: var(--elinor-primary, #186343) !important;
+}
+
+.session-header-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+.session-chevron-wrap {
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 9px !important;
+  background: var(--slate-100) !important;
+  display: grid !important;
+  place-items: center !important;
+  color: var(--slate-600) !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  flex-shrink: 0 !important;
+}
+
+.session-chevron-wrap .chevron-icon {
+  transition: transform 0.25s ease !important;
+  transform: rotate(0deg) !important;
+}
+
+.session-card:not(.is-collapsed) .session-chevron-wrap {
+  background: var(--elinor-primary-light) !important;
+  color: var(--elinor-primary) !important;
+}
+
+.session-card:not(.is-collapsed) .session-chevron-wrap .chevron-icon {
+  transform: rotate(180deg) !important;
+}
+
+/* Accordion Collapsing: Hide body when is-collapsed */
+.session-card.is-collapsed .session-body-wrap {
+  display: none !important;
+}
+
+.session-gaps-alert {
+  background: #fffbeb !important;
+  border-bottom: 1px solid #fef3c7 !important;
+  padding: 12px 22px !important;
+}
+
+/* Review Table Desktop Standard */
+.review-table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  text-align: right !important;
+}
+
+.review-table th {
+  background: var(--slate-50) !important;
+  padding: 12px 18px !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  color: var(--slate-600) !important;
+  border-bottom: 1.5px solid var(--slate-200) !important;
+}
+
+.review-table td {
+  padding: 14px 18px !important;
+  font-size: 13px !important;
+  border-bottom: 1px solid var(--slate-100) !important;
+  color: var(--slate-700) !important;
+  vertical-align: middle !important;
+  transition: background 0.15s !important;
+}
+
+.review-table tr.active-row td {
+  background-color: var(--elinor-primary-light) !important;
+}
+
+.review-table tr:hover td {
+  background-color: #f8fbf9 !important;
+  cursor: pointer !important;
+}
+
+.table-employee-cell {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+.emp-sub-badge-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  margin-top: 2px !important;
+}
+
+.emp-grade-chip {
+  font-size: 10.5px !important;
+  font-weight: 700 !important;
+  background: #f1f5f9 !important;
+  color: #475569 !important;
+  padding: 1px 6px !important;
+  border-radius: 4px !important;
+}
+
+.emp-code-text {
+  font-size: 11px !important;
+  color: #94a3b8 !important;
+}
+
+.table-avatar {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 9px !important;
+  background: var(--slate-100) !important;
+  display: grid !important;
+  place-items: center !important;
+  font-weight: 800 !important;
+  font-size: 14.5px !important;
+  color: var(--slate-700) !important;
+  flex-shrink: 0 !important;
+}
+
+.units-badge {
+  color: var(--elinor-primary, #186343) !important;
+  font-weight: 800 !important;
+}
+
+.comm-amount-text {
+  color: var(--elinor-primary, #186343) !important;
+  font-size: 14px !important;
+}
+
+/* Slide-over Drawer (Pinned strictly to LEFT viewport) */
+.drawer-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: rgba(15, 23, 42, 0.45) !important;
+  backdrop-filter: blur(4px) !important;
+  z-index: 9998 !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transition: all 0.25s ease-in-out !important;
+}
+
+.drawer-overlay.active {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.slide-drawer {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: auto !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  max-width: 520px !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  background: #ffffff !important;
+  box-shadow: 15px 0 35px rgba(0, 0, 0, 0.2) !important;
+  z-index: 9999 !important;
+  transform: translateX(-100%) !important;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  direction: rtl !important;
+  text-align: right !important;
+  margin: 0 !important;
+}
+
+.slide-drawer.active {
+  transform: translateX(0) !important;
+}
+
+.drawer-header {
+  padding: 18px 22px !important;
+  border-bottom: 1px solid var(--slate-200) !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  background: #ffffff !important;
+}
+
+.drawer-title-wrap {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+.drawer-close-btn {
+  background: var(--slate-100) !important;
+  border: none !important;
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 8px !important;
+  display: grid !important;
+  place-items: center !important;
+  cursor: pointer !important;
+  color: var(--slate-600) !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  transition: background 0.15s !important;
+}
+
+.drawer-close-btn:hover {
+  background: var(--slate-200) !important;
+  color: var(--slate-900) !important;
+}
+
+.drawer-body {
+  flex: 1 !important;
+  overflow-y: auto !important;
+  padding: 18px 22px !important;
+  background: #fafbfc !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 14px !important;
+}
+
+.drawer-card {
+  background: #ffffff !important;
+  border: 1px solid var(--slate-200) !important;
+  border-radius: 14px !important;
+  padding: 16px !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+
+.drawer-card-title {
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  color: var(--slate-800) !important;
+  margin-bottom: 10px !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+}
+
+.formula-row {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 7px 0 !important;
+  font-size: 12.5px !important;
+  border-bottom: 1px dashed var(--slate-200) !important;
+  color: var(--slate-600) !important;
+}
+
+.formula-row:last-child {
+  border-bottom: none !important;
+  padding-top: 10px !important;
+  font-weight: 800 !important;
+  font-size: 14px !important;
+  color: var(--elinor-primary) !important;
+}
+
+.drawer-footer {
+  padding: 14px 22px !important;
+  background: #ffffff !important;
+  border-top: 1px solid var(--slate-200) !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+.kicker-tag {
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  color: var(--elinor-primary) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+}
+
+/* Common Buttons & Pills */
+.btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  padding: 8px 18px !important;
+  border-radius: 10px !important;
+  font-family: inherit !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  border: 1px solid transparent !important;
+  transition: all 0.15s ease-in-out !important;
+  text-decoration: none !important;
+}
+
+.btn-primary {
+  background: var(--elinor-primary) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 4px rgba(24, 99, 67, 0.25) !important;
+}
+
+.btn-primary:hover {
+  background: var(--elinor-primary-hover) !important;
+  box-shadow: 0 4px 8px rgba(24, 99, 67, 0.35) !important;
+  transform: translateY(-1px) !important;
+}
+
+.btn-secondary {
+  background: #fff !important;
+  color: var(--slate-700) !important;
+  border-color: var(--slate-300) !important;
+}
+
+.btn-secondary:hover {
+  background: var(--slate-50) !important;
+  border-color: var(--slate-400) !important;
+}
+
+.btn-sm {
+  padding: 6px 14px !important;
+  font-size: 12px !important;
+  border-radius: 8px !important;
+}
+
+.pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 4px 10px !important;
+  border-radius: 9999px !important;
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+}
+
+.pill-emerald {
+  background: #ecfdf5 !important;
+  color: #047857 !important;
+  border: 1px solid rgba(5, 150, 105, 0.25) !important;
+}
+
+.pill-blue {
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+  border: 1px solid rgba(37, 99, 235, 0.25) !important;
+}
+
+.pill-slate {
+  background: #f1f5f9 !important;
+  color: #475569 !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+/* ============================================================== */
+/* MOBILE ADAPTIVE UX TRANSFORMATION (< 768px)                   */
+/* ============================================================== */
+@media (max-width: 768px) {
+  .desktop-only,
+  .desktop-only-btn {
+    display: none !important;
+  }
+
+  .ever-manager-container {
+    padding: 8px 12px 80px !important;
+  }
+
+  /* Toolbar on Mobile */
+  .manager-toolbar {
+    padding: 12px 14px !important;
+    gap: 10px !important;
+    border-radius: 16px !important;
+  }
+
+  .toolbar-primary-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .filter-search,
+  .date-input-holder,
+  .filter-shift-select {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+
+  .filter-btn-group {
+    width: 100% !important;
+  }
+
+  .filter-btn-group button,
+  .filter-btn-group a {
+    flex: 1 !important;
+    text-align: center !important;
+  }
+
+  .toolbar-secondary-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .status-tab-pills {
+    width: 100% !important;
+    justify-content: flex-start !important;
+    padding: 4px !important;
+  }
+
+  .toolbar-actions-left {
+    width: 100% !important;
+  }
+
+  .toolbar-actions-left button {
+    width: 100% !important;
+  }
+
+  /* Session Accordion Header on Mobile */
+  .session-card {
+    border-radius: 16px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .session-card-header {
+    padding: 14px !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+
+  .session-info {
+    width: 100% !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+  }
+
+  .session-date-box {
+    min-width: 76px !important;
+    padding: 6px 10px !important;
+  }
+
+  .session-date-box strong {
+    font-size: 13.5px !important;
+  }
+
+  .session-title-block {
+    flex: 1 !important;
+  }
+
+  .session-title-block h3 {
+    font-size: 14px !important;
+  }
+
+  .session-metrics-chips {
+    gap: 6px 10px !important;
+  }
+
+  .sess-chip {
+    font-size: 11.5px !important;
+  }
+
+  .session-header-actions {
+    width: 100% !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    border-top: 1px dashed var(--slate-100) !important;
+    padding-top: 10px !important;
+  }
+
+  .session-header-actions form {
+    flex: 1 !important;
+  }
+
+  .session-batch-approve-btn {
+    width: 100% !important;
+    padding: 8px 12px !important;
+    font-size: 12.5px !important;
+  }
+
+  /* TRANSFORM TABULAR TABLE TO MODERN CARDS ON MOBILE */
+  .review-table thead {
+    display: none !important;
+  }
+
+  .review-table,
+  .review-table tbody {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    width: 100% !important;
+    padding: 10px !important;
+    box-sizing: border-box !important;
+  }
+
+  .table-wrap {
+    overflow-x: visible !important;
+    padding: 0 !important;
+  }
+
+  /* Employee Review Card in Mobile Feed */
+  .review-table tr.review-row {
+    display: flex !important;
+    flex-direction: column !important;
+    background: #ffffff !important;
+    border: 1.5px solid var(--slate-200) !important;
+    border-radius: 16px !important;
+    padding: 14px !important;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04) !important;
+    gap: 10px !important;
+    cursor: pointer !important;
+    transition: all 0.15s ease !important;
+  }
+
+  .review-table tr.review-row:active {
+    background: #f8fafc !important;
+    border-color: var(--elinor-primary) !important;
+  }
+
+  .review-table tr.review-row td {
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+  }
+
+  /* Re-ordering Card Elements for Touch Ergonomics */
+  /* Line 1: Header (Avatar, Name, Grade & Status) */
+  .review-table tr.review-row .cell-emp {
+    order: 1 !important;
+  }
+
+  .review-table tr.review-row .cell-status {
+    order: 2 !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    border-top: 1px dashed var(--slate-100) !important;
+    padding-top: 8px !important;
+  }
+
+  .review-table tr.review-row .cell-status::before {
+    content: "وضعیت کارکرد:" !important;
+    font-size: 11.5px !important;
+    color: var(--slate-400) !important;
+    font-weight: 600 !important;
+  }
+
+  /* Line 2: Shift Department & Line Distribution */
+  .review-table tr.review-row .cell-main-dept {
+    order: 3 !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    font-size: 12.5px !important;
+  }
+
+  .review-table tr.review-row .cell-main-dept::before {
+    content: "لاین اصلی:" !important;
+    font-size: 11.5px !important;
+    color: var(--slate-400) !important;
+  }
+
+  .review-table tr.review-row .cell-support-dept {
+    order: 4 !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    font-size: 12.5px !important;
+  }
+
+  .review-table tr.review-row .cell-support-dept::before {
+    content: "لاین کمکی:" !important;
+    font-size: 11.5px !important;
+    color: var(--slate-400) !important;
+  }
+
+  /* Line 3: Activities & Hours */
+  .review-table tr.review-row .cell-acts {
+    order: 5 !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+  }
+
+  .review-table tr.review-row .cell-acts::before {
+    content: "فعالیت‌ها:" !important;
+    font-size: 11.5px !important;
+    color: var(--slate-400) !important;
+  }
+
+  .review-table tr.review-row .cell-hours {
+    order: 6 !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    font-size: 12.5px !important;
+  }
+
+  .review-table tr.review-row .cell-hours::before {
+    content: "ساعات حضور:" !important;
+    font-size: 11.5px !important;
+    color: var(--slate-400) !important;
+  }
+
+  /* Line 4: Highlighted Financials (Units & Commission) */
+  .review-table tr.review-row .cell-units {
+    order: 7 !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+  }
+
+  .review-table tr.review-row .cell-units::before {
+    content: "سهم فروش شیفت:" !important;
+    font-size: 11.5px !important;
+    color: var(--slate-400) !important;
+  }
+
+  .review-table tr.review-row .cell-commission {
+    order: 8 !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    background: #f0fdf4 !important;
+    padding: 8px 12px !important;
+    border-radius: 10px !important;
+    border: 1px solid #bbf7d0 !important;
+  }
+
+  .review-table tr.review-row .cell-commission::before {
+    content: "پورسانت شیفت:" !important;
+    font-size: 12px !important;
+    color: #166534 !important;
+    font-weight: 700 !important;
+  }
+
+  .comm-amount-text {
+    font-size: 15px !important;
+    font-weight: 900 !important;
+  }
+
+  /* Line 5: Full-Width Touch Action Button */
+  .review-table tr.review-row .cell-action {
+    order: 9 !important;
+    margin-top: 4px !important;
+  }
+
+  .row-review-btn {
+    width: 100% !important;
+    padding: 9px 16px !important;
+    font-size: 13px !important;
+    border-radius: 10px !important;
+  }
+
+  /* Missing Personnel Card on Mobile */
+  .leave-candidate-row {
+    display: flex !important;
+    flex-direction: column !important;
+    background: #fffbeb !important;
+    border: 1.5px solid #fef08a !important;
+    border-radius: 14px !important;
+    padding: 12px 14px !important;
+    gap: 8px !important;
+  }
+
+  .leave-candidate-row td {
+    padding: 0 !important;
+    border: none !important;
+  }
+
+  .leave-candidate-row .cell-support-dept,
+  .leave-candidate-row .cell-acts,
+  .leave-candidate-row .cell-hours,
+  .leave-candidate-row .cell-units,
+  .leave-candidate-row .cell-commission {
+    display: none !important;
+  }
+
+  /* Mobile Slide Drawer (Full-Width Bottom Sheet / Screen) */
+  .slide-drawer {
+    max-width: 100% !important;
+    width: 100% !important;
+    border-radius: 0 !important;
+  }
+
+  .drawer-header {
+    padding: 14px 16px !important;
+  }
+
+  .drawer-body {
+    padding: 14px 16px !important;
+    gap: 12px !important;
+  }
+
+  .drawer-footer {
+    padding: 12px 16px !important;
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 16px)) !important;
+  }
+
+  .drawer-footer form {
+    flex: 1 !important;
+  }
+
+  .drawer-footer button {
+    width: 100% !important;
+    padding: 12px 20px !important;
+    font-size: 14px !important;
+  }
+}
+</style>
+
+<!-- ============================================================== -->
+<!-- JAVASCRIPT CONTROLLERS & KEYBOARD LISTENERS                    -->
+<!-- ============================================================== -->
+<script>
+let currentSelectedRowIndex = -1;
+let isDrawerOpen = false;
+
+// Accordion Toggle for Session Cards
+function toggleSession(sessionCard) {
+  if (!sessionCard) return;
+  sessionCard.classList.toggle('is-collapsed');
+  updateToggleAllBtn();
+}
+
+function toggleAllSessions() {
+  const cards = document.querySelectorAll('.session-card');
+  const allCollapsed = Array.from(cards).every(c => c.classList.contains('is-collapsed'));
+  cards.forEach(c => {
+    c.classList.toggle('is-collapsed', !allCollapsed);
+  });
+  updateToggleAllBtn();
+}
+
+function updateToggleAllBtn() {
+  const btn = document.getElementById('btn-toggle-all');
+  if (!btn) return;
+  const cards = document.querySelectorAll('.session-card');
+  const allCollapsed = Array.from(cards).every(c => c.classList.contains('is-collapsed'));
+  btn.querySelector('span').textContent = allCollapsed ? 'باز کردن همه' : 'بستن همه';
+}
+
+function getAllReviewRows() {
+  return Array.from(document.querySelectorAll('.review-row'));
+}
+
+function selectRow(index) {
+  const rows = getAllReviewRows();
+  if (!rows.length) return;
+  if (index < 0) index = 0;
+  if (index >= rows.length) index = rows.length - 1;
+  currentSelectedRowIndex = index;
+
+  rows.forEach((row, idx) => {
+    row.classList.toggle('active-row', idx === index);
+  });
+}
+
+function openSelectedRowDrawer() {
+  const rows = getAllReviewRows();
+  if (!rows.length) return;
+  if (currentSelectedRowIndex < 0 || currentSelectedRowIndex >= rows.length) {
+    selectRow(0);
+  }
+  openDrawerForRow(rows[currentSelectedRowIndex]);
+}
+
+function openDrawerForRow(row) {
+  if (!row) return;
+
+  // If row is inside a collapsed session, automatically open that session
+  const sessionCard = row.closest('.session-card');
+  if (sessionCard && sessionCard.classList.contains('is-collapsed')) {
+    sessionCard.classList.remove('is-collapsed');
+    updateToggleAllBtn();
+  }
+
+  const rows = getAllReviewRows();
+  const idx = rows.indexOf(row);
+  if (idx !== -1) selectRow(idx);
+
+  const ds = row.dataset;
+  document.getElementById('drawer-name').textContent = ds.name || 'کارمند';
+  document.getElementById('drawer-avatar').textContent = ds.avatar || ds.name?.charAt(0) || 'ک';
+  document.getElementById('drawer-sub').textContent = `گرید ${ds.grade || '—'} · کد ${ds.code || '—'} · ${ds.shift || ''}`;
+  document.getElementById('drawer-commission').textContent = ds.commission || '۰';
+  document.getElementById('drawer-formula-total').textContent = `${ds.commission || '۰'} تومان`;
+  document.getElementById('drawer-formula-units').textContent = ds.unitsShare || '۰ کالا';
+  document.getElementById('drawer-formula-rate').textContent = ds.gradeRate || '۱.۰×';
+  document.getElementById('drawer-hours-badge').textContent = ds.hoursTotal || 'ساعات حضور';
+
+  const payload = row.querySelector('.drawer-payload');
+  if (payload) {
+    const linesHtml = payload.querySelector('.payload-lines-html')?.innerHTML;
+    const linesBadge = payload.querySelector('.payload-lines-badge')?.textContent.trim();
+    const actsHtml = payload.querySelector('.payload-acts-html')?.innerHTML;
+    const actsBadge = payload.querySelector('.payload-acts-badge')?.textContent.trim();
+
+    if (linesHtml && linesHtml.trim()) {
+      document.getElementById('drawer-hours-text').innerHTML = linesHtml;
+    }
+    const linesSummaryEl = document.getElementById('drawer-lines-summary-badge');
+    if (linesSummaryEl) {
+      if (linesBadge) {
+        linesSummaryEl.style.display = 'inline-block';
+        linesSummaryEl.textContent = linesBadge;
+      } else {
+        linesSummaryEl.style.display = 'none';
+      }
+    }
+
+    if (actsHtml && actsHtml.trim()) {
+      document.getElementById('drawer-activities-content').innerHTML = actsHtml;
+    }
+    const actsBadgeEl = document.getElementById('drawer-activities-badge');
+    if (actsBadgeEl) {
+      if (actsBadge) {
+        actsBadgeEl.style.display = 'inline-block';
+        actsBadgeEl.textContent = actsBadge;
+      } else {
+        actsBadgeEl.style.display = 'none';
+      }
+    }
+
+    const fMain = payload.querySelector('.payload-formula-main')?.textContent.trim();
+    if (fMain) document.getElementById('drawer-formula-main').textContent = fMain;
+
+    const fSupp = payload.querySelector('.payload-formula-support')?.textContent.trim();
+    const fSuppRow = document.getElementById('drawer-formula-support-row');
+    if (fSupp && fSupp.length > 0) {
+      fSuppRow.style.display = 'flex';
+      document.getElementById('drawer-formula-support').textContent = fSupp;
+    } else if (fSuppRow) {
+      fSuppRow.style.display = 'none';
+    }
+
+    const fActs = payload.querySelector('.payload-formula-acts')?.textContent.trim();
+    const fActsRow = document.getElementById('drawer-formula-acts-row');
+    if (fActs && fActs.length > 0) {
+      fActsRow.style.display = 'flex';
+      document.getElementById('drawer-formula-acts').textContent = fActs;
+    } else if (fActsRow) {
+      fActsRow.style.display = 'none';
+    }
+
+    const fOt = payload.querySelector('.payload-formula-ot')?.textContent.trim();
+    const fOtRow = document.getElementById('drawer-formula-ot-row');
+    if (fOt && fOt.length > 0) {
+      fOtRow.style.display = 'flex';
+      document.getElementById('drawer-formula-ot').textContent = fOt;
+    } else if (fOtRow) {
+      fOtRow.style.display = 'none';
+    }
+  } else {
+    let hoursHtml = `<div>• <strong>لاین اصلی:</strong> ${ds.hoursMain || 'ثبت نشده'}</div>`;
+    if (ds.hoursSupport && ds.hoursSupport !== 'ثبت نشده') {
+      hoursHtml += `<div>• <strong style="color:var(--elinor-primary, #186343);">لاین کمکی:</strong> ${ds.hoursSupport}</div>`;
+    } else {
+      hoursHtml += `<div>• <span style="color:#94a3b8;">لاین کمکی: ثبت نشده</span></div>`;
+    }
+    if (ds.hoursOvertime) {
+      hoursHtml += `<div>• <strong style="color:#b45309;">اضافه‌کاری:</strong> ${ds.hoursOvertime}</div>`;
+    }
+    document.getElementById('drawer-hours-text').innerHTML = hoursHtml;
+    document.getElementById('drawer-activities-content').innerHTML = ds.activities || 'فعالیتی برای این شیفت ثبت نشده است.';
+  }
+
+  const noteCard = document.getElementById('drawer-note-card');
+  const noteText = document.getElementById('drawer-note-text');
+  if (ds.note && ds.note.trim()) {
+    noteCard.style.display = 'block';
+    noteText.textContent = ds.note.trim();
+  } else {
+    noteCard.style.display = 'none';
+  }
+
+  document.getElementById('drawer-detail-link').href = ds.detailUrl || '#';
+  const drawerEditLink = document.getElementById('drawer-edit-link');
+  if (drawerEditLink) {
+    drawerEditLink.href = ds.editUrl || '#';
+  }
+
+  const freezeForm = document.getElementById('drawer-freeze-form');
+  const freezeBtn = document.getElementById('drawer-freeze-btn');
+  freezeForm.action = ds.quickApproveUrl || '';
+
+  if (ds.isFrozen === '1') {
+    freezeBtn.disabled = true;
+    freezeBtn.style.opacity = '0.65';
+    freezeBtn.innerHTML = '<span>تأیید و فریز شده است ✓</span>';
+  } else {
+    freezeBtn.disabled = false;
+    freezeBtn.style.opacity = '1';
+    freezeBtn.innerHTML = `
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+      <span>تأیید و فریز پورسانت</span>
+    `;
+  }
+
+  document.getElementById('drawer-overlay').classList.add('active');
+  document.getElementById('slide-drawer').classList.add('active');
+  isDrawerOpen = true;
+}
+
+function closeDrawer() {
+  document.getElementById('drawer-overlay').classList.remove('active');
+  document.getElementById('slide-drawer').classList.remove('active');
+  isDrawerOpen = false;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const rows = getAllReviewRows();
+  rows.forEach((row, idx) => {
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('a, button, form, input, select')) return;
+      selectRow(idx);
+      openDrawerForRow(row);
+    });
+  });
+
+  if (rows.length > 0) {
+    selectRow(0);
+  }
+
+  updateToggleAllBtn();
+
+  // Keyboard Shortcuts Listener
+  document.addEventListener('keydown', (e) => {
+    const rows = getAllReviewRows();
+    if (!rows.length) return;
+
+    if (e.key === 'Escape' && isDrawerOpen) {
+      closeDrawer();
+    } else if (e.key === 'ArrowDown' && !isDrawerOpen) {
+      e.preventDefault();
+      if (currentSelectedRowIndex < rows.length - 1) {
+        selectRow(currentSelectedRowIndex + 1);
+        const selRow = rows[currentSelectedRowIndex];
+        const sc = selRow.closest('.session-card');
+        if (sc && sc.classList.contains('is-collapsed')) {
+          sc.classList.remove('is-collapsed');
+          updateToggleAllBtn();
+        }
+        selRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    } else if (e.key === 'ArrowUp' && !isDrawerOpen) {
+      e.preventDefault();
+      if (currentSelectedRowIndex > 0) {
+        selectRow(currentSelectedRowIndex - 1);
+        const selRow = rows[currentSelectedRowIndex];
+        const sc = selRow.closest('.session-card');
+        if (sc && sc.classList.contains('is-collapsed')) {
+          sc.classList.remove('is-collapsed');
+          updateToggleAllBtn();
+        }
+        selRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    } else if (e.key === 'Enter') {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+      if (!isDrawerOpen) {
+        if (currentSelectedRowIndex >= 0 && currentSelectedRowIndex < rows.length) {
+          e.preventDefault();
+          openDrawerForRow(rows[currentSelectedRowIndex]);
+        }
+      } else {
+        const freezeBtn = document.getElementById('drawer-freeze-btn');
+        if (freezeBtn && !freezeBtn.disabled) {
+          e.preventDefault();
+          document.getElementById('drawer-freeze-form').submit();
+        }
+      }
+    }
+  });
+});
+</script>
 {% endblock %}

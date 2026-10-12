@@ -261,6 +261,13 @@ class SystemSettings(models.Model):
     logo = models.FileField("لوگو", upload_to="branding/", blank=True)
     favicon = models.FileField("فاوآیکون", upload_to="branding/", blank=True)
     primary_color = models.CharField("رنگ اصلی", max_length=7, default="#237554", validators=[RegexValidator(r"^#[0-9A-Fa-f]{6}$", "رنگ باید مانند #237554 باشد.")])
+    overtime_hourly_multiplier = models.DecimalField(
+        "ضریب عملکرد هر ساعت اضافه‌کاری",
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal("0.20"),
+        help_text="به ازای هر ساعت اضافه‌کاری، این ضریب در مجموع عملکرد روز کارمند ضرب می‌شود (مثلاً 0.20 یعنی ۲۰٪ به ازای هر ساعت).",
+    )
     updated_at = models.DateTimeField(auto_now=True)
     def save(self, *args, **kwargs):
         self.pk = 1
@@ -429,7 +436,7 @@ class DailyShiftLog(BranchScoped, models.Model):
         "مجموع سهم فریز شده کالا", max_digits=10, decimal_places=2, default=Decimal("0.0")
     )
     frozen_commission_amount = models.PositiveBigIntegerField(
-        "مبلغ پورسانت فریز شده (ریال)", default=0
+        "مبلغ پورسانت فریز شده (تومان)", default=0
     )
     frozen_snapshot_data = models.JSONField(
         "جزئیات فریز شده محاسبات شیفت", default=dict, blank=True
@@ -483,6 +490,9 @@ class DailyShiftLog(BranchScoped, models.Model):
         super().save(*args, **kwargs)
 
     def recalculate_allocations(self, *, save=True):
+        if hasattr(self, "_prefetched_objects_cache"):
+            self._prefetched_objects_cache.pop("support_intervals", None)
+            self._prefetched_objects_cache.pop("support_departments", None)
         intervals = list(self.support_intervals.all())
         support_minutes = sum(item.duration_minutes for item in intervals)
         total_shift_minutes = int((self.shift.standard_hours or Decimal("0")) * 60)
@@ -587,7 +597,7 @@ class LineShiftPerformance(BranchScoped, models.Model):
     shift = models.ForeignKey(Shift, on_delete=models.PROTECT, related_name="line_performances", verbose_name="شیفت")
     department = models.ForeignKey(Department, on_delete=models.PROTECT, related_name="shift_performances", verbose_name="لاین / بخش")
     sold_units = models.PositiveIntegerField("تعداد کالای فروخته‌شده", default=0)
-    sales_amount = models.PositiveBigIntegerField("مبلغ فروش (ریال)", default=0, blank=True)
+    sales_amount = models.PositiveBigIntegerField("مبلغ فروش (تومان)", default=0, blank=True)
     recorded_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="recorded_line_performances", verbose_name="ثبت‌کننده")
     description = models.TextField("توضیحات / یادداشت مدیر", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -605,7 +615,7 @@ class LineShiftPerformance(BranchScoped, models.Model):
 class LineCommissionRate(models.Model):
     department = models.ForeignKey(Department, on_delete=models.CASCADE, related_name="commission_rates", verbose_name="لاین / بخش")
     commission_level = models.ForeignKey(CommissionLevel, on_delete=models.CASCADE, related_name="line_rates", verbose_name="سطح / گرید")
-    rate_per_unit = models.PositiveIntegerField("مبلغ پورسانت به ازای هر کالا", default=1000)
+    rate_per_unit = models.PositiveIntegerField("مبلغ پورسانت به ازای هر کالا (تومان)", default=1000)
     is_active = models.BooleanField("فعال", default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -705,11 +715,11 @@ class LineTarget(models.Model):
         verbose_name="لاین / بخش"
     )
     bronze_units = models.PositiveIntegerField("تارگت برنزی (تعداد کالا)", default=500)
-    bronze_reward = models.PositiveBigIntegerField("پاداش تارگت برنزی (ریال)", default=5000000)
+    bronze_reward = models.PositiveBigIntegerField("پاداش تارگت برنزی (تومان)", default=5000000)
     silver_units = models.PositiveIntegerField("تارگت نقره‌ای (تعداد کالا)", default=1000)
-    silver_reward = models.PositiveBigIntegerField("پاداش تارگت نقره‌ای (ریال)", default=12000000)
+    silver_reward = models.PositiveBigIntegerField("پاداش تارگت نقره‌ای (تومان)", default=12000000)
     gold_units = models.PositiveIntegerField("تارگت طلایی (تعداد کالا)", default=3000)
-    gold_reward = models.PositiveBigIntegerField("پاداش تارگت طلایی (ریال)", default=30000000)
+    gold_reward = models.PositiveBigIntegerField("پاداش تارگت طلایی (تومان)", default=30000000)
     is_active = models.BooleanField("فعال", default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -811,11 +821,11 @@ class LineGradeTarget(models.Model):
         verbose_name="سطح / گرید"
     )
     target_1_units = models.PositiveIntegerField("تارگت ۱ (تعداد کالا)", default=500)
-    target_1_reward = models.PositiveBigIntegerField("پاداش تارگت ۱ (ریال)", default=5000000)
+    target_1_reward = models.PositiveBigIntegerField("پاداش تارگت ۱ (تومان)", default=5000000)
     target_2_units = models.PositiveIntegerField("تارگت ۲ (تعداد کالا)", default=1000)
-    target_2_reward = models.PositiveBigIntegerField("پاداش تارگت ۲ (ریال)", default=12000000)
+    target_2_reward = models.PositiveBigIntegerField("پاداش تارگت ۲ (تومان)", default=12000000)
     target_3_units = models.PositiveIntegerField("تارگت ۳ (تعداد کالا)", default=3000)
-    target_3_reward = models.PositiveBigIntegerField("پاداش تارگت ۳ (ریال)", default=30000000)
+    target_3_reward = models.PositiveBigIntegerField("پاداش تارگت ۳ (تومان)", default=30000000)
     is_active = models.BooleanField("فعال", default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -894,9 +904,9 @@ class DepartmentMonthlyTarget(models.Model):
         verbose_name="لاین / بخش"
     )
     target_units = models.PositiveIntegerField("تارگت تعداد فروش کالا", default=0)
-    target_sales_amount = models.PositiveBigIntegerField("تارگت مبلغ فروش لاین (ریال)", default=0, blank=True)
-    target_commission_points = models.PositiveBigIntegerField("تارگت پورسانت ناخالص لاین (ریال)", default=0, blank=True)
-    reward_amount = models.PositiveBigIntegerField("پاداش دستیابی به تارگت لاین (ریال)", default=0, blank=True)
+    target_sales_amount = models.PositiveBigIntegerField("تارگت مبلغ فروش لاین (تومان)", default=0, blank=True)
+    target_commission_points = models.PositiveBigIntegerField("تارگت پورسانت ناخالص لاین (تومان)", default=0, blank=True)
+    reward_amount = models.PositiveBigIntegerField("پاداش دستیابی به تارگت لاین (تومان)", default=0, blank=True)
     description = models.TextField("توضیحات و اهداف شیفت/لاین برای پرسنل", blank=True)
     created_by = models.ForeignKey(
         User,

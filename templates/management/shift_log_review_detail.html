@@ -6,49 +6,53 @@
     <div>
         <p class="eyebrow">بررسی و تأیید کارکرد روزانه</p>
         <h1>{{ log.employee.full_name }} — {{ log.date|jalali }}</h1>
-        <p>شیفت: <strong>{{ log.shift.title }}</strong> · گرید: <strong>سطح {{ log.employee.commission_level.code }}</strong> · لاین اصلی: <strong>{{ log.main_department.name }}</strong></p>
+        <p>شیفت <strong>{{ log.shift.title }}</strong> · گرید <strong>{{ log.employee.commission_level.code }}</strong> · لاین اصلی <strong>{{ log.main_department.name }}</strong></p>
     </div>
-    <a class="secondary" href="{% url 'management_shift_log_reviews' %}">بازگشت به صف بررسی</a>
+    <div class="head-actions">
+        <a class="primary" href="{% url 'shift_log_edit' log.pk %}?next={{ request.get_full_path|urlencode }}" style="display:inline-flex; align-items:center; gap:6px;">
+            ✏️ ویرایش کارکرد
+        </a>
+        <a class="secondary" href="{% url 'management_shift_log_reviews' %}">بازگشت به صف بررسی</a>
+    </div>
 </div>
 
 {% if log.support_intervals.exists %}
-<article class="card" style="margin-bottom:18px">
-    <div class="card-head"><h2>🕒 بازه‌های دقیق حضور در لاین‌های کمکی</h2></div>
+<article class="card">
+    <div class="card-head"><h2>بازه‌های حضور در لاین‌های کمکی</h2></div>
     <div class="table-wrap">
-        <table>
-            <thead><tr><th>لاین مقصد</th><th>ساعت شروع</th><th>ساعت پایان</th><th>مدت</th></tr></thead>
+        <table class="cards-mobile">
+            <thead><tr><th>لاین مقصد</th><th>شروع</th><th>پایان</th><th>مدت</th></tr></thead>
             <tbody>
                 {% for interval in log.support_intervals.all %}
                 <tr>
-                    <td><b>{{ interval.department.name }}</b></td>
-                    <td>{{ interval.start_time|time:"H:i" }}</td>
-                    <td>{{ interval.end_time|time:"H:i" }}</td>
-                    <td>{{ interval.duration_display }}</td>
+                    <td class="card-title" data-label="لاین"><b>{{ interval.department.name }}</b></td>
+                    <td data-label="شروع">{{ interval.start_time|time:"H:i" }}</td>
+                    <td data-label="پایان">{{ interval.end_time|time:"H:i" }}</td>
+                    <td data-label="مدت">{{ interval.duration_display }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-    <p style="margin-bottom:0"><b>مجموع کمکی:</b> {{ log.support_hours }} ساعت · <b>لاین اصلی:</b> {{ log.main_hours }} ساعت</p>
+    <p class="support-summary"><b>مجموع کمکی:</b> {{ log.support_hours }} ساعت · <b>لاین اصلی:</b> {{ log.main_hours }} ساعت</p>
 </article>
 {% endif %}
 
-<!-- Quick Stats Summary of the Shift Log -->
 <div class="stats">
     <article>
         <span>مجموع ساعت کارکرد</span>
-        <strong style="color: var(--green, #237554);">{{ log.total_hours }} ساعت</strong>
-        <small>{{ log.main_hours }}h اصلی + {{ log.support_hours|default:'0' }}h کمکی</small>
+        <strong>{{ log.total_hours }} <small>ساعت</small></strong>
+        <small>{{ log.main_hours }} ساعت اصلی + {{ log.support_hours|default:'0' }} ساعت کمکی</small>
     </article>
     <article>
         <span>سهم محاسبه‌شده کالا</span>
-        <strong style="color: var(--green, #237554);">{{ calc.total_units_share }} کالا</strong>
+        <strong>{{ calc.total_units_share }} <small>کالا</small></strong>
         <small>تسهیم ساعتی از فروش لاین‌ها</small>
     </article>
     <article>
         <span>پورسانت محاسبه‌شده روز</span>
-        <strong style="color: var(--green, #237554); font-size: 1.5rem;">{{ calc.total_commission|persian_int }} ریال</strong>
-        <small>مبلغ قابل واریز قطعی به حساب</small>
+        <strong>{{ calc.total_commission|persian_int }} <small>تومان</small></strong>
+        <small>مبلغ قابل واریز قطعی</small>
     </article>
     <article>
         <span>وضعیت فعلی</span>
@@ -61,107 +65,125 @@
             <span class="status pending">در انتظار تأیید</span>
             {% endif %}
         </strong>
-        <small>{% if log.is_frozen %}🔒 محاسبات فریز شده است{% else %}⏳ محاسبات در وضعیت باز{% endif %}</small>
+        <small>{% if log.is_frozen %}محاسبات فریز شده است{% else %}محاسبات هنوز باز است{% endif %}</small>
     </article>
 </div>
 
-<!-- Detailed Calculation Breakdown Card -->
 <article class="card">
     <div class="card-head">
-        <h2>📊 ریز محاسبات تسهیم ساعتی و پورسانت لاین‌ها در این شیفت</h2>
+        <h2>ریز تسهیم ساعتی و پورسانت این شیفت</h2>
     </div>
-    <div class="table-wrap">
-        <table>
+    <div class="table-wrap table-wrap-scroll-hint">
+        <table class="cards-mobile commission-breakdown">
             <thead>
                 <tr>
                     <th>بخش / لاین</th>
                     <th>نوع حضور</th>
-                    <th>ساعت کار کارمند</th>
-                    <th>مجموع ساعت کل پرسنل در این لاین</th>
-                    <th>فروش کل لاین در شیفت</th>
-                    <th>سهم محاسبه‌شده</th>
-                    <th>نرخ پورسانت (گرید {{ log.employee.commission_level.code }})</th>
-                    <th>مبلغ پورسانت لاین</th>
+                    <th>ساعت کارمند</th>
+                    <th>ساعت کل پرسنل</th>
+                    <th>فروش لاین</th>
+                    <th>سهم</th>
+                    <th>نرخ گرید {{ log.employee.commission_level.code }}</th>
+                    <th>پورسانت لاین</th>
                 </tr>
             </thead>
             <tbody>
                 {% if calc.main_info %}
                 <tr>
-                    <td><b>{{ calc.main_info.department_name }}</b></td>
-                    <td>
+                    <td class="card-title" data-label="لاین"><b>{{ calc.main_info.department_name }}</b></td>
+                    <td data-label="نوع حضور">
                         {% if calc.main_info.is_activity_based %}
-                        <span class="badge" style="background: #dbeafe; color: #1d4ed8;">فعالیت عملیاتی</span>
+                        <span class="badge badge-activity">فعالیت عملیاتی</span>
                         {% else %}
-                        <span class="badge" style="background: #e6f4ea; color: #137333;">لاین اصلی</span>
+                        <span class="badge badge-main-line">لاین اصلی</span>
                         {% endif %}
                     </td>
-                    <td>{% if calc.main_info.is_activity_based %}—{% else %}{{ calc.main_info.hours }} ساعت{% endif %}</td>
-                    <td>{% if calc.main_info.is_activity_based %}—{% else %}{{ calc.main_info.total_dept_hours }} ساعت{% endif %}</td>
-                    <td>
+                    <td data-label="ساعت کارمند">{% if calc.main_info.is_activity_based %}—{% else %}{{ calc.main_info.hours }} ساعت{% endif %}</td>
+                    <td data-label="ساعت کل پرسنل">{% if calc.main_info.is_activity_based %}—{% else %}{{ calc.main_info.total_dept_hours }} ساعت{% endif %}</td>
+                    <td data-label="فروش لاین">
                         {% if calc.main_info.activity_details %}
-                        <div style="font-size:12.5px;line-height:1.6;">
+                        <div class="activity-lines">
                             {% for act in calc.main_info.activity_details %}
-                            <div><b>{{ act.title }}:</b> {% if act.count_method == 'CHECKMARK' %}{% if act.quantity %}✓ انجام{% else %}—{% endif %}{% else %}{{ act.quantity }} × {{ act.unit_multiplier }}{% endif %} = {{ act.performance_units }} واحد</div>
+                            <div><b>{{ act.title }}:</b> {% if act.count_method == 'CHECKMARK' %}{% if act.quantity %}انجام شد{% else %}ثبت نشده{% endif %}{% else %}{{ act.quantity }} × {{ act.unit_multiplier }}{% endif %} = {{ act.performance_units }} واحد</div>
                             {% endfor %}
                         </div>
                         {% else %}
                         <strong>{{ calc.main_info.total_sold_units }} عدد</strong>
                         {% if not calc.main_info.has_performance_recorded %}
-                        <small style="color: #c53030;">⚠️ فروش این لاین هنوز ثبت نشده (صفر)</small>
+                        <small class="text-missing-sale">فروش این لاین هنوز ثبت نشده</small>
                         {% endif %}
                         {% endif %}
                     </td>
-                    <td><b style="color: var(--green, #237554); font-size: 14px;">{{ calc.main_info.share_units }} کالا</b></td>
-                    <td>{{ calc.main_info.rate_per_unit|persian_int }} ریال</td>
-                    <td><strong style="color: var(--green, #237554);">{{ calc.main_info.commission|persian_int }} ریال</strong></td>
+                    <td data-label="سهم"><b class="text-money">{{ calc.main_info.share_units }} کالا</b></td>
+                    <td data-label="نرخ">{{ calc.main_info.rate_per_unit|persian_int }} تومان</td>
+                    <td data-label="پورسانت"><strong class="money-positive">{{ calc.main_info.commission|persian_int }} تومان</strong></td>
+                </tr>
+                {% endif %}
+
+                {% if calc.activity_info %}
+                <tr>
+                    <td class="card-title" data-label="لاین"><b>{{ calc.activity_info.department_name }}</b></td>
+                    <td data-label="نوع حضور"><span class="badge badge-activity">فعالیت عملیاتی</span></td>
+                    <td data-label="ساعت کارمند">—</td>
+                    <td data-label="ساعت کل پرسنل">—</td>
+                    <td data-label="فروش لاین">
+                        <div class="activity-lines">
+                            {% for act in calc.activity_info.activity_details %}
+                            <div><b>{{ act.title }}:</b> {% if act.count_method == 'CHECKMARK' %}{% if act.quantity %}انجام شد{% else %}ثبت نشده{% endif %}{% else %}{{ act.quantity }} × {{ act.unit_multiplier }}{% endif %} = {{ act.performance_units }} واحد</div>
+                            {% endfor %}
+                        </div>
+                    </td>
+                    <td data-label="سهم"><b class="text-money">{{ calc.activity_info.share_units }} کالا</b></td>
+                    <td data-label="نرخ">{{ calc.activity_info.rate_per_unit|persian_int }} تومان</td>
+                    <td data-label="پورسانت"><strong class="money-positive">{{ calc.activity_info.commission|persian_int }} تومان</strong></td>
                 </tr>
                 {% endif %}
 
                 {% for s in calc.support_infos %}
                 <tr>
-                    <td><b>{{ s.department_name }}</b></td>
-                    <td><span class="badge" style="background: #e8f0fe; color: #1a73e8;">لاین کمکی</span></td>
-                    <td>{{ s.hours }} ساعت</td>
-                    <td>
+                    <td class="card-title" data-label="لاین"><b>{{ s.department_name }}</b></td>
+                    <td data-label="نوع حضور"><span class="badge badge-support">لاین کمکی</span></td>
+                    <td data-label="ساعت کارمند">{{ s.hours }} ساعت</td>
+                    <td data-label="ساعت کل پرسنل">
                         {{ s.total_dept_hours }} ساعت
-                        <small style="display:block; color: var(--muted);">بدون کسر از سهم لاین اصلی</small>
+                        <small>بدون کسر از سهم لاین اصلی</small>
                     </td>
-                    <td>
+                    <td data-label="فروش لاین">
                         <strong>{{ s.total_sold_units }} عدد</strong>
                         {% if not s.has_performance_recorded %}
-                        <small style="color: #c53030;">⚠️ فروش این لاین هنوز ثبت نشده (صفر)</small>
+                        <small class="text-missing-sale">فروش این لاین هنوز ثبت نشده</small>
                         {% endif %}
                     </td>
-                    <td><b style="color: var(--green, #237554); font-size: 14px;">{{ s.share_units }} کالا</b></td>
-                    <td>{{ s.rate_per_unit|persian_int }} ریال</td>
-                    <td><strong style="color: var(--green, #237554);">{{ s.commission|persian_int }} ریال</strong></td>
+                    <td data-label="سهم"><b class="text-money">{{ s.share_units }} کالا</b></td>
+                    <td data-label="نرخ">{{ s.rate_per_unit|persian_int }} تومان</td>
+                    <td data-label="پورسانت"><strong class="money-positive">{{ s.commission|persian_int }} تومان</strong></td>
                 </tr>
                 {% endfor %}
 
                 {% if calc.overtime_info %}
-                <tr style="background: #f0fdf4;">
-                    <td><b>{{ calc.overtime_info.department_name }}</b></td>
-                    <td><span class="badge" style="background: #dcfce7; color: #15803d;">⚡ اضافه‌کاری (شیفت {{ calc.overtime_info.target_shift_title }})</span></td>
-                    <td>{{ calc.overtime_info.hours }} ساعت ({{ calc.overtime_info.start_time }} تا {{ calc.overtime_info.end_time }})</td>
-                    <td>{{ calc.overtime_info.total_dept_hours }} ساعت</td>
-                    <td>
+                <tr>
+                    <td class="card-title" data-label="لاین"><b>{{ calc.overtime_info.department_name }}</b></td>
+                    <td data-label="نوع حضور"><span class="badge badge-overtime">اضافه‌کاری · شیفت {{ calc.overtime_info.target_shift_title }}</span></td>
+                    <td data-label="ساعت کارمند">{{ calc.overtime_info.hours }} ساعت ({{ calc.overtime_info.start_time }} تا {{ calc.overtime_info.end_time }})</td>
+                    <td data-label="ساعت کل پرسنل">{{ calc.overtime_info.total_dept_hours }} ساعت</td>
+                    <td data-label="فروش لاین">
                         <strong>{{ calc.overtime_info.total_sold_units }} عدد</strong>
                         {% if not calc.overtime_info.has_performance_recorded %}
-                        <small style="color: #c53030;">⚠️ فروش این لاین هنوز ثبت نشده (صفر)</small>
+                        <small class="text-missing-sale">فروش این لاین هنوز ثبت نشده</small>
                         {% endif %}
                     </td>
-                    <td><b style="color: var(--green, #237554); font-size: 14px;">{{ calc.overtime_info.share_units }} کالا</b></td>
-                    <td>{{ calc.overtime_info.rate_per_unit|persian_int }} ریال</td>
-                    <td><strong style="color: var(--green, #237554);">{{ calc.overtime_info.commission|persian_int }} ریال</strong></td>
+                    <td data-label="سهم"><b class="text-money">{{ calc.overtime_info.share_units }} کالا</b></td>
+                    <td data-label="نرخ">{{ calc.overtime_info.rate_per_unit|persian_int }} تومان</td>
+                    <td data-label="پورسانت"><strong class="money-positive">{{ calc.overtime_info.commission|persian_int }} تومان</strong></td>
                 </tr>
                 {% endif %}
             </tbody>
-            <tfoot>
-                <tr style="background: #f9fafb; font-weight: bold;">
-                    <td colspan="5" style="text-align: left; padding-left: 20px;">جمع کل سهم و پورسانت این شیفت:</td>
-                    <td style="color: var(--green, #237554); font-size: 15px;">{{ calc.total_units_share }} کالا</td>
-                    <td>—</td>
-                    <td style="color: var(--green, #237554); font-size: 16px;">{{ calc.total_commission|persian_int }} ریال</td>
+            <tfoot class="commission-breakdown-foot">
+                <tr>
+                    <td class="card-title" colspan="5" data-label="جمع">جمع سهم و پورسانت این شیفت</td>
+                    <td data-label="سهم" class="text-money"><b>{{ calc.total_units_share }} کالا</b></td>
+                    <td data-label="نرخ">—</td>
+                    <td data-label="پورسانت" class="money-positive"><strong>{{ calc.total_commission|persian_int }} تومان</strong></td>
                 </tr>
             </tfoot>
         </table>
@@ -170,33 +192,28 @@
 
 {% if log.employee_note %}
 <article class="card">
-    <h3>📝 توضیحات و یادداشت کارمند هنگام ثبت:</h3>
-    <p style="background: rgba(0,0,0,0.02); padding: 12px 16px; border-radius: 8px; margin-top: 6px;">
-        {{ log.employee_note }}
-    </p>
+    <h3 style="margin-top:0;">یادداشت کارمند</h3>
+    <p class="employee-note-body">{{ log.employee_note }}</p>
 </article>
 {% endif %}
 
-<!-- Review & Action Form Card -->
-<article class="card form-card" style="border: 2px solid {% if log.status == 'APPROVED' %}#86efac{% else %}var(--green, #237554){% endif %}; border-radius: 16px;">
+<article class="card form-card review-decision-card" style="border:2px solid {% if log.status == 'APPROVED' %}#86efac{% else %}var(--green){% endif %};">
     <div class="card-head">
-        <h2>⚖️ ثبت تصمیم مدیر</h2>
+        <h2>ثبت تصمیم مدیر</h2>
     </div>
 
     <form method="post" id="review-action-form">
         {% csrf_token %}
         <div class="review-decision-grid">
             <label class="decision-card approve-card" id="approve-card-label">
-                <input type="radio" name="action" value="APPROVED" {% if form.action.value != 'REJECTED' %}checked{% endif %} id="action-approve" style="display:none">
-                <div class="decision-icon">✅</div>
+                <input class="sr-only" type="radio" name="action" value="APPROVED" {% if form.action.value != 'REJECTED' %}checked{% endif %} id="action-approve">
                 <div class="decision-text">
                     <strong>تأیید کارکرد شیفت</strong>
-                    <small>واریز قطعی {{ calc.total_commission|persian_int }} ریال به کیف پول کارمند</small>
+                    <small>واریز قطعی {{ calc.total_commission|persian_int }} تومان به کیف پول کارمند</small>
                 </div>
             </label>
             <label class="decision-card reject-card" id="reject-card-label">
-                <input type="radio" name="action" value="REJECTED" {% if form.action.value == 'REJECTED' %}checked{% endif %} id="action-reject" style="display:none">
-                <div class="decision-icon">❌</div>
+                <input class="sr-only" type="radio" name="action" value="REJECTED" {% if form.action.value == 'REJECTED' %}checked{% endif %} id="action-reject">
                 <div class="decision-text">
                     <strong>رد کارکرد شیفت</strong>
                     <small>عدم تأیید و لزوم درج توضیح برای پرسنل</small>
@@ -205,18 +222,14 @@
         </div>
         {% for error in form.action.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
 
-        <div id="reject-note-container" class="field" style="margin-top: 18px; display: none;">
-            <label style="font-size: 13px; font-weight: 700; margin-bottom: 6px; display: block; color: #b91c1c;">
-                ⚠️ علت رد کارکرد برای پرسنل (الزامی):
-            </label>
+        <div id="reject-note-container" class="field" hidden>
+            <label for="{{ form.manager_note.id_for_label }}">علت رد کارکرد برای پرسنل</label>
             {{ form.manager_note }}
             {% for error in form.manager_note.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
         </div>
 
-        <div style="margin-top: 22px;">
-            <button id="submit-review-btn" class="primary" style="padding: 12px 30px; font-size: 14px; font-weight: 700; border-radius: 10px;">
-                ✅ ثبت و تأیید نهایی کارکرد
-            </button>
+        <div class="review-submit-wrap">
+            <button id="submit-review-btn" class="primary review-submit" type="submit">ثبت و تأیید نهایی کارکرد</button>
         </div>
     </form>
 </article>
@@ -233,78 +246,59 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function syncDecision() {
         if (!radioApprove || !radioReject) return;
-        if (radioReject.checked) {
-            cardReject.classList.add('selected');
-            cardApprove.classList.remove('selected');
-            if (noteContainer) noteContainer.style.display = 'block';
-            if (noteTextarea) noteTextarea.required = true;
-            if (submitBtn) {
-                submitBtn.style.background = '#dc2626';
-                submitBtn.style.color = '#fff';
-                submitBtn.style.borderColor = '#dc2626';
-                submitBtn.textContent = '❌ ثبت رد کارکرد';
-            }
-        } else {
-            cardApprove.classList.add('selected');
-            cardReject.classList.remove('selected');
-            if (noteContainer) noteContainer.style.display = 'none';
-            if (noteTextarea) noteTextarea.required = false;
-            if (submitBtn) {
-                submitBtn.style.background = 'var(--green, #237554)';
-                submitBtn.style.color = '#fff';
-                submitBtn.style.borderColor = 'transparent';
-                submitBtn.textContent = '✅ ثبت و تأیید نهایی کارکرد';
-            }
+        const rejecting = radioReject.checked;
+        cardReject.classList.toggle('selected', rejecting);
+        cardApprove.classList.toggle('selected', !rejecting);
+        if (noteContainer) noteContainer.hidden = !rejecting;
+        if (noteTextarea) noteTextarea.required = rejecting;
+        if (submitBtn) {
+            submitBtn.textContent = rejecting ? 'ثبت رد کارکرد' : 'ثبت و تأیید نهایی کارکرد';
+            submitBtn.classList.toggle('is-reject', rejecting);
         }
     }
 
-    if (cardApprove && cardReject) {
-        cardApprove.addEventListener('click', () => { radioApprove.checked = true; syncDecision(); });
-        cardReject.addEventListener('click', () => { radioReject.checked = true; syncDecision(); if (noteTextarea) noteTextarea.focus(); });
+    if (radioApprove && radioReject) {
+        radioApprove.addEventListener('change', syncDecision);
+        radioReject.addEventListener('change', syncDecision);
         syncDecision();
     }
 });
 </script>
 
 {% if log.status == 'APPROVED' or log.is_frozen %}
-<article class="card" style="margin-top:20px; border: 1.5px solid #fde047; background: #fefce8;">
+<article class="card revert-card" style="border:1.5px solid #fde047;background:#fefce8;">
     <div class="card-head">
-        <h2>🔄 لغو تأیید و بازگشت به صف بررسی</h2>
+        <h2>لغو تأیید و بازگشت به صف</h2>
     </div>
-    <p style="font-size: 13px; color: #713f12; margin-bottom: 14px; line-height: 1.6;">
-        این کارکرد قبلاً تأیید و فریز شده است. در صورت نیاز به ویرایش یا بازنگری، می‌توانید آن را به صف «در انتظار بررسی» بازگردانید.
-        با این کار، محاسبات موقتاً از حالت فریز خارج شده و تا زمان بررسی و تأیید مجدد، از کیف پول و کارنامه کسر می‌گردد.
+    <p style="font-size:13.5px;color:#713f12;margin:0 0 14px;line-height:1.7;">
+        این کارکرد تأیید و فریز شده است. با بازگشت به صف، مبلغ تا تأیید مجدد از کیف پول و کارنامه کنار گذاشته می‌شود.
     </p>
     <form method="post" action="{% url 'management_shift_log_revert' log.pk %}" onsubmit="return confirm('کارکرد از حالت تأیید خارج شود و به صف بررسی برگردد؟');">
         {% csrf_token %}
-        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-            <input type="text" name="revert_reason" placeholder="دلیل بازگشت به صف بررسی (اختیاری)..." style="flex: 1; min-width: 240px; padding: 9px 12px; border: 1px solid #ca8a04; border-radius: 8px;">
-            <button type="submit" class="secondary" style="background: #fff; border-color: #ca8a04; color: #854d0e; font-weight: 700;">
-                لغو تأیید و بازگشت به صف بررسی
-            </button>
+        <div class="revert-row">
+            <input type="text" name="revert_reason" placeholder="دلیل بازگشت به صف بررسی" aria-label="دلیل بازگشت به صف بررسی" style="border-color:#ca8a04;">
+            <button type="submit" class="secondary" style="background:#fff;border-color:#ca8a04;color:#854d0e;font-weight:700;">بازگشت به صف بررسی</button>
         </div>
     </form>
 </article>
 {% endif %}
 
-<article class="card" style="margin-top:24px;border:1px solid #fecaca;background:#fffafa">
-    <h2 style="color:#b42318">منطقه خطر</h2>
+<article class="card danger-zone" style="border-color:#fecaca;background:#fffafa;">
+    <h2 style="color:#b42318;margin-top:0;">حذف کارکرد</h2>
     {% if log.status == 'APPROVED' or log.is_frozen %}
-    <p style="font-size: 13px; color: #7f1d1d; line-height: 1.6;">
-        ⚠️ <strong>توجه مدیر:</strong> این کارکرد قبلاً تأیید و فریز شده است (پورسانت: <strong>{{ log.frozen_commission_amount|persian_int }} ریال</strong>).
-        با حذف این کارکرد، مبلغ پورسانت از کیف پول و کارنامه کارمند کسر گردیده و بازه‌های کمکی آن نیز پاک خواهند شد. این عملیات در لاگ ممیزی مالی ثبت می‌گردد.
+    <p style="font-size:13.5px;color:#7f1d1d;line-height:1.7;">
+        این کارکرد تأیید شده و پورسانت آن <strong>{{ log.frozen_commission_amount|persian_int }} تومان</strong> است.
+        حذف، مبلغ را از کیف پول و کارنامه کم می‌کند و در لاگ ممیزی ثبت می‌شود.
     </p>
     <form method="post" action="{% url 'management_shift_log_delete' log.pk %}" onsubmit="return confirm('آیا از حذف قطعی این کارکرد تأییدشده اطمینان دارید؟ پورسانت فریز شده از کیف پول کارمند کسر خواهد شد.');">
         {% csrf_token %}
-        <button type="submit" class="secondary" style="color:#b42318;border-color:#ef4444;font-weight:700">حذف قطعی کارکرد تأییدشده</button>
+        <button type="submit" class="secondary" style="color:#b42318;border-color:#ef4444;font-weight:700;">حذف قطعی کارکرد تأییدشده</button>
     </form>
     {% else %}
-    <p style="font-size: 13px; color: #7f1d1d;">
-        با حذف این کارکرد، اطلاعات ثبت‌شده و بازه‌های کمکی مربوط به آن حذف خواهند شد.
-    </p>
+    <p style="font-size:13.5px;color:#7f1d1d;line-height:1.7;">با حذف این کارکرد، اطلاعات ثبت‌شده و بازه‌های کمکی آن پاک می‌شود.</p>
     <form method="post" action="{% url 'management_shift_log_delete' log.pk %}" onsubmit="return confirm('کارکرد این روز حذف شود؟');">
         {% csrf_token %}
-        <button type="submit" class="secondary" style="color:#b42318;border-color:#ef4444;font-weight:700">حذف کارکرد</button>
+        <button type="submit" class="secondary" style="color:#b42318;border-color:#ef4444;font-weight:700;">حذف کارکرد</button>
     </form>
     {% endif %}
 </article>

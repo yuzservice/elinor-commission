@@ -6,7 +6,7 @@
     <div>
         <span class="admin-kicker">🎯 اهداف فروش و پاداش‌ها</span>
         <h1>ماتریس تارگت‌های لاین‌ها و گریدها</h1>
-        <p>تعیین پلکان ۳ گانه تارگت‌های فروش (تعداد کالا) و مبلغ پاداش نقدی (ریال) به تفکیک هر لاین و هر گرید کاری</p>
+        <p>تعیین پلکان ۳ گانه تارگت‌های فروش (تعداد کالا) و مبلغ پاداش نقدی (تومان) به تفکیک هر لاین و هر گرید کاری</p>
     </div>
 </div>
 
@@ -51,7 +51,7 @@
                         <tr>
                             <td style="text-align: center; vertical-align: middle;">
                                 <strong style="font-size: 15px;">گرید {{ row.level.code }}</strong>
-                                <small style="display: block; color: var(--muted);">نرخ پایه: {{ row.level.performance_rate }} ریال</small>
+                                <small style="display: block; color: var(--muted);">نرخ پایه: {{ row.level.performance_rate }} تومان</small>
                             </td>
 
                             <!-- تارگت ۱ -->
@@ -62,8 +62,8 @@
                                         <input type="number" name="t1_u_{{ item.department.pk }}_{{ row.level.pk }}" value="{{ row.t1_units }}" min="0" step="10" placeholder="مثلاً ۵۰۰" style="font-weight: 700; text-align: center;" inputmode="numeric">
                                     </div>
                                     <div>
-                                        <label style="font-size: 11px; color: var(--muted); display: block; margin-bottom: 3px;">پاداش (ریال):</label>
-                                        <input type="number" name="t1_r_{{ item.department.pk }}_{{ row.level.pk }}" value="{{ row.t1_reward }}" min="0" step="500000" placeholder="مبلغ ریال" style="font-weight: 700; color: #b06000; text-align: center;" inputmode="numeric">
+                                        <label style="font-size: 11px; color: var(--muted); display: block; margin-bottom: 3px;">پاداش (تومان):</label>
+                                        <input type="number" name="t1_r_{{ item.department.pk }}_{{ row.level.pk }}" value="{{ row.t1_reward }}" min="0" step="500000" placeholder="مبلغ به تومان" style="font-weight: 700; color: #b06000; text-align: center;" inputmode="numeric">
                                     </div>
                                 </div>
                             </td>
@@ -76,8 +76,8 @@
                                         <input type="number" name="t2_u_{{ item.department.pk }}_{{ row.level.pk }}" value="{{ row.t2_units }}" min="0" step="10" placeholder="مثلاً ۱۰۰۰" style="font-weight: 700; text-align: center;" inputmode="numeric">
                                     </div>
                                     <div>
-                                        <label style="font-size: 11px; color: var(--muted); display: block; margin-bottom: 3px;">پاداش (ریال):</label>
-                                        <input type="number" name="t2_r_{{ item.department.pk }}_{{ row.level.pk }}" value="{{ row.t2_reward }}" min="0" step="500000" placeholder="مبلغ ریال" style="font-weight: 700; color: #1a73e8; text-align: center;" inputmode="numeric">
+                                        <label style="font-size: 11px; color: var(--muted); display: block; margin-bottom: 3px;">پاداش (تومان):</label>
+                                        <input type="number" name="t2_r_{{ item.department.pk }}_{{ row.level.pk }}" value="{{ row.t2_reward }}" min="0" step="500000" placeholder="مبلغ به تومان" style="font-weight: 700; color: #1a73e8; text-align: center;" inputmode="numeric">
                                     </div>
                                 </div>
                             </td>
@@ -90,8 +90,8 @@
                                         <input type="number" name="t3_u_{{ item.department.pk }}_{{ row.level.pk }}" value="{{ row.t3_units }}" min="0" step="10" placeholder="مثلاً ۳۰۰۰" style="font-weight: 700; text-align: center;" inputmode="numeric">
                                     </div>
                                     <div>
-                                        <label style="font-size: 11px; color: var(--muted); display: block; margin-bottom: 3px;">پاداش (ریال):</label>
-                                        <input type="number" name="t3_r_{{ item.department.pk }}_{{ row.level.pk }}" value="{{ row.t3_reward }}" min="0" step="1000000" placeholder="مبلغ ریال" style="font-weight: 700; color: var(--green, #237554); text-align: center;" inputmode="numeric">
+                                        <label style="font-size: 11px; color: var(--muted); display: block; margin-bottom: 3px;">پاداش (تومان):</label>
+                                        <input type="number" name="t3_r_{{ item.department.pk }}_{{ row.level.pk }}" value="{{ row.t3_reward }}" min="0" step="1000000" placeholder="مبلغ به تومان" style="font-weight: 700; color: var(--green, #237554); text-align: center;" inputmode="numeric">
                                     </div>
                                 </div>
                             </td>

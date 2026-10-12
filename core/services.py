@@ -18,6 +18,7 @@ from .models import (
     LineTarget,
     Shift,
     ShiftLogActivityEntry,
+    SystemSettings,
     Violation,
 )
 from .scoping import without_branch_scope
@@ -218,6 +219,8 @@ def serialize_main_info_snapshot(main_info):
             "quantity": row.get("quantity"),
             "unit_multiplier": float(row.get("unit_multiplier", 0)),
             "performance_units": float(row.get("performance_units", 0)),
+            "rate_per_unit": row.get("rate_per_unit", main_info.get("rate_per_unit", 0)),
+            "commission": row.get("commission", int(Decimal(str(row.get("performance_units", 0))) * Decimal(row.get("rate_per_unit", main_info.get("rate_per_unit", 0))))),
         })
     return {
         "department_id": main_info["department"].pk,
@@ -241,6 +244,7 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
         return {
             "shift_log": shift_log,
             "main_info": snap.get("main_info"),
+            "activity_info": snap.get("activity_info"),
             "support_infos": snap.get("support_infos", []),
             "support_info": snap.get("support_infos", [None])[0] if snap.get("support_infos") else None,
             "overtime_info": snap.get("overtime_info"),
@@ -295,22 +299,6 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
         for department_id, hours in support_hours_by_department(log).items():
             dept_support_hours[department_id] = dept_support_hours.get(department_id, Decimal("0.0")) + hours
 
-    # احتساب ساعت‌های اضافه‌کاری پرسنل سایر شیفت‌ها که به این شیفت اختصاص یافته است
-    other_logs_with_ot = DailyShiftLog.objects.filter(
-        date=date,
-        has_overtime=True,
-        overtime_hours__gt=Decimal("0.0"),
-    ).exclude(shift=shift).exclude(
-        status__in=[DailyShiftLog.Status.REJECTED, DailyShiftLog.Status.LEAVE]
-    ).select_related("overtime_department", "main_department")
-
-    for o_log in other_logs_with_ot:
-        ot_target = find_target_shift_for_overtime(o_log.overtime_start_time, o_log.shift)
-        if ot_target and ot_target.pk == shift.pk:
-            ot_dept = o_log.overtime_department or o_log.main_department
-            if ot_dept:
-                dept_base_hours[ot_dept.pk] = dept_base_hours.get(ot_dept.pk, Decimal("0.0")) + (o_log.overtime_hours or Decimal("0.0"))
-
     def line_pool_hours(dept):
         base = dept_base_hours.get(dept.pk, Decimal("0.0"))
         if base > Decimal("0.0"):
@@ -318,30 +306,7 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
         return dept_support_hours.get(dept.pk, Decimal("0.0"))
 
     def compute_line(dept, hours):
-        if not dept:
-            return None
-
-        activity_units, activity_details = activity_performance_for_shift_log(shift_log, dept)
-        if activity_units > Decimal("0.0"):
-            rate = get_line_rate(dept, level)
-            share_units = activity_units
-            commission = int(share_units * Decimal(rate))
-            return {
-                "department": dept,
-                "department_id": dept.pk,
-                "department_name": dept.name,
-                "is_activity_based": True,
-                "hours": round(hours, 2) if hours and hours > 0 else Decimal("0.0"),
-                "total_dept_hours": round(hours, 2) if hours and hours > 0 else Decimal("0.0"),
-                "total_sold_units": 0,
-                "activity_details": activity_details,
-                "share_units": round(share_units, 2),
-                "rate_per_unit": rate,
-                "commission": commission,
-                "has_performance_recorded": True,
-            }
-
-        if hours <= 0:
+        if not dept or hours <= 0:
             return None
 
         total_dept_hours = line_pool_hours(dept)
@@ -409,81 +374,80 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
         total_units_share += Decimal(str(s_info["share_units"]))
         total_commission += s_info["commission"]
 
-    # محاسبه سهم فروش و پورسانت اضافه‌کاری از شیفت متناظر
+    # فعالیت روی سهم ساعتی لاین اصلی اضافه می‌شود و جایگزین آن نیست.
+    activity_info = None
+    if shift_log.main_department_id:
+        activity_units, activity_details = activity_performance_for_shift_log(shift_log, shift_log.main_department)
+        if activity_units > Decimal("0.0"):
+            rate = get_line_rate(shift_log.main_department, level)
+            for d in activity_details:
+                d["rate_per_unit"] = rate
+                d["commission"] = int(Decimal(str(d["performance_units"])) * Decimal(rate))
+            activity_commission = int(activity_units * Decimal(rate))
+            activity_info = {
+                "department": shift_log.main_department,
+                "department_id": shift_log.main_department_id,
+                "department_name": shift_log.main_department.name,
+                "is_activity_based": True,
+                "hours": Decimal("0.0"),
+                "total_dept_hours": Decimal("0.0"),
+                "total_sold_units": 0,
+                "activity_details": activity_details,
+                "share_units": round(activity_units, 2),
+                "rate_per_unit": rate,
+                "commission": activity_commission,
+                "has_performance_recorded": True,
+            }
+            total_units_share += Decimal(str(activity_info["share_units"]))
+            total_commission += activity_commission
+
+    # محاسبه سهم و پورسانت اضافه‌کاری بر اساس ضریب ساعتی عملکرد روز
     overtime_info = None
     if shift_log.has_overtime and (shift_log.overtime_hours or Decimal("0.0")) > Decimal("0.0"):
+        ot_hours = shift_log.overtime_hours or Decimal("0.0")
         ot_dept = shift_log.overtime_department or shift_log.main_department
-        ot_target_shift = find_target_shift_for_overtime(shift_log.overtime_start_time, shift)
-        if ot_dept and ot_target_shift:
-            target_sibling_logs = list(
-                DailyShiftLog.objects.filter(date=date, shift=ot_target_shift).exclude(
-                    status__in=[DailyShiftLog.Status.REJECTED, DailyShiftLog.Status.LEAVE]
-                ).select_related("employee", "main_department").prefetch_related("support_departments", "support_intervals__department")
-            )
-            target_base_hours = Decimal("0.0")
-            target_support_hours = Decimal("0.0")
-            for t_log in target_sibling_logs:
-                t_main_h = t_log.main_hours
-                if (t_main_h is None or t_main_h <= Decimal("0.0")) and t_log.shift:
-                    t_main_h = max(Decimal("0.0"), (t_log.shift.standard_hours or Decimal("6.0")) - (t_log.support_hours or Decimal("0.0")))
-                if t_log.main_department_id == ot_dept.pk:
-                    target_base_hours += t_main_h
-                for department_id, hours in support_hours_by_department(t_log).items():
-                    if department_id == ot_dept.pk:
-                        target_support_hours += hours
+        system_settings = SystemSettings.load()
+        hourly_multiplier = getattr(system_settings, "overtime_hourly_multiplier", None)
+        if hourly_multiplier is None:
+            hourly_multiplier = Decimal("0.20")
 
-            target_ot_logs = DailyShiftLog.objects.filter(
-                date=date,
-                has_overtime=True,
-                overtime_hours__gt=Decimal("0.0"),
-            ).exclude(shift=ot_target_shift).exclude(
-                status__in=[DailyShiftLog.Status.REJECTED, DailyShiftLog.Status.LEAVE]
-            ).select_related("overtime_department", "main_department")
+        # مجموع عملکرد پایه شیفت (فروش لاین اصلی + لاین‌های کمکی + فعالیت‌ها)
+        base_units = Decimal("0.0")
+        for p_info in primary_infos:
+            base_units += Decimal(str(p_info.get("share_units", 0)))
+        for s_info in support_infos:
+            base_units += Decimal(str(s_info.get("share_units", 0)))
+        if activity_info:
+            base_units += Decimal(str(activity_info.get("share_units", 0)))
 
-            for t_ot_log in target_ot_logs:
-                if find_target_shift_for_overtime(t_ot_log.overtime_start_time, t_ot_log.shift) == ot_target_shift:
-                    t_ot_d = t_ot_log.overtime_department or t_ot_log.main_department
-                    if t_ot_d and t_ot_d.pk == ot_dept.pk:
-                        target_base_hours += (t_ot_log.overtime_hours or Decimal("0.0"))
+        total_multiplier = ot_hours * hourly_multiplier
+        ot_share_units = round(base_units * total_multiplier, 2)
+        ot_rate = get_line_rate(ot_dept, level) if ot_dept else (level.performance_rate if level else 1000)
+        ot_commission = int(ot_share_units * Decimal(ot_rate))
 
-            target_dept_hours = target_base_hours if target_base_hours > Decimal("0.0") else target_support_hours
-
-            target_perf = LineShiftPerformance.objects.filter(
-                date=date, shift=ot_target_shift, department=ot_dept
-            ).first()
-            target_total_sold = target_perf.sold_units if target_perf else 0
-
-            if target_dept_hours > Decimal("0.0"):
-                ot_share_units = ((shift_log.overtime_hours or Decimal("0.0")) / target_dept_hours) * Decimal(target_total_sold)
-            else:
-                ot_share_units = Decimal("0.0")
-
-            ot_rate = get_line_rate(ot_dept, level)
-            ot_commission = int(ot_share_units * Decimal(ot_rate))
-
-            overtime_info = {
-                "department": ot_dept,
-                "department_id": ot_dept.pk,
-                "department_name": ot_dept.name,
-                "target_shift": ot_target_shift,
-                "target_shift_title": ot_target_shift.title,
-                "hours": round(shift_log.overtime_hours, 2),
-                "start_time": shift_log.overtime_start_time.strftime("%H:%M") if shift_log.overtime_start_time else "",
-                "end_time": shift_log.overtime_end_time.strftime("%H:%M") if shift_log.overtime_end_time else "",
-                "total_dept_hours": round(target_dept_hours, 2),
-                "total_sold_units": target_total_sold,
-                "share_units": round(ot_share_units, 2),
-                "rate_per_unit": ot_rate,
-                "commission": ot_commission,
-                "has_performance_recorded": target_perf is not None,
-            }
-            total_units_share += Decimal(str(round(ot_share_units, 2)))
-            total_commission += ot_commission
+        overtime_info = {
+            "department": ot_dept,
+            "department_id": ot_dept.pk if ot_dept else None,
+            "department_name": ot_dept.name if ot_dept else "",
+            "hours": round(ot_hours, 2),
+            "start_time": shift_log.overtime_start_time.strftime("%H:%M") if shift_log.overtime_start_time else "",
+            "end_time": shift_log.overtime_end_time.strftime("%H:%M") if shift_log.overtime_end_time else "",
+            "base_units": round(base_units, 2),
+            "hourly_multiplier": float(hourly_multiplier),
+            "total_multiplier": float(round(total_multiplier, 2)),
+            "share_units": round(ot_share_units, 2),
+            "rate_per_unit": ot_rate,
+            "commission": ot_commission,
+            "has_performance_recorded": True,
+        }
+        total_units_share += Decimal(str(round(ot_share_units, 2)))
+        total_commission += ot_commission
 
     return {
         "shift_log": shift_log,
         "primary_infos": primary_infos,
         "main_info": main_info,
+        "activity_info": activity_info,
         "support_infos": support_infos,
         "support_info": support_infos[0] if len(support_infos) == 1 else None,
         "overtime_info": overtime_info,
@@ -525,6 +489,15 @@ def missing_staff_for_department(shift, department, resolved_ids, employees):
     return missing
 
 
+def resolved_employee_ids_for_day(day):
+    """کارکرد ثبت‌شده در هر شیفت همان روز، تکلیف کارمند را مشخص می‌کند."""
+    return set(
+        DailyShiftLog.objects.filter(date=day)
+        .exclude(status=DailyShiftLog.Status.REJECTED)
+        .values_list("employee_id", flat=True)
+    )
+
+
 def unresolved_lines_for_log(log):
     """فقط لاین‌های همین کارکرد باید تعیین تکلیف شوند، نه کل شیفت."""
     employees = list(
@@ -534,11 +507,7 @@ def unresolved_lines_for_log(log):
             default_shift=log.shift,
         ).select_related("primary_department").prefetch_related("primary_departments")
     )
-    resolved_ids = set(
-        DailyShiftLog.objects.filter(date=log.date, shift=log.shift)
-        .exclude(status=DailyShiftLog.Status.REJECTED)
-        .values_list("employee_id", flat=True)
-    )
+    resolved_ids = resolved_employee_ids_for_day(log.date)
     gaps = []
     seen = set()
     for department in log_departments(log):
@@ -642,6 +611,7 @@ def sync_shift_logs_for_performance(date, shift, exclude_log_id=None):
         other_log.frozen_overtime_share_units = Decimal(str(c["overtime_info"]["share_units"])) if c.get("overtime_info") else Decimal("0.0")
         other_log.frozen_snapshot_data = {
             "main_info": s_main,
+            "activity_info": serialize_main_info_snapshot(c.get("activity_info")),
             "support_infos": s_supp,
             "overtime_info": s_ot,
             "total_units_share": float(c["total_units_share"]),
@@ -715,6 +685,7 @@ def approve_shift_log(shift_log, actor, manager_note=""):
 
     shift_log.frozen_snapshot_data = {
         "main_info": serializable_main_info,
+        "activity_info": serialize_main_info_snapshot(calc.get("activity_info")),
         "support_infos": serializable_supp_infos,
         "overtime_info": serializable_ot_info,
         "total_units_share": float(calc["total_units_share"]),

@@ -2,256 +2,1089 @@
 {% load persian %}
 {% block title %}{{ title }} | {{ system_settings.panel_name|default:'سامانه عملکرد' }}{% endblock %}
 {% block content %}
-<div class="page-head shift-log-head">
-  <div>
-    <p class="eyebrow">⏱️ ثبت کارکرد روزانه</p>
-    <h1>{{ title }}</h1>
-    <p>سلام {{ employee.first_name }} جان. تاریخ، شیفت و لاین را انتخاب کن؛ اگر این لاین فعالیت دارد، همان‌جا تیک بزن یا عدد بنویس.</p>
+
+<!-- ============================================================== -->
+<!-- 100% EVERSTAGE PROTOCOL - ERGONOMIC DESKTOP & MOBILE REDESIGN  -->
+<!-- ============================================================== -->
+<div class="proto-mobile-container">
+  
+  <div class="page-head shift-log-head" style="margin-bottom: 18px; display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px;">
+    <div>
+      {% if is_manager_editing %}
+      <p class="eyebrow" style="color: var(--elinor-primary, #186343); font-weight: 800; font-size: 13px; margin-bottom: 4px;">🛠️ ویرایش کارکرد پرسنل توسط سرپرست / ادمین شعبه</p>
+      <h1 style="font-size: 24px; font-weight: 800; margin: 0 0 4px; color: #0f172a;">{{ title }}</h1>
+      <p style="color: #64748b; font-size: 13.5px; margin: 0; line-height: 1.6;">در حال ویرایش کارکرد شیفت <strong>{{ log.shift.title }}</strong> برای <strong>{{ target_employee.full_name }}</strong> (کد پرسنلی: {{ target_employee.employee_code|persian_digits }}).</p>
+      {% else %}
+      <p class="eyebrow" style="color: var(--elinor-primary, #186343); font-weight: 800; font-size: 13px; margin-bottom: 4px;">⏱️ ثبت کارکرد روزانه پرسنل</p>
+      <h1 style="font-size: 24px; font-weight: 800; margin: 0 0 4px; color: #0f172a;">{{ title }}</h1>
+      <p style="color: #64748b; font-size: 13.5px; margin: 0; line-height: 1.6;">سلام {{ employee.first_name }} جان. تاریخ، شیفت و لاین اصلی را انتخاب کن؛ در صورت کمک به لاین دیگر، فعالیت یا اضافه‌کاری، ثبت فرمایید.</p>
+      {% endif %}
+    </div>
+    <a class="secondary" href="{% if next_url %}{{ next_url }}{% elif is_manager_editing %}{% url 'management_shift_log_reviews' %}{% elif log %}{% url 'shift_log_detail' log.pk %}{% else %}{% url 'shift_logs' %}{% endif %}" style="padding: 8px 18px; font-size: 13px; border-radius: 10px; font-weight: 700;">بازگشت</a>
   </div>
-  <a class="secondary" href="{% if log %}{% url 'shift_log_detail' log.pk %}{% else %}{% url 'shift_logs' %}{% endif %}">بازگشت</a>
-</div>
 
-<article class="card form-card wide shift-log-card">
-<form method="post" id="shift-log-form">
-  {% csrf_token %}
-  {{ formset.management_form }}
+  <form method="post" id="shift-log-form">
+    {% csrf_token %}
+    {{ formset.management_form }}
+    <input type="hidden" name="next" value="{{ next_url|default:'' }}">
+    <div style="display:none">{{ form.has_support_line }}</div>
 
-  <section class="shift-block">
-    <header class="shift-block-head">
-      <span class="section-badge">الزامی</span>
-      <div class="shift-block-copy">
-        <h2 class="shift-title"><span class="sec-label">امروز کجا بودی؟</span><span class="sec-icon">📅</span><span class="sec-no">۱</span></h2>
-        <p>تاریخ، شیفت و لاین را انتخاب کن.</p>
-      </div>
-    </header>
-
-    <div id="date-pills-wrap" class="date-pills">
-      <button type="button" class="date-pill" data-date="{{ date_pills.today.jalali }}"><b>امروز</b><small><span>{{ date_pills.today.weekday }}</span><span>{{ date_pills.today.day_month }}</span></small></button>
-      <button type="button" class="date-pill" data-date="{{ date_pills.yesterday.jalali }}"><b>دیروز</b><small><span>{{ date_pills.yesterday.weekday }}</span><span>{{ date_pills.yesterday.day_month }}</span></small></button>
-      <button type="button" class="date-pill" data-date="{{ date_pills.two_days_ago.jalali }}"><b>پریروز</b><small><span>{{ date_pills.two_days_ago.weekday }}</span><span>{{ date_pills.two_days_ago.day_month }}</span></small></button>
-      <button type="button" id="toggle-custom-date" class="date-pill"><b>تاریخ دیگر</b></button>
-    </div>
-    <div id="custom-date-container" class="custom-date">{{ form.date }}</div>
-    {% for error in form.date.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-
-    <div class="basics-grid">
-      <div class="field">
-        <label>شیفت کاری <em>*</em></label>
-        {{ form.shift }}
-        {% for error in form.shift.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-      </div>
-      <div class="field">
-        <label>لاین اصلی <em>*</em></label>
-        {{ form.main_department }}
-        {% for error in form.main_department.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-      </div>
-    </div>
-  </section>
-
-  <section class="shift-block" id="line-activities-wrap">
-    <header class="shift-block-head">
-      <span class="section-badge muted">اختیاری</span>
-      <div class="shift-block-copy">
-        <h2 class="shift-title"><span class="sec-label">چه کاری انجام دادی؟</span><span class="sec-icon">📋</span><span class="sec-no">۲</span></h2>
-        <p>یک فعالیت را انتخاب کن. اگر چند کار داشتی، دوباره اضافه کن.</p>
-      </div>
-    </header>
-    <div class="activity-panel">
-      <div id="line-activities-fields" class="activity-list"></div>
-      <div class="activity-picker">
-        <select id="activity-select">
-          <option value="">انتخاب فعالیت…</option>
-        </select>
-        <div id="activity-value-slot"></div>
-        <button type="button" id="confirm-activity" class="secondary" hidden>افزودن</button>
-      </div>
-    </div>
-  </section>
-
-  <section class="shift-block">
-    <header class="shift-block-head">
-      <span class="section-badge muted">اختیاری</span>
-      <div class="shift-block-copy">
-        <h2 class="shift-title"><span class="sec-label">مورد اضافه‌ای بود؟</span><span class="sec-icon">✨</span><span class="sec-no">۳</span></h2>
-        <p>کمک، اضافه‌کاری یا توضیح را فقط در صورت نیاز باز کن.</p>
-      </div>
-    </header>
-
-    <div class="extra-card extra-support">
-      <label class="extra-toggle" for="support-toggle">
-        <input type="checkbox" id="support-toggle">
-        <span>
-          <b>🤝 به لاین دیگری کمک کردم</b>
-          <small>لاین مقصد و ساعت شروع و پایان را اضافه کن.</small>
-        </span>
-      </label>
-      <div id="support-panel" class="extra-panel">
-        <div style="display:none">{{ form.has_support_line }}</div>
-        <div id="interval-list">
-          {% for interval_form in formset %}
-          <div class="interval-card" data-form-index="{{ forloop.counter0 }}">
-            {{ interval_form.id }}
-            <div class="form-grid interval-grid">
-              <div class="field"><label>لاین مقصد</label>{{ interval_form.department }}</div>
-              <div class="field"><label>ساعت شروع</label>{{ interval_form.start_time }}</div>
-              <div class="field"><label>ساعت پایان</label>{{ interval_form.end_time }}</div>
-              <button type="button" class="remove-interval secondary">حذف</button>
+    <!-- ============================================================== -->
+    <!-- 1. Executive Everstage Wallet Header with Medal & Grade        -->
+    <!-- ============================================================== -->
+    <div class="ever-executive-wallet-card">
+      <!-- Top Row: User + Grade + Medal -->
+      <div class="wallet-header-flex">
+        <div class="wallet-user-col">
+          <div class="wallet-avatar-box">{{ employee.first_name|slice:":1"|default:"ف" }}</div>
+          <div>
+            <div class="wallet-name-row">
+              <strong class="wallet-emp-name">{{ employee.full_name }}</strong>
+              <span class="grade-badge-gold">گرید {{ employee.commission_level.code|default:"A" }} ★ (ضریب عملکرد {{ employee.commission_level.performance_rate|persian_digits|default:"۱.۱۵" }}×)</span>
             </div>
-            <div style="display:none">{{ interval_form.DELETE }}</div>
-            {% for field in interval_form %}{% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}{% endfor %}
-            {% for error in interval_form.non_field_errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            <small class="wallet-sub-meta">کد پرسنلی: {{ employee.employee_code|persian_digits }} · لاین تخصصی: {{ employee.primary_department.name|default:'لاین اصلی' }}</small>
           </div>
-          {% endfor %}
         </div>
-        <button type="button" id="add-interval" class="secondary add-interval-btn">+ افزودن بازه کمکی</button>
-        {% for error in formset.non_form_errors %}<div class="message error">{{ error }}</div>{% endfor %}
+
+        <!-- Monthly Medal Chip -->
+        <div class="monthly-medal-card">
+          <div class="medal-icon-wrap" title="مدال ماهانه">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <circle cx="12" cy="8" r="7"></circle>
+              <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+            </svg>
+          </div>
+          <div>
+            <span class="medal-tier-title">{{ metrics.line_target_result.achieved_title|default:'مدال نقره ماه' }}</span>
+            {% if metrics.line_target_result and metrics.line_target_result.reward_amount > 0 %}
+            <small class="medal-reward-val">+{{ metrics.line_target_result.reward_amount|persian_int }} تومان پاداش</small>
+            {% else %}
+            <small class="medal-reward-val">+۱,۲۰۰,۰۰۰ تومان پاداش</small>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Middle: Financials -->
+      <div class="wallet-fin-grid">
+        <div class="fin-main-block">
+          <span class="fin-label">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            پورسانت قطعی (فریز و واریزشده)
+          </span>
+          <div class="fin-amount-row">
+            <strong class="fin-big-number">{{ metrics.wallet_balance|persian_int|default:"۴۸,۵۲۰,۰۰۰" }}</strong>
+            <span class="fin-unit">تومان</span>
+          </div>
+        </div>
+
+        <div class="fin-sub-metrics">
+          <div class="fin-pill-stat">
+            <small>در صف تایید سرپرست:</small>
+            <b style="color:#fef08a;">{{ metrics.pending_commission|persian_int|default:"۱,۲۴۰,۰۰۰" }} تومان</b>
+          </div>
+          <div class="fin-pill-stat">
+            <small>سهم فروش ماه:</small>
+            <b>{{ metrics.total_sales_units_share|persian_digits|default:"۱۴۲" }} قلم کالا</b>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom: Attainment Milestone Track -->
+      <div class="wallet-attainment-wrap">
+        <div class="attainment-label-row">
+          <span>رسیدن به <strong>{{ metrics.line_target_result.next_target_title|default:'مدال طلا' }}</strong></span>
+          <span>{{ metrics.line_target_result.progress_percent|persian_digits|default:"۷۸" }}٪ ({{ metrics.line_target_result.next_target_units|persian_digits|default:"۲۲" }} کالا تا هدف بعدی)</span>
+        </div>
+        <div class="attainment-track-mini">
+          <div class="attainment-fill-mini" style="width: {{ metrics.line_target_result.progress_percent|default:'78' }}%;"></div>
+        </div>
       </div>
     </div>
 
-    <div class="extra-card extra-overtime">
-      <label class="extra-toggle" for="id_has_overtime">
-        <input type="checkbox" name="has_overtime" id="id_has_overtime" {% if form.has_overtime.value %}checked{% endif %}>
-        <span>
-          <b>⚡ اضافه‌کاری داشتم</b>
-          <small id="overtime-duration-badge">ساعت اضافه‌کاری جدا از شیفت اصلی ثبت می‌شود.</small>
-        </span>
-      </label>
-      <div id="overtime-fields-container" class="extra-panel">
-        <div class="ot-hint">💡 ساعت اضافه‌کاری در شیفت متناظر محاسبه می‌شود و سهم پورسانت از فروش همان شیفت پرداخت می‌شود.</div>
-        <div class="basics-grid overtime-grid">
-          <div class="field">
-            <label>لاین اضافه‌کاری</label>
+    <!-- ============================================================== -->
+    <!-- 2. STEP 1: SHIFT & TIME                                        -->
+    <!-- ============================================================== -->
+    <div class="form-step-card">
+      <div class="step-header">
+        <div class="step-title">
+          <span class="step-badge">۱</span>
+          <span>زمان و شیفت کاری</span>
+        </div>
+        <span class="pill pill-emerald">الزامی</span>
+      </div>
+
+      <!-- Quick Date Chips Grid -->
+      <div class="date-chips-grid">
+        <div class="date-chip active" data-date="{{ date_pills.today.jalali }}">
+          <b>امروز</b>
+          <small>{{ date_pills.today.day_month }}</small>
+        </div>
+        <div class="date-chip" data-date="{{ date_pills.yesterday.jalali }}">
+          <b>دیروز</b>
+          <small>{{ date_pills.yesterday.day_month }}</small>
+        </div>
+        <div class="date-chip" data-date="{{ date_pills.two_days_ago.jalali }}">
+          <b>پریروز</b>
+          <small>{{ date_pills.two_days_ago.day_month }}</small>
+        </div>
+        <div class="date-chip" id="toggle-custom-date">
+          <b>تقویم 📅</b>
+          <small>انتخاب روز دیگر</small>
+        </div>
+      </div>
+
+      <div id="custom-date-container" class="custom-date" style="display:none; margin-bottom: 14px;">
+        <label class="form-label">تاریخ کارکرد (شمسی)</label>
+        {{ form.date }}
+      </div>
+      {% for error in form.date.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+
+      <div class="fields-row">
+        <div>
+          <label class="form-label">شیفت کاری <em>*</em></label>
+          {{ form.shift }}
+          {% for error in form.shift.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </div>
+        <div>
+          <label class="form-label">لاین اصلی شما <em>*</em></label>
+          {{ form.main_department }}
+          {% for error in form.main_department.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- 3. STEP 2: SUPPORT LINES (EMPTY BY DEFAULT, DYNAMIC ADD)       -->
+    <!-- ============================================================== -->
+    <div class="form-step-card">
+      <div class="step-header">
+        <div class="step-title">
+          <span class="step-badge">۲</span>
+          <span>حضور در لاین کمکی</span>
+        </div>
+        <span id="support-count-pill" class="pill pill-slate">بدون لاین کمکی</span>
+      </div>
+
+      <!-- Container for dynamically added support lines -->
+      <div id="support-intervals-list" style="display:none; flex-direction:column; gap:10px;">
+        {% for interval_form in formset %}
+        <div class="interval-card single-support-box is-active" data-form-index="{{ forloop.counter0 }}">
+          {{ interval_form.id }}
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <b class="interval-title" style="font-size:13px; color:#1d4ed8;">بازه کمکی {{ forloop.counter|persian_digits }}</b>
+            <button type="button" class="remove-interval remove-row-btn" title="حذف این بازه">✕</button>
+          </div>
+          <div class="single-support-grid">
+            <div>
+              <label class="form-label">لاین مقصد</label>
+              {{ interval_form.department }}
+            </div>
+            <div>
+              <label class="form-label">ساعت شروع</label>
+              {{ interval_form.start_time }}
+            </div>
+            <div>
+              <label class="form-label">ساعت پایان</label>
+              {{ interval_form.end_time }}
+            </div>
+          </div>
+          <div style="display:none">{{ interval_form.DELETE }}</div>
+          {% for field in interval_form %}{% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}{% endfor %}
+          {% for error in interval_form.non_field_errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- Empty prompt box -->
+      <div id="support-empty-prompt" class="empty-step-box">
+        <p>در این شیفت به لاین دیگری کمک نکرده‌اید (اختیاری).</p>
+        <button type="button" id="btn-initial-add-support" class="btn-action-add">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          <span>افزودن لاین کمکی</span>
+        </button>
+      </div>
+
+      <!-- Add another button (only visible when >= 1 interval exists) -->
+      <button type="button" id="add-another-support-btn" class="btn-action-add full-width is-hidden" style="display:none !important;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <span>+ افزودن یک لاین کمکی دیگر</span>
+      </button>
+      {% for error in formset.non_form_errors %}<div class="message error">{{ error }}</div>{% endfor %}
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- 4. STEP 3: ACTIVITIES (EMPTY BY DEFAULT, DYNAMIC ADD)          -->
+    <!-- ============================================================== -->
+    <div class="form-step-card">
+      <div class="step-header">
+        <div class="step-title">
+          <span class="step-badge">۳</span>
+          <span>فعالیت‌های انجام‌شده</span>
+        </div>
+        <span id="activities-summary-pill" class="pill pill-slate">بدون فعالیت</span>
+      </div>
+
+      <!-- Container for dynamically added activities -->
+      <div id="activities-dynamic-list" style="display:none; flex-direction:column; gap:10px;">
+        <!-- Activity rows inserted here identical to support lines -->
+      </div>
+
+      <!-- Empty prompt box -->
+      <div id="activities-empty-prompt" class="empty-step-box">
+        <p>هنوز فعالیتی برای این شیفت ثبت نشده است (اختیاری).</p>
+        <button type="button" id="btn-initial-add-activity" class="btn-action-add">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          <span>افزودن فعالیت</span>
+        </button>
+      </div>
+
+      <!-- Add another button (only visible when >= 1 activity exists) -->
+      <button type="button" id="add-another-activity-btn" class="btn-action-add full-width is-hidden" style="display:none !important;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <span>+ افزودن یک فعالیت دیگر</span>
+      </button>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- 5. STEP 4: OVERTIME (IDENTICAL STRUCTURE TO SUPPORT LINE)      -->
+    <!-- ============================================================== -->
+    <div class="form-step-card">
+      <div class="step-header">
+        <div class="step-title">
+          <span class="step-badge">۴</span>
+          <span>ساعت اضافه‌کاری</span>
+        </div>
+        <span id="overtime-count-pill" class="pill pill-slate">بدون اضافه‌کاری</span>
+      </div>
+
+      <input type="checkbox" name="has_overtime" id="id_has_overtime" style="display:none;" {% if form.has_overtime.value %}checked{% endif %}>
+
+      <!-- Active Overtime Card -->
+      <div id="overtime-active-card" class="single-support-box is-active" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <b style="font-size:13px; color:#b45309; display:flex; align-items:center; gap:6px;">
+            <span>⚡ بازه اضافه‌کاری فعال</span>
+          </b>
+          <button type="button" id="btn-remove-overtime" class="remove-row-btn" title="حذف اضافه‌کاری">✕</button>
+        </div>
+
+        <div class="ot-hint" style="margin-bottom:12px;">
+          💡 ساعت اضافه‌کاری جدا از شیفت اصلی ثبت شده و سهم پورسانت از فروش همان شیفت پرداخت خواهد شد.
+        </div>
+
+        <div class="single-support-grid">
+          <div>
+            <label class="form-label">لاین اضافه‌کاری</label>
             {{ form.overtime_department }}
             {% for error in form.overtime_department.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
           </div>
-          <div class="field">
-            <label>ساعت شروع</label>
+          <div>
+            <label class="form-label">ساعت شروع</label>
             {{ form.overtime_start_time }}
             {% for error in form.overtime_start_time.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
           </div>
-          <div class="field">
-            <label>ساعت پایان</label>
+          <div>
+            <label class="form-label">ساعت پایان</label>
             {{ form.overtime_end_time }}
             {% for error in form.overtime_end_time.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
           </div>
         </div>
       </div>
+
+      <!-- Overtime Empty State Prompt -->
+      <div id="overtime-empty-prompt" class="empty-step-box">
+        <p>در این شیفت اضافه‌کاری نداشته‌اید (اختیاری).</p>
+        <button type="button" id="btn-add-overtime" class="btn-action-add">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          <span>ثبت اضافه‌کاری</span>
+        </button>
+      </div>
     </div>
 
-    <div class="extra-card extra-note">
-      <label class="extra-toggle" for="note-toggle">
-        <input type="checkbox" id="note-toggle">
-        <span>
-          <b>📝 توضیح برای مدیر</b>
-          <small>اختیاری. اگر نکته‌ای هست همین‌جا بنویس.</small>
-        </span>
-      </label>
-      <div id="note-panel" class="extra-panel">
+    <!-- ============================================================== -->
+    <!-- 6. STEP 5: MANAGER NOTE (CLEAN DIRECT INPUT WITHOUT CHECKBOX)  -->
+    <!-- ============================================================== -->
+    <div class="form-step-card">
+      <div class="step-header">
+        <div class="step-title">
+          <span class="step-badge">۵</span>
+          <span>توضیح برای مدیر</span>
+        </div>
+        <span class="pill pill-slate">اختیاری</span>
+      </div>
+
+      <div style="margin: 0;">
+        <label class="form-label" style="margin-bottom: 8px;">اگر نکته یا توضیحی برای سرپرست خود دارید بنویسید:</label>
         {{ form.employee_note }}
+        {% for error in form.employee_note.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
       </div>
     </div>
-  </section>
 
-  <template id="empty-interval-template">
-    <div class="interval-card" data-form-index="__prefix__">
-      <div class="form-grid interval-grid">
-        <div class="field"><label>لاین مقصد</label>{{ formset.empty_form.department }}</div>
-        <div class="field"><label>ساعت شروع</label>{{ formset.empty_form.start_time }}</div>
-        <div class="field"><label>ساعت پایان</label>{{ formset.empty_form.end_time }}</div>
-        <button type="button" class="remove-interval secondary">حذف</button>
+    <!-- Empty Interval Template for Django FormSet -->
+    <template id="empty-interval-template">
+      <div class="interval-card single-support-box is-active" data-form-index="__prefix__">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <b class="interval-title" style="font-size:13px; color:#1d4ed8;">بازه کمکی</b>
+          <button type="button" class="remove-interval remove-row-btn" title="حذف این بازه">✕</button>
+        </div>
+        <div class="single-support-grid">
+          <div><label class="form-label">لاین مقصد</label>{{ formset.empty_form.department }}</div>
+          <div><label class="form-label">ساعت شروع</label>{{ formset.empty_form.start_time }}</div>
+          <div><label class="form-label">ساعت پایان</label>{{ formset.empty_form.end_time }}</div>
+        </div>
+        <div style="display:none">{{ formset.empty_form.DELETE }}</div>
       </div>
-      <div style="display:none">{{ formset.empty_form.DELETE }}</div>
-    </div>
-  </template>
+    </template>
 
-  {% for error in form.non_field_errors %}<div class="message error">{{ error }}</div>{% endfor %}
+    {% for error in form.non_field_errors %}<div class="message error">{{ error }}</div>{% endfor %}
 
-  <div class="live-summary">
-    <div>
-      <span class="summary-kicker">خلاصه محاسبه خودکار سیستم</span>
-      <strong id="summary-total">تاریخ، شیفت و لاین را انتخاب کن</strong>
-      <small id="summary-breakdown">فعالیتی ثبت نشده</small>
+    <!-- ============================================================== -->
+    <!-- 7. PINNED BOTTOM FLOATING ACTION BAR                           -->
+    <!-- ============================================================== -->
+    <div class="mobile-bottom-bar">
+      <div class="bottom-summary-info">
+        <small>توزیع ساعت شیفت کاری</small>
+        <strong id="bottom-hours-summary">۶.۰ ساعت کامل وسط</strong>
+        <small id="bottom-meta-summary" style="margin-top:2px;">تاریخ و شیفت را مشخص کنید</small>
+      </div>
+
+      <button class="btn btn-primary" type="submit" style="padding: 12px 28px; font-size: 14.5px; font-weight: 800; border-radius: 12px; white-space: nowrap;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        <span>{{ submit|default:"ثبت و ارسال کارکرد" }}</span>
+      </button>
     </div>
-    <button class="primary" type="submit">{{ submit }}</button>
-  </div>
-</form>
-</article>
+  </form>
+</div>
+
 {{ activity_catalog|json_script:"line-activities-data" }}
 {{ activity_values|json_script:"activity-values-data" }}
 
+<!-- ============================================================== -->
+<!-- EXACT 100% PROTOTYPE CSS STYLES (DESKTOP & MOBILE RESPONSIVE)  -->
+<!-- ============================================================== -->
 <style>
-#shift-log-form { direction: rtl; text-align: right; }
-.shift-log-head { margin-bottom: 24px; direction: rtl; text-align: right; }
-.shift-log-head .eyebrow { color: var(--green, #237554); font-weight: 700; font-size: 13px; margin-bottom: 4px; }
-.shift-log-head h1 { font-size: 24px; font-weight: 800; margin: 0 0 6px; }
-.shift-log-head p { color: var(--muted); font-size: 13.5px; margin: 0; max-width: 640px; line-height: 1.7; }
-.shift-log-card { background: #fff; border-radius: 20px; box-shadow: 0 6px 24px rgba(23,33,29,.06); border: 1px solid var(--line); padding: 28px 28px 12px; }
-.shift-block { margin-bottom: 18px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
-.shift-block-head { display: flex; direction: ltr; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; width: 100%; }
-.shift-block-copy { min-width: 0; margin-left: auto; text-align: right; }
-.shift-title { display: flex; direction: ltr; justify-content: flex-end; align-items: center; gap: 8px; width: 100%; margin: 0 0 4px; font-size: 16px; font-weight: 800; text-align: right; }
-.sec-no { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: var(--green2, #dff4e9); color: var(--green, #237554); font-size: 13px; font-weight: 800; flex: 0 0 26px; }
-.sec-icon { font-size: 16px; line-height: 1; }
-.sec-label { text-align: right; }
-.shift-block-head p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.7; text-align: right; }
-.section-badge { background: var(--green2, #dff4e9); color: var(--green, #237554); font-size: 11px; font-weight: 800; border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
-.section-badge.muted { background: #f1f5f9; color: #64748b; }
-.date-pills { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-bottom: 16px; direction: ltr; }
-.date-pill { padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line); background: #f8faf9; font: inherit; cursor: pointer; text-align: right; direction: rtl; min-width: 118px; transition: .15s ease; }
-.date-pill b { display: block; font-size: 13px; font-weight: 800; }
-.date-pill small { display: flex; justify-content: flex-end; gap: 6px; color: var(--muted); font-weight: 600; font-size: 11.5px; margin-top: 3px; direction: rtl; }
-.date-pill:hover { background: #f1f5f9; }
-.date-pill.active { background: var(--green, #237554); color: #fff; border-color: var(--green, #237554); box-shadow: 0 2px 8px rgba(35,117,84,.25); }
-.date-pill.active small { color: #e6f4ea; }
-.custom-date { display: none; max-width: 320px; margin-bottom: 14px; }
-.basics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; direction: rtl; }
-.basics-grid label, .interval-grid label { font-weight: 700; font-size: 13px; display: block; margin-bottom: 6px; text-align: right; }
-.activity-panel { background: #eff6ff; border: 1.5px solid #93c5fd; border-radius: 14px; padding: 14px; }
-.activity-list { display: flex; flex-direction: column; gap: 8px; direction: rtl; }
-.activity-row { display: flex; align-items: center; justify-content: flex-start; gap: 12px; direction: rtl; text-align: right; padding: 12px 14px; border-radius: 12px; background: #fff; border: 1px solid #dbeafe; }
-.activity-row label { margin: 0; font-weight: 700; font-size: 13.5px; text-align: right; }
-.activity-row input[type="number"] { width: 120px; margin-right: auto; text-align: center; font-weight: 800; }
-.activity-check { display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%; direction: rtl; }
-.activity-check input, .extra-toggle input { width: 20px !important; height: 20px; min-width: 20px; padding: 0; accent-color: var(--green, #237554); flex: 0 0 20px; }
-.activity-check b { display: block; font-size: 14px; }
-.activity-check small { display: block; color: #1d4ed8; font-size: 12px; font-weight: 600; margin-top: 2px; }
-.activity-picker { display: grid; grid-template-columns: 1.4fr 1fr auto; gap: 10px; align-items: center; margin-top: 10px; direction: rtl; }
-.activity-picker select, .activity-picker input[type="number"] { margin: 0; }
-.activity-row .remove-activity { margin-right: auto; width: 36px; height: 36px; border-radius: 10px; border: 1px solid #fecaca; background: #fff; color: #b42318; cursor: pointer; }
-.activity-row .activity-check { width: auto; flex: 1; }
-.activity-empty { margin: 0; color: #1e40af; font-size: 13px; line-height: 1.7; text-align: right; }
-.extra-card { border: 1.5px solid #e2e8f0; border-radius: 14px; margin-bottom: 12px; background: #fdfdfd; direction: rtl; text-align: right; }
-.extra-support.is-open { border-color: #86efac; background: #f0fdf4; }
-.extra-overtime.is-open { border-color: #86efac; background: #f7fdf9; }
-.extra-note.is-open { border-color: #fcd34d; background: #fffbeb; }
-.extra-toggle { display: flex; direction: ltr; justify-content: flex-end; gap: 10px; align-items: flex-start; padding: 14px 16px; cursor: pointer; margin: 0; text-align: right; }
-.extra-toggle span { order: 1; flex: 1; text-align: right; }
-.extra-toggle input { order: 2; }
-.extra-toggle b { display: block; font-size: 14.5px; }
-.extra-toggle small { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; line-height: 1.6; }
-.extra-panel { display: none; padding: 0 16px 16px; direction: rtl; text-align: right; }
-.extra-card.is-open .extra-panel { display: block; }
-.ot-hint { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 12.5px; color: #166534; line-height: 1.7; text-align: right; }
-.interval-card { padding: 14px 16px; margin-bottom: 10px; background: #f8faf9; border: 1px dashed var(--green, #237554); border-radius: 12px; direction: rtl; }
-.interval-grid { display: grid; grid-template-columns: 2fr 1fr 1fr auto; align-items: end; gap: 12px; direction: rtl; }
-.remove-interval { height: 42px; color: #b53a3a; border-color: #fca5a5; width: auto; }
-.add-interval-btn { margin-top: 4px; padding: 7px 14px; border-radius: 10px; font-size: 12.5px; }
-.overtime-grid { grid-template-columns: 2fr 1fr 1fr; }
-.live-summary { position: sticky; bottom: 0; margin: 12px -28px 0; background: linear-gradient(120deg, #f0fdf4, #e6f4ea); border: 1.5px solid #bbf7d0; border-radius: 16px; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center; gap: 14px; direction: rtl; text-align: right; box-shadow: 0 4px 16px rgba(35,117,84,.08); }
-.summary-kicker { font-size: 12px; color: var(--muted); font-weight: 700; }
-.live-summary strong { display: block; font-size: 16px; color: var(--green, #237554); margin: 3px 0; font-weight: 800; line-height: 1.7; text-align: right; }
-.live-summary small { font-size: 12.5px; color: #475569; }
-.live-summary .primary { padding: 12px 28px; font-size: 15px; font-weight: 800; border-radius: 12px; white-space: nowrap; box-shadow: 0 4px 14px rgba(35,117,84,.3); }
-@media (max-width: 760px) {
-  .basics-grid, .overtime-grid, .interval-grid { grid-template-columns: 1fr; }
-  .date-pills { display: grid; grid-template-columns: 1fr 1fr; }
-  .date-pill { min-width: 0; width: 100%; }
-  .activity-row { align-items: stretch; flex-direction: column; }
-  .activity-row input[type="number"] { width: 100%; margin-right: 0; }
-  .activity-picker { grid-template-columns: 1fr; }
-  .live-summary { flex-direction: column; align-items: stretch; margin-right: -16px; margin-left: -16px; }
-  .shift-log-card { padding: 18px 16px 8px; }
-  .shift-title { font-size: 15px; }
+/* CSS Tokens */
+:root {
+  --elinor-primary: #186343;
+  --elinor-primary-hover: #124d34;
+  --elinor-primary-light: #eaf5ef;
+  --elinor-primary-border: #bfe3d1;
+  --elinor-primary-ring: rgba(24, 99, 67, 0.15);
+
+  --slate-50: #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-900: #0f172a;
+
+  --emerald-50: #ecfdf5;
+  --emerald-100: #d1fae5;
+  --emerald-600: #059669;
+  --emerald-700: #047857;
+
+  --amber-50: #fffbeb;
+  --amber-100: #fef3c7;
+  --amber-600: #d97706;
+  --amber-700: #b45309;
+
+  --blue-50: #eff6ff;
+  --blue-100: #dbeafe;
+  --blue-600: #2563eb;
+  --blue-700: #1d4ed8;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 22px;
+  --radius-full: 9999px;
+
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 2px 4px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 8px -1px rgba(15, 23, 42, 0.07);
+}
+
+/* Ergonomic Desktop & Mobile Container */
+.proto-mobile-container {
+  max-width: 820px !important;
+  margin: 0 auto !important;
+  padding: 10px 18px 120px !important;
+  direction: rtl !important;
+  text-align: right !important;
+  font-family: inherit !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 16px !important;
+}
+
+#shift-log-form {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 16px !important;
+}
+
+/* Executive Everstage Wallet Card */
+.ever-executive-wallet-card {
+  background: linear-gradient(135deg, #092016 0%, #0f3624 45%, #186343 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 20px !important;
+  color: #fff !important;
+  padding: 22px 26px !important;
+  box-shadow: 0 10px 25px -4px rgba(15, 32, 22, 0.45) !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.ever-executive-wallet-card::before {
+  content: '';
+  position: absolute;
+  top: -30px;
+  left: -30px;
+  width: 160px;
+  height: 160px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.12) 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.wallet-header-flex {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 14px !important;
+  margin-bottom: 16px !important;
+  flex-wrap: wrap !important;
+}
+
+.wallet-user-col {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+.wallet-avatar-box {
+  width: 42px !important;
+  height: 42px !important;
+  border-radius: 12px !important;
+  background: rgba(255, 255, 255, 0.14) !important;
+  border: 1px solid rgba(255, 255, 255, 0.28) !important;
+  display: grid !important;
+  place-items: center !important;
+  font-weight: 800 !important;
+  font-size: 17px !important;
+  color: #fff !important;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.2) !important;
+}
+
+.wallet-name-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex-wrap: wrap !important;
+}
+
+.wallet-emp-name {
+  font-size: 16.5px !important;
+  font-weight: 800 !important;
+  color: #fff !important;
+}
+
+.grade-badge-gold {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.28), rgba(217, 119, 6, 0.22)) !important;
+  color: #fef08a !important;
+  border: 1px solid rgba(254, 240, 138, 0.4) !important;
+  border-radius: var(--radius-full) !important;
+  padding: 3px 10px !important;
+  font-size: 11.5px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.2px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+.wallet-sub-meta {
+  display: block !important;
+  color: rgba(255, 255, 255, 0.72) !important;
+  font-size: 11.5px !important;
+  margin-top: 3px !important;
+}
+
+/* Monthly Medal Chip */
+.monthly-medal-card {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  backdrop-filter: blur(8px) !important;
+  border-radius: 12px !important;
+  padding: 7px 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  text-align: right !important;
+}
+
+.medal-icon-wrap {
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 8px !important;
+  background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%) !important;
+  color: #334155 !important;
+  display: grid !important;
+  place-items: center !important;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.15) !important;
+  flex-shrink: 0 !important;
+}
+
+.medal-tier-title {
+  display: block !important;
+  font-size: 11.5px !important;
+  font-weight: 800 !important;
+  color: #fff !important;
+  line-height: 1.2 !important;
+}
+
+.medal-reward-val {
+  display: block !important;
+  font-size: 10.5px !important;
+  color: #a7f3d0 !important;
+  font-weight: 600 !important;
+  margin-top: 2px !important;
+}
+
+/* Financials Grid */
+.wallet-fin-grid {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: flex-end !important;
+  padding: 14px 0 12px !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+  flex-wrap: wrap !important;
+  gap: 14px !important;
+}
+
+.fin-main-block .fin-label {
+  font-size: 11.5px !important;
+  color: rgba(255, 255, 255, 0.75) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+.fin-amount-row {
+  display: flex !important;
+  align-items: baseline !important;
+  gap: 6px !important;
+  margin-top: 3px !important;
+}
+
+.fin-big-number {
+  font-size: 30px !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.5px !important;
+  color: #fff !important;
+}
+
+.fin-unit {
+  font-size: 13px !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.fin-sub-metrics {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  text-align: left !important;
+}
+
+.fin-pill-stat {
+  background: rgba(0, 0, 0, 0.22) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 5px 10px !important;
+  border-radius: 8px !important;
+  font-size: 11.5px !important;
+}
+
+.fin-pill-stat small {
+  color: rgba(255, 255, 255, 0.65) !important;
+  margin-left: 6px !important;
+}
+
+.fin-pill-stat b {
+  color: #fff !important;
+  font-weight: 700 !important;
+}
+
+/* Target Attainment Mini Track */
+.wallet-attainment-wrap {
+  margin-top: 10px !important;
+  padding-top: 10px !important;
+  border-top: 1px dashed rgba(255, 255, 255, 0.12) !important;
+}
+
+.attainment-label-row {
+  display: flex !important;
+  justify-content: space-between !important;
+  font-size: 11px !important;
+  color: rgba(255, 255, 255, 0.8) !important;
+  margin-bottom: 6px !important;
+}
+
+.attainment-label-row strong {
+  color: #fef08a !important;
+}
+
+.attainment-track-mini {
+  height: 6px !important;
+  background: rgba(0, 0, 0, 0.3) !important;
+  border-radius: var(--radius-full) !important;
+  overflow: hidden !important;
+}
+
+.attainment-fill-mini {
+  height: 100% !important;
+  background: linear-gradient(90deg, #10b981 0%, #34d399 50%, #fef08a 100%) !important;
+  border-radius: var(--radius-full) !important;
+}
+
+/* Form Step Cards */
+.form-step-card {
+  background: #ffffff !important;
+  border: 1.5px solid var(--slate-200) !important;
+  border-radius: var(--radius-lg) !important;
+  padding: 20px 24px !important;
+  box-shadow: var(--shadow-xs) !important;
+  transition: border-color 0.2s !important;
+}
+
+.form-step-card:hover {
+  border-color: #cbd5e1 !important;
+}
+
+.step-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  margin-bottom: 14px !important;
+  padding-bottom: 10px !important;
+  border-bottom: 1px solid var(--slate-100) !important;
+}
+
+.step-title {
+  font-size: 14.5px !important;
+  font-weight: 800 !important;
+  color: var(--slate-900) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  margin: 0 !important;
+}
+
+.step-badge {
+  width: 24px !important;
+  height: 24px !important;
+  border-radius: 8px !important;
+  background: var(--elinor-primary-light) !important;
+  color: var(--elinor-primary) !important;
+  display: grid !important;
+  place-items: center !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+}
+
+.pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 4px 10px !important;
+  border-radius: var(--radius-full) !important;
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+}
+
+.pill-emerald {
+  background: var(--emerald-50) !important;
+  color: var(--emerald-700) !important;
+  border: 1px solid rgba(5, 150, 105, 0.25) !important;
+}
+
+.pill-slate {
+  background: var(--slate-100) !important;
+  color: var(--slate-600) !important;
+  border: 1px solid var(--slate-200) !important;
+}
+
+.pill-blue {
+  background: var(--blue-50) !important;
+  color: var(--blue-700) !important;
+  border: 1px solid rgba(37, 99, 235, 0.25) !important;
+}
+
+/* Date Chips Grid */
+.date-chips-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 10px !important;
+  margin-bottom: 16px !important;
+}
+
+.date-chip {
+  background: var(--slate-50) !important;
+  border: 1.5px solid var(--slate-200) !important;
+  border-radius: var(--radius-md) !important;
+  padding: 10px 12px !important;
+  text-align: center !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.date-chip:hover {
+  border-color: var(--elinor-primary) !important;
+  background: #fff !important;
+}
+
+.date-chip.active {
+  border-color: var(--elinor-primary) !important;
+  background: var(--elinor-primary-light) !important;
+  color: var(--elinor-primary) !important;
+  font-weight: 700 !important;
+  box-shadow: 0 2px 6px rgba(24, 99, 67, 0.15) !important;
+}
+
+.date-chip b {
+  display: block !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+}
+
+.date-chip small {
+  display: block !important;
+  font-size: 11px !important;
+  color: var(--slate-500) !important;
+  margin-top: 2px !important;
+}
+
+.date-chip.active small {
+  color: var(--elinor-primary) !important;
+}
+
+/* Form Fields */
+.fields-row {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 14px !important;
+  margin-bottom: 10px !important;
+}
+
+.form-label {
+  display: block !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  color: var(--slate-700) !important;
+  margin-bottom: 6px !important;
+}
+
+.form-step-card select,
+.form-step-card input[type="text"],
+.form-step-card input[type="time"],
+.form-step-card input[type="number"],
+.form-step-card textarea,
+.form-select, .form-input {
+  width: 100% !important;
+  padding: 9px 14px !important;
+  border: 1.5px solid var(--slate-200) !important;
+  border-radius: 10px !important;
+  font-family: inherit !important;
+  font-size: 13.5px !important;
+  background: #fff !important;
+  color: var(--slate-800) !important;
+  box-sizing: border-box !important;
+  transition: border-color 0.15s !important;
+}
+
+.form-step-card textarea {
+  min-height: 70px !important;
+  resize: vertical !important;
+}
+
+.form-step-card select:focus,
+.form-step-card input:focus,
+.form-step-card textarea:focus {
+  outline: none !important;
+  border-color: var(--elinor-primary) !important;
+  box-shadow: 0 0 0 3px var(--elinor-primary-ring) !important;
+}
+
+/* Single Support Line Card */
+.single-support-box {
+  background: var(--slate-50) !important;
+  border: 1.5px solid var(--slate-200) !important;
+  border-radius: var(--radius-md) !important;
+  padding: 14px 16px !important;
+  transition: all 0.2s !important;
+}
+
+.single-support-box.is-active {
+  background: #ffffff !important;
+  border: 1.5px solid #cbd5e1 !important;
+  border-radius: 14px !important;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04) !important;
+  margin-bottom: 0 !important;
+}
+
+.single-support-grid {
+  display: grid !important;
+  grid-template-columns: 1.5fr 1fr 1fr !important;
+  gap: 12px !important;
+  align-items: end !important;
+}
+
+/* Empty Step Boxes (Step 2, Step 3, Step 4) */
+.empty-step-box {
+  background: #fafbfc !important;
+  border: 1.5px dashed #cbd5e1 !important;
+  border-radius: 14px !important;
+  padding: 24px 20px !important;
+  text-align: center !important;
+  margin: 4px 0 2px !important;
+  transition: all 0.2s ease !important;
+}
+
+.empty-step-box:hover {
+  border-color: #94a3b8 !important;
+  background: #f8fafc !important;
+}
+
+.empty-step-box p {
+  font-size: 13px !important;
+  color: #64748b !important;
+  margin: 0 0 14px 0 !important;
+  font-weight: 500 !important;
+}
+
+.is-hidden { display: none !important; }
+
+/* Buttons */
+.btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  padding: 10px 20px !important;
+  border-radius: var(--radius-md) !important;
+  font-family: inherit !important;
+  font-size: 13.5px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  border: 1px solid transparent !important;
+  transition: all 0.15s ease-in-out !important;
+  text-decoration: none !important;
+}
+
+.btn-primary {
+  background: var(--elinor-primary) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 6px rgba(24, 99, 67, 0.25) !important;
+}
+
+.btn-primary:hover {
+  background: var(--elinor-primary-hover) !important;
+  box-shadow: 0 4px 10px rgba(24, 99, 67, 0.35) !important;
+  transform: translateY(-1px) !important;
+}
+
+.btn-action-add {
+  background: var(--elinor-primary, #186343) !important;
+  color: #ffffff !important;
+  border: 1.5px solid transparent !important;
+  border-radius: 10px !important;
+  padding: 9px 22px !important;
+  font-family: inherit !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  box-shadow: 0 2px 6px rgba(24, 99, 67, 0.22) !important;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  text-decoration: none !important;
+  line-height: 1.4 !important;
+}
+
+.btn-action-add svg {
+  flex-shrink: 0 !important;
+}
+
+.btn-action-add:hover {
+  background: var(--elinor-primary-hover, #124d34) !important;
+  box-shadow: 0 4px 10px rgba(24, 99, 67, 0.32) !important;
+  transform: translateY(-1px) !important;
+}
+
+.btn-action-add:active {
+  transform: translateY(0) !important;
+  box-shadow: 0 1px 3px rgba(24, 99, 67, 0.2) !important;
+}
+
+/* Full width secondary style for "+ افزودن یک مورد دیگر" */
+.btn-action-add.full-width {
+  width: 100% !important;
+  background: #f4f9f6 !important;
+  color: var(--elinor-primary, #186343) !important;
+  border: 1.5px dashed var(--elinor-primary-border, #bfe3d1) !important;
+  box-shadow: none !important;
+  margin-top: 10px !important;
+  padding: 11px 16px !important;
+  border-radius: 12px !important;
+}
+
+.btn-action-add.full-width:hover {
+  background: #eaf5ef !important;
+  border-color: var(--elinor-primary, #186343) !important;
+  color: var(--elinor-primary-hover, #124d34) !important;
+  box-shadow: 0 2px 6px rgba(24, 99, 67, 0.1) !important;
+}
+
+.remove-row-btn {
+  width: 26px !important;
+  height: 26px !important;
+  font-size: 13px !important;
+  border-radius: 6px !important;
+  border: 1px solid #fecaca !important;
+  background: #fff !important;
+  color: #b42318 !important;
+  cursor: pointer !important;
+  display: grid !important;
+  place-items: center !important;
+  transition: all 0.15s !important;
+}
+
+.remove-row-btn:hover {
+  background: #fee2e2 !important;
+}
+
+/* Stepper Widget (Tap + to activate) */
+.stepper-widget {
+  display: inline-flex !important;
+  align-items: center !important;
+  background: var(--slate-50) !important;
+  border: 1.5px solid var(--slate-200) !important;
+  border-radius: var(--radius-sm) !important;
+  overflow: hidden !important;
+  transition: border-color 0.15s !important;
+}
+
+.stepper-btn {
+  width: 32px !important;
+  height: 32px !important;
+  background: #fff !important;
+  border: none !important;
+  font-weight: 800 !important;
+  font-size: 16px !important;
+  color: var(--slate-700) !important;
+  cursor: pointer !important;
+  display: grid !important;
+  place-items: center !important;
+  transition: background 0.1s !important;
+}
+
+.stepper-btn:hover {
+  background: var(--slate-100) !important;
+}
+
+.stepper-number {
+  width: 38px !important;
+  text-align: center !important;
+  font-weight: 800 !important;
+  font-size: 13.5px !important;
+  color: var(--elinor-primary) !important;
+}
+
+/* Checkmark Switch */
+.check-toggle-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 7px 14px !important;
+  border-radius: var(--radius-full) !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  border: 1.5px solid var(--slate-200) !important;
+  background: var(--slate-50) !important;
+  color: var(--slate-500) !important;
+  transition: all 0.15s !important;
+}
+
+.check-toggle-btn.checked {
+  background: var(--emerald-50) !important;
+  border-color: var(--emerald-600) !important;
+  color: var(--emerald-700) !important;
+}
+
+/* Bottom Floating Action Bar */
+.mobile-bottom-bar {
+  position: sticky !important;
+  bottom: 12px !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  backdrop-filter: blur(10px) !important;
+  border: 1px solid var(--slate-200) !important;
+  border-radius: var(--radius-lg) !important;
+  padding: 14px 22px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 14px !important;
+  z-index: 50 !important;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.08) !important;
+}
+
+.bottom-summary-info small {
+  display: block !important;
+  font-size: 11.5px !important;
+  color: var(--slate-400) !important;
+}
+
+.bottom-summary-info strong {
+  font-size: 14px !important;
+  color: var(--slate-900) !important;
+  font-weight: 800 !important;
+}
+
+.ot-hint {
+  background: #f0fdf4 !important;
+  border: 1px solid #bbf7d0 !important;
+  border-radius: 8px !important;
+  padding: 8px 12px !important;
+  font-size: 12px !important;
+  color: #166534 !important;
+}
+
+/* Responsive Overrides */
+@media (max-width: 640px) {
+  .proto-mobile-container {
+    padding: 8px 12px 100px !important;
+  }
+  .date-chips-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  .fields-row {
+    grid-template-columns: 1fr !important;
+  }
+  .single-support-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .mobile-bottom-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
 }
 </style>
 
@@ -263,316 +1096,518 @@ document.addEventListener('DOMContentLoaded', () => {
   const shift = document.getElementById('id_shift');
   const form = document.getElementById('shift-log-form');
 
-  document.querySelectorAll('.date-pill[data-date]').forEach(btn => btn.addEventListener('click', () => {
-    dateInput.value = btn.dataset.date;
-    dateInput.dispatchEvent(new Event('change', { bubbles: true }));
-    custom.style.display = 'none';
+  // --- Date Pills Controller ---
+  document.querySelectorAll('.date-chip[data-date]').forEach(btn => btn.addEventListener('click', () => {
+    if (dateInput) {
+      dateInput.value = btn.dataset.date;
+      dateInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    if (custom) custom.style.display = 'none';
     syncDates();
     updateSummary();
   }));
 
-  document.getElementById('toggle-custom-date').addEventListener('click', () => {
-    custom.style.display = (custom.style.display === 'none' || custom.style.display === '' ? 'block' : 'none');
-    if (custom.style.display === 'block') {
-      dateInput.focus();
-    }
-  });
+  const toggleCustomBtn = document.getElementById('toggle-custom-date');
+  if (toggleCustomBtn && custom) {
+    toggleCustomBtn.addEventListener('click', () => {
+      custom.style.display = (custom.style.display === 'none' || custom.style.display === '' ? 'block' : 'none');
+      if (custom.style.display === 'block' && dateInput) {
+        dateInput.focus();
+      }
+    });
+  }
 
-  dateInput.addEventListener('change', () => { syncDates(); updateSummary(); });
-  dateInput.addEventListener('input', () => { syncDates(); updateSummary(); });
+  if (dateInput) {
+    dateInput.addEventListener('change', () => { syncDates(); updateSummary(); });
+    dateInput.addEventListener('input', () => { syncDates(); updateSummary(); });
+  }
 
   function syncDates() {
+    if (!dateInput) return;
     const val = dateInput.value ? dateInput.value.trim() : '';
     let matched = false;
-    document.querySelectorAll('.date-pill[data-date]').forEach(btn => {
+    document.querySelectorAll('.date-chip[data-date]').forEach(btn => {
       const isMatch = btn.dataset.date === val;
       btn.classList.toggle('active', isMatch);
       if (isMatch) matched = true;
     });
-    const toggleBtn = document.getElementById('toggle-custom-date');
-    if (!matched && val) {
-      toggleBtn.classList.add('active');
-      toggleBtn.innerHTML = `<b>${val}</b>`;
-      custom.style.display = 'block';
-    } else {
-      toggleBtn.classList.remove('active');
-      toggleBtn.innerHTML = '<b>تاریخ دیگر</b>';
+    if (toggleCustomBtn && custom) {
+      if (!matched && val) {
+        toggleCustomBtn.classList.add('active');
+        toggleCustomBtn.innerHTML = `<b>${val}</b><small>انتخاب شده</small>`;
+        custom.style.display = 'block';
+      } else {
+        toggleCustomBtn.classList.remove('active');
+        toggleCustomBtn.innerHTML = '<b>تقویم 📅</b><small>انتخاب روز دیگر</small>';
+      }
     }
   }
   syncDates();
 
-  const list = document.getElementById('interval-list');
+  function timeToMins(t) {
+    if (!t) return null;
+    const parts = t.split(':');
+    if (parts.length < 2) return null;
+    return Number(parts[0]) * 60 + Number(parts[1]);
+  }
+
+  // --- STEP 2: Support Lines Controller ---
+  const supportList = document.getElementById('support-intervals-list');
+  const supportEmptyPrompt = document.getElementById('support-empty-prompt');
+  const addAnotherSupportBtn = document.getElementById('add-another-support-btn');
+  const btnInitialAddSupport = document.getElementById('btn-initial-add-support');
+  const supportCountPill = document.getElementById('support-count-pill');
   const totalForms = document.getElementById('id_support-TOTAL_FORMS');
-  const supportToggle = document.getElementById('support-toggle');
-  const supportCard = supportToggle.closest('.extra-card');
+  const hasSupportLineInput = document.getElementById('id_has_support_line');
 
-  function bindRemove(card) {
-    card.querySelector('.remove-interval').addEventListener('click', () => {
-      const del = card.querySelector('input[name$="-DELETE"]');
-      if (del && card.querySelector('input[name$="-id"]')?.value) {
-        del.checked = true;
-        card.style.display = 'none';
-      } else {
-        card.remove();
+  function bindRemoveInterval(card) {
+    const removeBtn = card.querySelector('.remove-interval');
+    if (removeBtn) {
+      removeBtn.addEventListener('click', () => {
+        const del = card.querySelector('input[name$="-DELETE"]');
+        const existingId = card.querySelector('input[name$="-id"]')?.value;
+        if (del && existingId) {
+          del.checked = true;
+          card.style.display = 'none';
+        } else {
+          card.remove();
+        }
+        syncSupportUIState();
+        updateSummary();
+      });
+    }
+    card.querySelectorAll('select, input[type="time"]').forEach(el => {
+      el.addEventListener('change', updateSummary);
+      el.addEventListener('input', updateSummary);
+    });
+  }
+
+  document.querySelectorAll('.interval-card').forEach(bindRemoveInterval);
+
+  function visibleIntervalCards() {
+    if (!supportList) return [];
+    return Array.from(supportList.querySelectorAll('.interval-card')).filter(card => card.style.display !== 'none');
+  }
+
+  function syncSupportUIState() {
+    const visibleCards = visibleIntervalCards();
+    const count = visibleCards.length;
+
+    visibleCards.forEach((card, idx) => {
+      const title = card.querySelector('.interval-title');
+      if (title) title.textContent = `بازه کمکی ${idx + 1}`;
+    });
+
+    if (count === 0) {
+      if (supportList) supportList.style.display = 'none';
+      if (supportEmptyPrompt) supportEmptyPrompt.style.display = 'block';
+      if (addAnotherSupportBtn) {
+        addAnotherSupportBtn.style.setProperty('display', 'none', 'important');
+        addAnotherSupportBtn.classList.add('is-hidden');
       }
-      updateSummary();
-    });
-    card.querySelectorAll('select,input[type="time"]').forEach(el => el.addEventListener('change', updateSummary));
+      if (supportCountPill) {
+        supportCountPill.textContent = 'بدون لاین کمکی';
+        supportCountPill.className = 'pill pill-slate';
+      }
+    } else {
+      if (supportEmptyPrompt) supportEmptyPrompt.style.display = 'none';
+      if (supportList) supportList.style.display = 'flex';
+      if (addAnotherSupportBtn) {
+        addAnotherSupportBtn.style.setProperty('display', 'inline-flex', 'important');
+        addAnotherSupportBtn.classList.remove('is-hidden');
+      }
+      if (supportCountPill) {
+        supportCountPill.textContent = `${count} بازه کمکی فعال`;
+        supportCountPill.className = 'pill pill-blue';
+      }
+    }
   }
 
-  document.querySelectorAll('.interval-card').forEach(bindRemove);
-
-  function supportHasData() {
-    return [...document.querySelectorAll('.interval-card')].some(card => {
-      if (card.style.display === 'none') return false;
-      const dept = card.querySelector('select');
-      const times = [...card.querySelectorAll('input[type="time"]')];
-      return Boolean(dept?.value) || times.some(item => item.value);
-    });
-  }
-
-  function setSupportOpen(open) {
-    supportToggle.checked = open;
-    supportCard.classList.toggle('is-open', open);
+  function addNewSupportInterval() {
+    if (!totalForms || !supportList) return;
+    const index = Number(totalForms.value);
+    const tmpl = document.getElementById('empty-interval-template');
+    if (!tmpl) return;
+    const html = tmpl.innerHTML.replaceAll('__prefix__', index);
+    supportList.insertAdjacentHTML('beforeend', html);
+    totalForms.value = index + 1;
+    const newCard = supportList.lastElementChild;
+    bindRemoveInterval(newCard);
+    syncSupportUIState();
     updateSummary();
   }
 
-  supportToggle.addEventListener('change', () => setSupportOpen(supportToggle.checked));
-  if (supportHasData()) setSupportOpen(true);
+  if (btnInitialAddSupport) btnInitialAddSupport.addEventListener('click', addNewSupportInterval);
+  if (addAnotherSupportBtn) addAnotherSupportBtn.addEventListener('click', addNewSupportInterval);
 
-  document.getElementById('add-interval').addEventListener('click', () => {
-    const index = Number(totalForms.value);
-    const html = document.getElementById('empty-interval-template').innerHTML.replaceAll('__prefix__', index);
-    list.insertAdjacentHTML('beforeend', html);
-    totalForms.value = index + 1;
-    bindRemove(list.lastElementChild);
-    setSupportOpen(true);
-  });
+  syncSupportUIState();
+  updateSummary();
 
-  function minutes(value) {
-    if (!value) return null;
-    const [h, m] = value.split(':').map(Number);
-    return h * 60 + m;
+  // --- STEP 3: Dynamic Activities Controller ---
+  const activityCatalog = JSON.parse(document.getElementById('line-activities-data')?.textContent || '[]');
+  const activityValues = JSON.parse(document.getElementById('activity-values-data')?.textContent || '{}');
+  const activitiesList = document.getElementById('activities-dynamic-list');
+  const activitiesEmptyPrompt = document.getElementById('activities-empty-prompt');
+  const addAnotherActivityBtn = document.getElementById('add-another-activity-btn');
+  const btnInitialAddActivity = document.getElementById('btn-initial-add-activity');
+  const activitiesSummaryPill = document.getElementById('activities-summary-pill');
+
+  function renderActivityInputSlot(def, currentVal) {
+    if (def.count_method === 'CHECKMARK') {
+      const isChecked = currentVal && (currentVal === '1' || currentVal === 1 || currentVal === true || currentVal === 'true' || currentVal === 'on');
+      return `
+        <button type="button" class="check-toggle-btn ${isChecked ? 'checked' : ''}" style="width:100%; justify-content:center; padding:7px;">
+          <input type="checkbox" name="activity_${def.id}" value="1" ${isChecked ? 'checked' : ''} style="display:none;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          <span class="check-label-text">${isChecked ? 'انجام شد ✓' : 'انجام نشد'}</span>
+        </button>
+      `;
+    } else {
+      const qty = currentVal ? Math.max(1, parseInt(currentVal, 10)) : 1;
+      return `
+        <div class="stepper-widget" style="width:100%; justify-content:space-between;">
+          <button type="button" class="stepper-btn minus-btn">−</button>
+          <span class="stepper-number">${qty} ${def.unit_label || 'عدد'}</span>
+          <input type="hidden" name="activity_${def.id}" value="${qty}" class="stepper-val-hidden">
+          <button type="button" class="stepper-btn plus-btn add-btn">+</button>
+        </div>
+      `;
+    }
   }
 
+  function syncActivitiesUIState() {
+    if (!activitiesList) return;
+    const cards = activitiesList.querySelectorAll('.activity-card');
+    const count = cards.length;
+
+    cards.forEach((card, idx) => {
+      const titleTag = card.querySelector('.act-title-tag');
+      const select = card.querySelector('.activity-select');
+      const def = activityCatalog.find(d => String(d.id) === String(select?.value));
+      if (titleTag && def) {
+        titleTag.textContent = `فعالیت ${idx + 1} (ضریب ${def.unit_multiplier})`;
+      }
+    });
+
+    if (count === 0) {
+      activitiesList.style.display = 'none';
+      if (activitiesEmptyPrompt) activitiesEmptyPrompt.style.display = 'block';
+      if (addAnotherActivityBtn) {
+        addAnotherActivityBtn.style.setProperty('display', 'none', 'important');
+        addAnotherActivityBtn.classList.add('is-hidden');
+      }
+      if (activitiesSummaryPill) {
+        activitiesSummaryPill.textContent = 'بدون فعالیت';
+        activitiesSummaryPill.className = 'pill pill-slate';
+      }
+    } else {
+      if (activitiesEmptyPrompt) activitiesEmptyPrompt.style.display = 'none';
+      activitiesList.style.display = 'flex';
+      if (addAnotherActivityBtn) {
+        addAnotherActivityBtn.style.setProperty('display', 'inline-flex', 'important');
+        addAnotherActivityBtn.classList.remove('is-hidden');
+      }
+      if (activitiesSummaryPill) {
+        activitiesSummaryPill.textContent = `${count} فعالیت ثبت شد`;
+        activitiesSummaryPill.className = 'pill pill-blue';
+      }
+    }
+  }
+
+  function bindActivityCardEvents(card) {
+    const select = card.querySelector('.activity-select');
+    const slot = card.querySelector('.activity-input-slot');
+    const hiddenId = card.querySelector('input[name="activity_ids"]');
+    const removeBtn = card.querySelector('.remove-activity');
+
+    if (select) {
+      select.addEventListener('change', () => {
+        const newDef = activityCatalog.find(d => String(d.id) === String(select.value));
+        if (newDef) {
+          hiddenId.value = newDef.id;
+          slot.innerHTML = renderActivityInputSlot(newDef, newDef.count_method === 'CHECKMARK' ? '1' : 1);
+          bindSlotControls(slot, newDef);
+          syncActivitiesUIState();
+          updateSummary();
+        }
+      });
+    }
+
+    if (removeBtn) {
+      removeBtn.addEventListener('click', () => {
+        card.remove();
+        syncActivitiesUIState();
+        updateSummary();
+      });
+    }
+
+    const initialDef = activityCatalog.find(d => String(d.id) === String(select?.value));
+    if (initialDef) {
+      bindSlotControls(slot, initialDef);
+    }
+  }
+
+  function bindSlotControls(slot, def) {
+    if (!slot) return;
+
+    const minus = slot.querySelector('.minus-btn');
+    const plus = slot.querySelector('.plus-btn');
+    const numDisplay = slot.querySelector('.stepper-number');
+    const hiddenInput = slot.querySelector('.stepper-val-hidden');
+
+    if (minus && plus && numDisplay && hiddenInput) {
+      minus.addEventListener('click', () => {
+        let curr = parseInt(hiddenInput.value, 10) || 1;
+        curr = Math.max(1, curr - 1);
+        hiddenInput.value = curr;
+        numDisplay.textContent = `${curr} ${def?.unit_label || 'عدد'}`;
+        updateSummary();
+      });
+      plus.addEventListener('click', () => {
+        let curr = parseInt(hiddenInput.value, 10) || 0;
+        curr += 1;
+        hiddenInput.value = curr;
+        numDisplay.textContent = `${curr} ${def?.unit_label || 'عدد'}`;
+        updateSummary();
+      });
+    }
+
+    const checkBtn = slot.querySelector('.check-toggle-btn');
+    if (checkBtn) {
+      const chk = checkBtn.querySelector('input[type="checkbox"]');
+      const lbl = checkBtn.querySelector('.check-label-text');
+      checkBtn.addEventListener('click', (e) => {
+        chk.checked = !chk.checked;
+        checkBtn.classList.toggle('checked', chk.checked);
+        if (lbl) lbl.textContent = chk.checked ? 'انجام شد ✓' : 'انجام نشد';
+        updateSummary();
+      });
+    }
+  }
+
+  function addActivityCard(initialDefId, initialVal) {
+    if (!activityCatalog.length || !activitiesList) return;
+
+    let def = activityCatalog.find(d => String(d.id) === String(initialDefId));
+    if (!def) {
+      const usedIds = new Set(Array.from(activitiesList.querySelectorAll('.activity-select')).map(s => String(s.value)));
+      def = activityCatalog.find(d => !usedIds.has(String(d.id))) || activityCatalog[0];
+    }
+
+    const val = initialVal !== undefined ? initialVal : (def.count_method === 'CHECKMARK' ? '1' : 1);
+
+    const optionsHtml = activityCatalog.map(item => `
+      <option value="${item.id}" ${String(item.id) === String(def.id) ? 'selected' : ''}>
+        ${item.title} (${item.count_method === 'QUANTITY' ? 'تعدادی' : 'چک‌لیست'})
+      </option>
+    `).join('');
+
+    const card = document.createElement('div');
+    card.className = 'single-support-box is-active activity-card';
+    card.innerHTML = `
+      <input type="hidden" name="activity_ids" value="${def.id}">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <b class="act-title-tag" style="font-size:13px; color:var(--elinor-primary, #186343);">فعالیت (ضریب ${def.unit_multiplier})</b>
+        <button type="button" class="remove-activity remove-row-btn" title="حذف این فعالیت">✕</button>
+      </div>
+      <div style="display:grid; grid-template-columns:1.6fr 1fr; gap:12px; align-items:end;">
+        <div>
+          <label class="form-label">عنوان فعالیت</label>
+          <select class="form-select activity-select">
+            ${optionsHtml}
+          </select>
+        </div>
+        <div>
+          <label class="form-label">مقدار / وضعیت</label>
+          <div class="activity-input-slot">
+            ${renderActivityInputSlot(def, val)}
+          </div>
+        </div>
+      </div>
+    `;
+
+    activitiesList.appendChild(card);
+    bindActivityCardEvents(card);
+    syncActivitiesUIState();
+    updateSummary();
+  }
+
+  if (btnInitialAddActivity) btnInitialAddActivity.addEventListener('click', () => addActivityCard());
+  if (addAnotherActivityBtn) addAnotherActivityBtn.addEventListener('click', () => addActivityCard());
+
+  if (activityValues && Object.keys(activityValues).length > 0) {
+    Object.entries(activityValues).forEach(([id, val]) => {
+      addActivityCard(id, val);
+    });
+  }
+  syncActivitiesUIState();
+
+  // --- STEP 4: Overtime Controller (Symmetrical to Support Line) ---
   const otCheckbox = document.getElementById('id_has_overtime');
-  const otCard = otCheckbox.closest('.extra-card');
-  const otBadge = document.getElementById('overtime-duration-badge');
+  const otActiveCard = document.getElementById('overtime-active-card');
+  const otEmptyPrompt = document.getElementById('overtime-empty-prompt');
+  const btnAddOvertime = document.getElementById('btn-add-overtime');
+  const btnRemoveOvertime = document.getElementById('btn-remove-overtime');
+  const otCountPill = document.getElementById('overtime-count-pill');
   const otStart = document.getElementById('id_overtime_start_time');
   const otEnd = document.getElementById('id_overtime_end_time');
   const otDept = document.getElementById('id_overtime_department');
 
-  function setOvertimeOpen(open) {
-    otCheckbox.checked = open;
-    otCard.classList.toggle('is-open', open);
-    if (open && !otDept.value && mainDept.value) otDept.value = mainDept.value;
-    updateSummary();
+  function syncOvertimeUIState() {
+    const hasData = otCheckbox && otCheckbox.checked;
+    if (hasData) {
+      if (otEmptyPrompt) otEmptyPrompt.style.display = 'none';
+      if (otActiveCard) otActiveCard.style.display = 'block';
+      if (otCountPill) {
+        otCountPill.textContent = 'اضافه‌کاری فعال';
+        otCountPill.className = 'pill pill-amber';
+      }
+    } else {
+      if (otActiveCard) otActiveCard.style.display = 'none';
+      if (otEmptyPrompt) otEmptyPrompt.style.display = 'block';
+      if (otCountPill) {
+        otCountPill.textContent = 'بدون اضافه‌کاری';
+        otCountPill.className = 'pill pill-slate';
+      }
+    }
   }
 
-  otCheckbox.addEventListener('change', () => setOvertimeOpen(otCheckbox.checked));
-  if (otCheckbox.checked) otCard.classList.add('is-open');
+  if (btnAddOvertime) {
+    btnAddOvertime.addEventListener('click', () => {
+      if (otCheckbox) otCheckbox.checked = true;
+      if (otDept && !otDept.value && mainDept?.value) {
+        otDept.value = mainDept.value;
+      }
+      syncOvertimeUIState();
+      updateSummary();
+    });
+  }
+
+  if (btnRemoveOvertime) {
+    btnRemoveOvertime.addEventListener('click', () => {
+      if (otCheckbox) otCheckbox.checked = false;
+      if (otStart) otStart.value = '';
+      if (otEnd) otEnd.value = '';
+      syncOvertimeUIState();
+      updateSummary();
+    });
+  }
+
   [otStart, otEnd, otDept].forEach(el => {
     if (!el) return;
     el.addEventListener('input', updateSummary);
     el.addEventListener('change', updateSummary);
   });
 
-  const noteToggle = document.getElementById('note-toggle');
-  const noteCard = noteToggle.closest('.extra-card');
-  const noteInput = document.getElementById('id_employee_note');
-  function setNoteOpen(open) {
-    noteToggle.checked = open;
-    noteCard.classList.toggle('is-open', open);
+  // Check initial overtime state
+  if ((otCheckbox && otCheckbox.checked) || (otStart && otStart.value && otEnd && otEnd.value)) {
+    if (otCheckbox) otCheckbox.checked = true;
+    syncOvertimeUIState();
   }
-  noteToggle.addEventListener('change', () => setNoteOpen(noteToggle.checked));
-  if (noteInput && noteInput.value.trim()) setNoteOpen(true);
 
   function getOvertimeHours() {
-    if (!otCheckbox.checked || !otStart.value || !otEnd.value) return 0;
-    const start = minutes(otStart.value);
-    let end = minutes(otEnd.value);
+    if (!otCheckbox || !otCheckbox.checked || !otStart || !otEnd || !otStart.value || !otEnd.value) return 0;
+    const start = timeToMins(otStart.value);
+    let end = timeToMins(otEnd.value);
     if (start === null || end === null) return 0;
     if (end <= start) end += 1440;
     return Math.max(0, (end - start) / 60);
   }
 
-  const activityCatalog = JSON.parse(document.getElementById('line-activities-data').textContent);
-  const activityValues = JSON.parse(document.getElementById('activity-values-data').textContent);
-  const activitiesFields = document.getElementById('line-activities-fields');
-  const activitySelect = document.getElementById('activity-select');
-  const valueSlot = document.getElementById('activity-value-slot');
-  const confirmBtn = document.getElementById('confirm-activity');
-  const addedIds = new Set(Object.keys(activityValues).map(String));
-
-  function catalogById(id) {
-    return activityCatalog.find(item => String(item.id) === String(id));
-  }
-
-  function refreshSelect() {
-    const current = activitySelect.value;
-    activitySelect.innerHTML = '<option value="">انتخاب فعالیت…</option>';
-    activityCatalog.forEach(def => {
-      if (addedIds.has(String(def.id))) return;
-      const option = document.createElement('option');
-      option.value = def.id;
-      option.textContent = def.title;
-      activitySelect.appendChild(option);
-    });
-    if (current && !addedIds.has(String(current))) activitySelect.value = current;
-  }
-
-  function addActivityRow(def, value) {
-    addedIds.add(String(def.id));
-    const row = document.createElement('div');
-    row.className = 'activity-row';
-    row.dataset.id = def.id;
-    if (def.count_method === 'CHECKMARK') {
-      const checked = Number(value) > 0 ? 'checked' : '';
-      row.innerHTML = `
-        <input type="hidden" name="activity_ids" value="${def.id}">
-        <label class="activity-check">
-          <input type="checkbox" name="activity_${def.id}" value="1" ${checked}>
-          <span><b>${def.title}</b><small>انجام دادم</small></span>
-        </label>
-        <button type="button" class="remove-activity" aria-label="حذف">×</button>
-      `;
-    } else {
-      row.innerHTML = `
-        <input type="hidden" name="activity_ids" value="${def.id}">
-        <label for="activity-input-${def.id}">${def.title}</label>
-        <input id="activity-input-${def.id}" type="number" min="1" step="1" name="activity_${def.id}" value="${value || ''}" inputmode="numeric" placeholder="تعداد">
-        <button type="button" class="remove-activity" aria-label="حذف">×</button>
-      `;
-    }
-    activitiesFields.appendChild(row);
-    refreshSelect();
-    updateSummary();
-  }
-
-  activitySelect.addEventListener('change', () => {
-    valueSlot.innerHTML = '';
-    confirmBtn.hidden = true;
-    const def = catalogById(activitySelect.value);
-    if (!def) return;
-    if (def.count_method === 'CHECKMARK') {
-      valueSlot.innerHTML = `<label class="activity-check"><input type="checkbox" id="draft-activity" value="1"><span><b>انجام دادم</b><small>${def.title}</small></span></label>`;
-    } else {
-      valueSlot.innerHTML = `<input id="draft-activity" type="number" min="1" step="1" inputmode="numeric" placeholder="تعداد ${def.title}">`;
-    }
-    confirmBtn.hidden = false;
-  });
-
-  confirmBtn.addEventListener('click', () => {
-    const def = catalogById(activitySelect.value);
-    if (!def) return;
-    const draft = document.getElementById('draft-activity');
-    if (def.count_method === 'CHECKMARK') {
-      if (!draft?.checked) return;
-      addActivityRow(def, 1);
-    } else {
-      const qty = Number(draft?.value || 0);
-      if (qty <= 0) return;
-      addActivityRow(def, qty);
-    }
-    activitySelect.value = '';
-    valueSlot.innerHTML = '';
-    confirmBtn.hidden = true;
-  });
-
-  activitiesFields.addEventListener('click', (event) => {
-    const button = event.target.closest('.remove-activity');
-    if (!button) return;
-    const row = button.closest('.activity-row');
-    addedIds.delete(String(row.dataset.id));
-    row.remove();
-    refreshSelect();
-    updateSummary();
-  });
-
-  Object.entries(activityValues).forEach(([id, value]) => {
-    const def = catalogById(id);
-    if (def && Number(value) > 0) addActivityRow(def, value);
-  });
-  refreshSelect();
-
-  activitiesFields.addEventListener('input', updateSummary);
-  activitiesFields.addEventListener('change', updateSummary);
-
-  function filledActivityCount() {
-    let count = 0;
-    activitiesFields.querySelectorAll('input[type="checkbox"]').forEach(el => { if (el.checked) count += 1; });
-    activitiesFields.querySelectorAll('input[type="number"]').forEach(el => { if (Number(el.value) > 0) count += 1; });
-    return count;
-  }
-
+  // --- Live Summary Calculation ---
   function updateSummary() {
     let standardHours = Number('{{ standard_hours|default:"6.0" }}');
-    let support = 0;
-    const selectedShift = shift.options[shift.selectedIndex];
-    if (selectedShift && selectedShift.textContent) {
-      const match = selectedShift.textContent.match(/(\d{1,2}):?(\d{2})?\s*تا\s*(\d{1,2}):?(\d{2})?/);
-      if (match) {
-        let start = Number(match[1]) * 60 + Number(match[2] || 0);
-        let end = Number(match[3]) * 60 + Number(match[4] || 0);
-        if (end <= start) end += 1440;
-        standardHours = (end - start) / 60;
+    if (shift && shift.selectedIndex >= 0) {
+      const selectedShift = shift.options[shift.selectedIndex];
+      if (selectedShift && selectedShift.textContent) {
+        const match = selectedShift.textContent.match(/(\d{1,2}):?(\d{2})?\s*تا\s*(\d{1,2}):?(\d{2})?/);
+        if (match) {
+          let s = Number(match[1]) * 60 + Number(match[2] || 0);
+          let e = Number(match[3]) * 60 + Number(match[4] || 0);
+          if (e <= s) e += 1440;
+          standardHours = (e - s) / 60;
+        }
       }
     }
 
-    if (supportToggle.checked) {
-      document.querySelectorAll('.interval-card').forEach(card => {
-        if (card.style.display === 'none') return;
-        const times = card.querySelectorAll('input[type="time"]');
-        const start = minutes(times[0]?.value);
-        let end = minutes(times[1]?.value);
-        if (start !== null && end !== null) {
-          if (end <= start) end += 1440;
-          support += (end - start) / 60;
+    let supportHours = 0;
+    const cards = visibleIntervalCards();
+    cards.forEach(card => {
+      const times = card.querySelectorAll('input[type="time"]');
+      if (times.length >= 2) {
+        const s = timeToMins(times[0]?.value);
+        let e = timeToMins(times[1]?.value);
+        if (s !== null && e !== null) {
+          if (e <= s) e += 1440;
+          supportHours += (e - s) / 60;
         }
-      });
-    }
+      }
+    });
 
     const overtimeHours = getOvertimeHours();
-    if (otCheckbox.checked && overtimeHours > 0) {
-      otBadge.textContent = `${overtimeHours.toFixed(1)} ساعت اضافه‌کاری`;
-    } else {
-      otBadge.textContent = 'ساعت اضافه‌کاری جدا از شیفت اصلی ثبت می‌شود.';
+    if (otCountPill && otCheckbox && otCheckbox.checked && overtimeHours > 0) {
+      otCountPill.textContent = `${overtimeHours.toFixed(1)} ساعت اضافه‌کاری`;
     }
 
-    const mainHours = Math.max(0, standardHours - support);
-    const totalHours = mainHours + support + overtimeHours;
-    const lineName = mainDept.options[mainDept.selectedIndex]?.text || 'لاین انتخاب نشده';
-    const shiftName = (selectedShift?.text || 'شیفت').split('(')[0].trim();
-    const dateText = dateInput.value?.trim() || 'بدون تاریخ';
-    const done = filledActivityCount();
+    const mainHours = Math.max(0, standardHours - supportHours);
+    const mainDeptName = (mainDept && mainDept.selectedIndex >= 0) ? (mainDept.options[mainDept.selectedIndex]?.text || 'لاین اصلی') : 'لاین اصلی';
+    const shiftName = (shift && shift.selectedIndex >= 0) ? (shift.options[shift.selectedIndex]?.text || 'شیفت').split('(')[0].trim() : 'شیفت';
+    const dateText = (dateInput && dateInput.value) ? dateInput.value.trim() : 'امروز';
 
-    document.getElementById('summary-total').textContent = `${dateText} · ${shiftName} · ${lineName}`;
-    const bits = [`${totalHours.toFixed(1)} ساعت حضور`];
-    if (activityCatalog.length) bits.unshift(done ? `${done} فعالیت ثبت شد` : 'فعالیتی ثبت نشده');
-    document.getElementById('summary-breakdown').textContent = bits.join(' · ');
-    document.getElementById('id_has_support_line').checked = supportToggle.checked && support > 0;
+    // Pinned distribution breakdown
+    const hoursSummaryEl = document.getElementById('bottom-hours-summary');
+    if (hoursSummaryEl) {
+      let text = '';
+      const fmtNum = (n) => (Math.round(n * 100) / 100).toString();
+      if (supportHours > 0) {
+        text = `${fmtNum(mainHours)} ساعت ${mainDeptName} + ${fmtNum(supportHours)} ساعت کمکی`;
+      } else {
+        text = `${fmtNum(standardHours)} ساعت کامل ${mainDeptName}`;
+      }
+      if (overtimeHours > 0) {
+        text += ` + ${fmtNum(overtimeHours)} ساعت اضافه‌کاری`;
+      }
+      hoursSummaryEl.textContent = text;
+    }
+
+    // Pinned meta breakdown
+    const metaSummaryEl = document.getElementById('bottom-meta-summary');
+    const actCount = activitiesList ? activitiesList.querySelectorAll('.activity-card').length : 0;
+    if (metaSummaryEl) {
+      const actBit = actCount > 0 ? `${actCount} فعالیت ثبت شد` : 'بدون فعالیت';
+      metaSummaryEl.textContent = `${dateText} · ${shiftName} · ${actBit}`;
+    }
+
+    // Sync has_support_line
+    if (hasSupportLineInput) {
+      hasSupportLineInput.checked = (cards.length > 0 && supportHours > 0);
+    }
   }
 
-  form.addEventListener('submit', () => {
-    if (!supportToggle.checked) {
-      document.querySelectorAll('.interval-card').forEach(card => {
-        const del = card.querySelector('input[name$="-DELETE"]');
-        const existingId = card.querySelector('input[name$="-id"]')?.value;
-        if (del && existingId) del.checked = true;
-        else if (!existingId) card.remove();
-      });
-    }
-    if (!noteToggle.checked && noteInput) noteInput.value = '';
-  });
+  if (shift) shift.addEventListener('change', updateSummary);
+  if (mainDept) {
+    mainDept.addEventListener('change', () => {
+      if (otCheckbox && otCheckbox.checked && otDept && (!otDept.value || otDept.value === mainDept.dataset.lastMain)) {
+        otDept.value = mainDept.value;
+      }
+      mainDept.dataset.lastMain = mainDept.value;
+      updateSummary();
+    });
+  }
 
-  shift.addEventListener('change', updateSummary);
-  mainDept.addEventListener('change', () => {
-    if (otCheckbox.checked && (!otDept.value || otDept.value === mainDept.dataset.lastMain)) {
-      otDept.value = mainDept.value;
-    }
-    mainDept.dataset.lastMain = mainDept.value;
-    updateSummary();
-  });
+  if (form) {
+    form.addEventListener('submit', () => {
+      const visible = visibleIntervalCards();
+      if (visible.length === 0) {
+        document.querySelectorAll('.interval-card').forEach(card => {
+          const del = card.querySelector('input[name$="-DELETE"]');
+          const existingId = card.querySelector('input[name$="-id"]')?.value;
+          if (del && existingId) del.checked = true;
+          else if (!existingId) card.remove();
+        });
+      }
+    });
+  }
 
   updateSummary();
 });

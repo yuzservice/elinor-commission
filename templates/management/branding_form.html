@@ -34,6 +34,15 @@
                 {% for error in form.primary_color.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
             </div>
 
+            <div class="field span-2" style="background: #f8fafc; border: 1.5px solid var(--line); border-radius: 12px; padding: 16px;">
+                <label style="font-weight: 800; font-size: 14px; margin-bottom: 6px;">{{ form.overtime_hourly_multiplier.label }}</label>
+                <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                    <div style="width: 140px;">{{ form.overtime_hourly_multiplier }}</div>
+                    <small style="color: var(--muted); line-height: 1.6; font-size: 12.5px;">{{ form.overtime_hourly_multiplier.help_text }}</small>
+                </div>
+                {% for error in form.overtime_hourly_multiplier.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </div>
+
             <div class="field" style="border: 1px dashed var(--line); border-radius: 12px; padding: 16px; background: #fafcfa;">
                 <label style="font-weight: 700; margin-bottom: 8px;">لوگوی سامانه (در بالای منو و صفحه ورود)</label>
                 {% if settings.logo %}

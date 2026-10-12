@@ -95,7 +95,11 @@
     <div><span>تاریخ ثبت</span><b>{{ log.date|jalali }}</b></div>
     <div><span>شیفت</span><b>{{ log.shift.title }}</b></div>
     <div><span>لاین اصلی</span><b>{{ log.main_department.name }}</b></div>
-    {% if calc.main_info.activity_details %}
+    {% if calc.activity_info.activity_details %}
+    {% for act in calc.activity_info.activity_details %}
+    <div><span>{{ act.title }}</span><b>{% if act.count_method == 'CHECKMARK' %}{% if act.quantity %}✓ انجام شد{% else %}—{% endif %} → {{ act.performance_units }} واحد عملکرد{% else %}{{ act.quantity|persian_digits }} → {{ act.performance_units }} واحد عملکرد{% endif %}</b></div>
+    {% endfor %}
+    {% elif calc.main_info.activity_details %}
     {% for act in calc.main_info.activity_details %}
     <div><span>{{ act.title }}</span><b>{% if act.count_method == 'CHECKMARK' %}{% if act.quantity %}✓ انجام شد{% else %}—{% endif %} → {{ act.performance_units }} واحد عملکرد{% else %}{{ act.quantity|persian_digits }} → {{ act.performance_units }} واحد عملکرد{% endif %}</b></div>
     {% endfor %}

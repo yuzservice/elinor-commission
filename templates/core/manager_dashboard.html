@@ -25,7 +25,7 @@
   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
     <div style="display: flex; align-items: center; gap: 8px;">
       <span style="font-size: 20px;">🔔</span>
-      <h3 style="margin: 0; font-size: 15.5px; font-weight: 800; color: #92400e;">کارهای نیازمند اقدام شما</h3>
+      <h3 class="attention-heading">کارهای نیازمند اقدام شما</h3>
     </div>
     {% if pending_count > 0 %}
     <a href="{% url 'management_shift_log_reviews' %}" class="primary" style="padding: 6px 14px; font-size: 12.5px; background: #d97706; border-color: #b45309;">
@@ -73,12 +73,12 @@
   </article>
   <article style="border-radius: 14px;">
     <span style="font-size: 12.5px; color: var(--muted);">💵 کل پورسانت محاسبه‌شده ماه</span>
-    <strong style="font-size: 24px; margin-top: 4px;">{{ total_commission|persian_int }} <small style="font-size: 13px; font-weight: 500; color: var(--muted); display: inline;">ریال</small></strong>
+    <strong style="font-size: 24px; margin-top: 4px;">{{ total_commission|persian_int }} <small style="font-size: 13px; font-weight: 500; color: var(--muted); display: inline;">تومان</small></strong>
     <small style="color: var(--muted); font-size: 11.5px;"><a href="{% url 'management_commission_report' %}" style="color: var(--green, #237554); text-decoration: underline;">گزارش جامع تسویه ←</a></small>
   </article>
   <article style="border-radius: 14px;">
     <span style="font-size: 12.5px; color: var(--muted);">🏦 پورسانت‌های واریزشده (فریز)</span>
-    <strong style="font-size: 24px; margin-top: 4px; color: #1e40af;">{{ total_wallet_balance|persian_int }} <small style="font-size: 13px; font-weight: 500; color: var(--muted); display: inline;">ریال</small></strong>
+    <strong style="font-size: 24px; margin-top: 4px; color: #1e40af;">{{ total_wallet_balance|persian_int }} <small style="font-size: 13px; font-weight: 500; color: var(--muted); display: inline;">تومان</small></strong>
     <small style="color: var(--muted); font-size: 11.5px;">تأییدشده و غیرقابل تغییر</small>
   </article>
   <article style="border-radius: 14px;">
@@ -184,14 +184,14 @@
           </td>
           <td>
             {% if row.deduction > 0 %}
-            <span style="color: #b91c1c; font-weight: 700; font-size: 13px;">- {{ row.deduction|persian_int }} ریال</span>
+            <span style="color: #b91c1c; font-weight: 700; font-size: 13px;">- {{ row.deduction|persian_int }} تومان</span>
             {% else %}
             <span style="color: var(--muted); font-size: 12px;">۰</span>
             {% endif %}
           </td>
           <td>
             <strong class="money-positive" style="font-size: 15px; color: var(--green, #237554);">
-              {{ row.commission|persian_int }} ریال
+              {{ row.commission|persian_int }} تومان
             </strong>
           </td>
         </tr>

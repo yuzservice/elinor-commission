@@ -1,236 +1,375 @@
 {% extends 'base.html' %}
-{% load persian %}
-{% block title %}داشبورد من | {{ system_settings.panel_name|default:'سامانه عملکرد' }}{% endblock %}
+{% load persian static %}
+
+{% block title %}میز کار و کارنامه من | {{ system_settings.panel_name|default:'الینور بوتیک' }}{% endblock %}
+
 {% block content %}
-<div class="page-head" style="margin-bottom: 22px;">
-    <div>
-        <p class="eyebrow" style="color: var(--green, #237554); font-weight: 700; font-size: 13px; margin-bottom: 4px;">ماه جاری ({{ start|jalali }})</p>
-        <h1 style="font-size: 24px; font-weight: 800; margin: 0 0 4px;">سلام {{ employee.first_name }} جان 👋</h1>
-        <p style="color: var(--muted); font-size: 13.5px; margin: 0;">وضعیت درآمد روزانه، واریزی‌های قطعی به کیف پول، کارکرد شیفت‌ها و تارگت لاین کاری شما</p>
-    </div>
-    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-        <a class="primary" href="{% url 'shift_log_create' %}" style="padding: 10px 18px; border-radius: 12px; font-weight: 800; box-shadow: 0 4px 14px rgba(35,117,84,0.25);">⏱️ ثبت کارکرد شیفت امروز</a>
-        <a class="secondary" href="{% url 'my_commission_report' %}" style="padding: 10px 16px; border-radius: 12px;">💰 کارنامه و واریزها</a>
-    </div>
-</div>
+<div class="dash-container">
 
-<!-- کارت هوشمند وضعیت شیفت امروز -->
-{% if not today_log %}
-<div style="background: linear-gradient(135deg, #fefce8 0%, #fef3c7 100%); border: 1.5px solid #fcd34d; border-radius: 16px; padding: 18px 24px; margin-bottom: 22px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; box-shadow: 0 4px 16px rgba(245,158,11,0.08);">
-    <div style="display: flex; align-items: center; gap: 14px;">
-        <div style="width: 48px; height: 48px; border-radius: 12px; background: #fff; display: grid; place-items: center; font-size: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-            ⏰
-        </div>
-        <div>
-            <h3 style="margin: 0 0 3px; font-size: 16px; font-weight: 800; color: #92400e;">هنوز کارکرد شیفت امروزت را ثبت نکرده‌ای!</h3>
-            <p style="margin: 0; font-size: 12.5px; color: #b45309;">برای محاسبه دقیق پورسانت و سهم فروش امروزت، همین حالا ساعت حضور در لاین اصلی و کمکی را ثبت کن.</p>
-        </div>
-    </div>
-    <a href="{% url 'shift_log_create' %}" class="primary" style="padding: 9px 20px; font-size: 13.5px; font-weight: 800; background: #d97706; border-color: #b45309; border-radius: 10px;">
-        ثبت کارکرد امروز 🚀
-    </a>
-</div>
-{% else %}
-<div style="background: #f0fdf4; border: 1.5px solid #bbf7d0; border-radius: 16px; padding: 16px 22px; margin-bottom: 22px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-    <div style="display: flex; align-items: center; gap: 12px;">
-        <span style="font-size: 22px;">✅</span>
-        <div>
-            <strong style="font-size: 14.5px; color: #166534; display: block;">
-                کارکرد امروز شما برای {{ today_log.shift.title }} با موفقیت ثبت شده است.
-            </strong>
-            <small style="color: #15803d; font-size: 12px;">
-                لاین اصلی: <b>{{ today_log.main_department.name }}</b> ({{ today_log.main_hours|persian_digits }} ساعت)
-                {% if today_log.has_support_line %} · کمکی: <b>{{ today_log.support_hours|persian_digits }} ساعت</b>{% endif %}
-                {% if today_log.has_overtime %} · اضافه‌کاری: <b style="color: #166534;">{{ today_log.overtime_hours|persian_digits }} ساعت</b>{% endif %}
-                · وضعیت: 
-                {% if today_log.status == 'APPROVED' %}
-                <span class="status approved" style="font-size: 11px; padding: 2px 7px;">تأیید و واریز شد</span>
-                {% elif today_log.status == 'REJECTED' %}
-                <span class="status rejected" style="font-size: 11px; padding: 2px 7px;">رد شد</span>
-                {% else %}
-                <span class="status pending" style="font-size: 11px; padding: 2px 7px;">در انتظار تایید مدیر</span>
-                {% endif %}
-            </small>
-        </div>
-    </div>
-    <div style="display: flex; gap: 8px;">
-        <a href="{% url 'shift_log_detail' today_log.pk %}" class="table-link" style="padding: 6px 12px; font-size: 12px; background: #fff; border: 1px solid #bbf7d0; border-radius: 8px; color: #166534;">
-            مشاهده جزئیات
-        </a>
-        {% if today_log.status == 'PENDING' %}
-        <a href="{% url 'shift_log_edit' today_log.pk %}" class="table-link" style="padding: 6px 12px; font-size: 12px; background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; color: #15803d;">
-            ویرایش
-        </a>
-        {% endif %}
-    </div>
-</div>
-{% endif %}
-
-<!-- Hero Card: کیف پول درآمد قطعی واریزشده -->
-<div class="hero" style="background: linear-gradient(125deg, #14532d 0%, #15803d 60%, #166534 100%); border-radius: 20px; padding: 28px 32px; box-shadow: 0 8px 26px rgba(20,83,45,0.22); margin-bottom: 22px;">
-    <div>
-        <span style="font-size: 13.5px; opacity: 0.9; display: flex; align-items: center; gap: 6px;">
-            <span>🏦</span> موجودی درآمد قطعی و واریزشده (کیف پول من)
+  <!-- ============================================================== -->
+  <!-- 1. EMPLOYEE HEADER                                            -->
+  <!-- ============================================================== -->
+  <header class="dash-command-header" aria-label="سربرگ میز کار کارمند">
+    <div class="dash-header-main">
+      <div class="dash-kicker-wrap">
+        <span class="dash-kicker">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          میز کار مشاور فروش الینور
         </span>
-        <strong style="font-size: 40px; font-weight: 800; margin: 6px 0 4px; display: block; letter-spacing: -0.5px;">
-            {{ metrics.wallet_balance|persian_int }} <small style="font-size: 17px; font-weight: 500; opacity: 0.9;">ریال</small>
-        </strong>
-        <small style="opacity: 0.85; font-size: 12.5px;">مجموع پورسانت‌های تأیید و فریز شده ماه جاری که به حساب واریز می‌گردد</small>
+        <span class="dash-header-badge">
+          گرید {{ employee.commission_level.code }}
+          · {{ employee.primary_department.name|default:'لاین اصلی' }}
+        </span>
+      </div>
+      <h1 class="dash-heading">سلام، {{ employee.first_name }}</h1>
+      <p class="dash-subheading">کارنامه پورسانت، وضعیت حضور در شیفت‌ها و اهداف فروش در <strong>{{ selected_month_label|default:'ماه جاری' }}</strong></p>
     </div>
-    <div class="hero-meta" style="gap: 16px;">
-        <div style="background: rgba(255,255,255,0.1); padding: 10px 14px; border-radius: 12px;">
-            <p style="font-size: 11.5px; opacity: 0.85; margin: 0 0 2px;">سهم کالای فروخته‌شده</p>
-            <b style="font-size: 16px;">{{ metrics.total_sales_units_share|persian_digits }} کالا</b>
-        </div>
-        <div style="background: rgba(255,255,255,0.1); padding: 10px 14px; border-radius: 12px;">
-            <p style="font-size: 11.5px; opacity: 0.85; margin: 0 0 2px;">در انتظار تأیید مدیر</p>
-            <b style="color: #fef08a; font-size: 16px;">{{ metrics.pending_commission|persian_int }} ریال</b>
-        </div>
-        <div style="background: rgba(255,255,255,0.1); padding: 10px 14px; border-radius: 12px;">
-            <p style="font-size: 11.5px; opacity: 0.85; margin: 0 0 2px;">گرید و لاین اصلی</p>
-            <b style="font-size: 15px;">گرید {{ employee.commission_level.code }} · {{ employee.primary_department.name|default:'لاین اصلی' }}</b>
-        </div>
+
+    <div class="dash-header-actions">
+      <a class="dash-btn-primary" href="{% url 'shift_log_create' %}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+        <span>ثبت کارکرد امروز</span>
+      </a>
+      <a class="dash-btn-secondary" href="{% url 'my_commission_report' %}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+        <span>کارنامه مالی و واریزها</span>
+      </a>
     </div>
-</div>
+  </header>
 
-<!-- Stats Grid -->
-<div class="stats" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 22px;">
-    <article style="border-radius: 14px;">
-        <span style="font-size: 12px; color: var(--muted);">🛍️ سهم از فروش کل لاین‌ها</span>
-        <strong style="font-size: 22px; color: var(--green, #237554); margin-top: 4px;">{{ metrics.total_sales_units_share|persian_digits }}</strong>
-        <small style="font-size: 11.5px; color: var(--muted);">{{ metrics.confirmed_units_share|default:metrics.total_sales_units_share|persian_digits }} کالا تأییدشده</small>
-    </article>
-    <article style="border-radius: 14px;">
-        <span style="font-size: 12px; color: var(--muted);">💵 پورسانت ناخالص کل ماه</span>
-        <strong style="font-size: 22px; margin-top: 4px;">{{ metrics.gross_sales_commission|persian_int }} ریال</strong>
-        <small style="font-size: 11.5px; color: var(--muted);">بر اساس نرخ لاین و گرید {{ employee.commission_level.code }}</small>
-    </article>
-    <article class="{% if metrics.deduction > 0 %}danger{% endif %}" style="border-radius: 14px;">
-        <span style="font-size: 12px; color: var(--muted);">⚠️ کسورات تخلفات</span>
-        <strong style="font-size: 22px; margin-top: 4px; {% if metrics.deduction > 0 %}color: #b91c1c;{% endif %}">{{ metrics.deduction|persian_int }} ریال</strong>
-        <small style="font-size: 11.5px;">{{ metrics.violation_points|persian_digits }} امتیاز تخلف ثبت‌شده</small>
-    </article>
-    <article style="border-radius: 14px;">
-        <span style="font-size: 12px; color: var(--muted);">⏳ کارکرد در انتظار بررسی</span>
-        <strong style="font-size: 22px; margin-top: 4px; color: #d97706;">{{ metrics.pending_commission|persian_int }} ریال</strong>
-        <small style="font-size: 11.5px; color: var(--muted);">{{ metrics.pending_shift_logs_count|default:'۰'|persian_digits }} شیفت در انتظار تأیید</small>
-    </article>
-</div>
+  <!-- ============================================================== -->
+  <!-- 2. TODAY'S SHIFT STATUS BANNER                                 -->
+  <!-- ============================================================== -->
+  {% if not today_log %}
+  <section class="dash-status-banner warning" aria-label="وضعیت شیفت امروز">
+    <div class="banner-body">
+      <div class="banner-icon-circle warn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+      </div>
+      <div>
+        <h3>کارکرد شیفت امروز هنوز ثبت نشده است</h3>
+        <p>برای محاسبه دقیق پورسانت فروش امروز، ساعت حضور در لاین اصلی و در صورت وجود لاین کمکی یا اضافه‌کاری را ثبت نمایید.</p>
+      </div>
+    </div>
+    <div class="banner-action">
+      <a href="{% url 'shift_log_create' %}" class="dash-btn-banner-action warn">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <span>ثبت فوری کارکرد امروز</span>
+      </a>
+    </div>
+  </section>
+  {% else %}
+  <section class="dash-status-banner success" aria-label="وضعیت شیفت امروز">
+    <div class="banner-body">
+      <div class="banner-icon-circle success">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      </div>
+      <div>
+        <h3>کارکرد امروز برای {{ today_log.shift.title }} ثبت شد</h3>
+        <p>
+          لاین اصلی: <strong>{{ today_log.main_department.name }}</strong> ({{ today_log.main_hours|persian_digits }} ساعت)
+          {% if today_log.has_support_line %} · کمکی: <strong>{{ today_log.support_hours|persian_digits }} ساعت</strong>{% endif %}
+          {% if today_log.has_overtime %} · اضافه‌کاری: <strong>{{ today_log.overtime_hours|persian_digits }} ساعت</strong>{% endif %}
+          ·
+          {% if today_log.status == 'APPROVED' %}
+          <span class="status-pill-sub approved">تأیید و فریز شد</span>
+          {% elif today_log.status == 'REJECTED' %}
+          <span class="status-pill-sub rejected">رد شد</span>
+          {% else %}
+          <span class="status-pill-sub pending">در صف بررسی مدیر</span>
+          {% endif %}
+        </p>
+      </div>
+    </div>
+    <div class="banner-action">
+      <a href="{% url 'shift_log_detail' today_log.pk %}" class="dash-btn-banner-action ghost">
+        <span>مشاهده جزئیات</span>
+      </a>
+      {% if today_log.status == 'PENDING' %}
+      <a href="{% url 'shift_log_edit' today_log.pk %}" class="dash-btn-banner-action edit">
+        <span>ویرایش</span>
+      </a>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
 
-<!-- Live Line Target Banner (هدف‌گذاری ماهانه لاین) -->
-{% if metrics.line_target_result %}
-<article class="card" style="border: 2px solid {% if metrics.line_target_result.achieved_level == 3 %}#f5c451{% else %}#bbf7d0{% endif %}; background: #f0fdf4; border-radius: 16px; padding: 22px; margin-bottom: 22px;">
-    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+  <!-- ============================================================== -->
+  <!-- 3. EXECUTIVE EVERSTAGE WALLET CARD (MEDAL, GRADE & ATTAINMENT)  -->
+  <!-- ============================================================== -->
+  <section class="ever-executive-wallet-card" aria-label="موجودی درآمد و کیف پول">
+    <!-- Top Row: User + Grade + Medal -->
+    <div class="wallet-header-flex">
+      <div class="wallet-user-col">
+        <div class="wallet-avatar-box">{{ employee.first_name|slice:":1"|default:"ع" }}</div>
         <div>
-            <span class="badge" style="background: var(--green, #237554); color: #fff; font-weight: 700; margin-bottom: 6px; padding: 4px 10px; border-radius: 6px;">
-                🎯 تارگت عملکرد لاین {{ employee.primary_department.name }}
-            </span>
-            <h3 style="margin: 6px 0 3px; font-size: 16.5px; font-weight: 800; color: var(--ink);">
-                {{ metrics.line_target_result.achieved_title }}
-            </h3>
-            <p style="margin: 0; color: var(--muted); font-size: 12.5px;">
-                عملکرد ماه شما: <strong>{{ metrics.line_target_result.units_sold|persian_digits }} کالا</strong>
-                {% if metrics.line_target_result.next_target_units %}· هدف بعدی: <strong>{{ metrics.line_target_result.next_target_title }} — {{ metrics.line_target_result.next_target_units|persian_digits }} کالا</strong>{% endif %}
-            </p>
+          <div class="wallet-name-row">
+            <strong class="wallet-emp-name">{{ employee.full_name }}</strong>
+            <span class="grade-badge-gold">گرید {{ employee.commission_level.code }} ★ (ضریب عملکرد {{ employee.commission_level.performance_rate|persian_digits }})</span>
+          </div>
+          <small class="wallet-sub-meta">کد پرسنلی: {{ employee.employee_code|persian_digits }} · لاین تخصصی: {{ employee.primary_department.name|default:'لاین اصلی' }}</small>
         </div>
-        <div style="text-align: left;">
-            <b style="font-size: 26px; color: var(--green, #237554); font-weight: 900;">{{ metrics.line_target_result.progress_percent }}٪</b>
-            {% if metrics.line_target_result.reward_amount > 0 %}.
-            <small style="display: block; color: #15803d; font-weight: 800; font-size: 13px; margin-top: 2px;">
-                🎁 پاداش تارگت: {{ metrics.line_target_result.reward_amount|persian_int }} ریال
-            </small>
-            {% endif %}
+      </div>
+
+      <!-- Monthly Medal Chip -->
+      <div class="monthly-medal-card">
+        <div class="medal-icon-wrap" title="{{ metrics.line_target_result.achieved_title|default:'تارگت ماهانه' }}">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="12" cy="8" r="7"></circle>
+            <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+          </svg>
         </div>
-    </div>
-
-    <div class="progress" style="height: 12px; background: #dcfce7; border-radius: 10px; overflow: hidden;">
-        <i style="width: {{ metrics.line_target_result.progress_percent }}%; background: {% if metrics.line_target_result.achieved_level == 3 %}#d4a017{% else %}var(--green, #237554){% endif %}; border-radius: 10px; display: block; height: 100%; transition: width 0.4s ease;"></i>
-    </div>
-    <p style="margin: 12px 0 0; font-size: 12px; color: #166534; display: flex; gap: 16px; flex-wrap: wrap;">
-        <span>🥉 {{ metrics.line_target_result.bronze_units|persian_digits }} کالا / {{ metrics.line_target_result.bronze_reward|persian_int }} ریال</span>
-        <span>🥈 {{ metrics.line_target_result.silver_units|persian_digits }} کالا / {{ metrics.line_target_result.silver_reward|persian_int }} ریال</span>
-        <span>🥇 {{ metrics.line_target_result.gold_units|persian_digits }} کالا / {{ metrics.line_target_result.gold_reward|persian_int }} ریال</span>
-    </p>
-</article>
-{% endif %}
-
-<!-- جدول آخرین کارکردهای شیفت کارمند -->
-<article class="card" style="border-radius: 16px;">
-    <div class="card-head" style="display: flex; justify-content: space-between; align-items: center; padding: 18px 22px; border-bottom: 1px solid var(--line);">
         <div>
-            <h2 style="font-size: 16px; font-weight: 800; margin: 0 0 2px;">⏱️ آخرین کارکردهای ثبت‌شده شما</h2>
-            <p style="color: var(--muted); font-size: 12px; margin: 0;">نمایش ساعات حضور، اضافه‌کاری و وضعیت تایید مدیر</p>
+          <span class="medal-tier-title">{{ metrics.line_target_result.achieved_title|default:'مدال ماهانه لاین' }}</span>
+          {% if metrics.line_target_result and metrics.line_target_result.reward_amount > 0 %}
+          <small class="medal-reward-val">+{{ metrics.line_target_result.reward_amount|persian_int }} تومان پاداش</small>
+          {% else %}
+          <small class="medal-reward-val" style="color:#fef08a;">در مسیر ارتقای سطح</small>
+          {% endif %}
         </div>
-        <a href="{% url 'shift_logs' %}" style="font-size: 12.5px; font-weight: 700; color: var(--green, #237554);">مشاهده همه کارکردها ←</a>
+      </div>
     </div>
-    <div class="table-wrap" style="padding: 0 10px 10px;">
-        <table>
-            <thead>
-                <tr>
-                    <th style="width: 12%;">تاریخ</th>
-                    <th style="width: 13%;">شیفت</th>
-                    <th style="width: 16%;">لاین اصلی</th>
-                    <th style="width: 15%;">لاین‌های کمکی</th>
-                    <th style="width: 14%;">اضافه‌کاری</th>
-                    <th style="width: 10%;">سهم کالا</th>
-                    <th style="width: 12%;">پورسانت</th>
-                    <th style="width: 8%;">وضعیت</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for d in metrics.shift_log_details|slice:":6" %}
-                <tr>
-                    <td><b>{{ d.shift_log.date|jalali }}</b></td>
-                    <td>{{ d.shift_log.shift.title }}</td>
-                    <td>
-                        <b>{{ d.shift_log.main_department.name }}</b>
-                        <small style="display: block; color: var(--muted); font-size: 11.5px;">{{ d.shift_log.main_hours|persian_digits }} ساعت</small>
-                    </td>
-                    <td>
-                        {% if d.shift_log.has_support_line %}
-                        <span>{{ d.shift_log.support_departments_display }}</span>
-                        <small style="display: block; color: var(--muted); font-size: 11.5px;">{{ d.shift_log.support_hours|persian_digits }} ساعت</small>
-                        {% else %}
-                        <span style="color: var(--muted);">—</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if d.shift_log.has_overtime %}
-                        <span class="badge" style="background: #dcfce7; color: #15803d; font-size: 11px; font-weight: 700;">
-                            ⚡ {{ d.shift_log.overtime_hours|persian_digits }}h
-                        </span>
-                        <small style="display: block; color: var(--muted); font-size: 11px;">{{ d.shift_log.overtime_department.name|default:d.shift_log.main_department.name }}</small>
-                        {% else %}
-                        <span style="color: var(--muted);">—</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <span class="badge" style="background: var(--green2); color: var(--green); font-weight: 800; font-size: 13px;">
-                            {{ d.total_units_share|persian_digits }}
-                        </span>
-                    </td>
-                    <td>
-                        <strong style="color: var(--green, #237554); font-size: 14px;">
-                            {{ d.total_commission|persian_int }} ریال
-                        </strong>
-                    </td>
-                    <td>
-                        {% if d.shift_log.status == 'APPROVED' %}
-                        <span class="status approved" style="font-size: 11px; padding: 2px 7px;">تأیید شد</span>
-                        {% elif d.shift_log.status == 'REJECTED' %}
-                        <span class="status rejected" style="font-size: 11px; padding: 2px 7px;">رد شد</span>
-                        {% else %}
-                        <span class="status pending" style="font-size: 11px; padding: 2px 7px;">در انتظار</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="8" class="empty">هنوز کارکردی در این ماه ثبت نکرده‌اید. با زدن دکمه «ثبت کارکرد شیفت امروز» شروع کنید.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+
+    <!-- Middle: Financials -->
+    <div class="wallet-fin-grid">
+      <div class="fin-main-block">
+        <span class="fin-label">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          پورسانت قطعی (فریز و واریزشده)
+        </span>
+        <div class="fin-amount-row">
+          <strong class="fin-big-number">{{ metrics.wallet_balance|persian_int }}</strong>
+          <span class="fin-unit">تومان</span>
+        </div>
+      </div>
+
+      <div class="fin-sub-metrics">
+        <div class="fin-pill-stat">
+          <small>در صف تایید سرپرست:</small>
+          <b style="color:#fef08a;">{{ metrics.pending_commission|persian_int }} تومان</b>
+        </div>
+        <div class="fin-pill-stat">
+          <small>سهم فروش ماه:</small>
+          <b>{{ metrics.total_sales_units_share|persian_digits }} قلم کالا</b>
+        </div>
+      </div>
     </div>
-</article>
+
+    <!-- Bottom: Attainment Milestone Track -->
+    {% if metrics.line_target_result %}
+    <div class="wallet-attainment-wrap">
+      <div class="attainment-label-row">
+        <span>رسیدن به <strong>{{ metrics.line_target_result.next_target_title|default:'تارگت ماه' }}</strong></span>
+        <span>{{ metrics.line_target_result.progress_percent|persian_digits }}٪ {% if metrics.line_target_result.next_target_units %}({{ metrics.line_target_result.next_target_units|persian_digits }} کالا تا هدف بعدی){% endif %}</span>
+      </div>
+      <div class="attainment-track-mini">
+        <div class="attainment-fill-mini" style="width: {{ metrics.line_target_result.progress_percent }}%;"></div>
+      </div>
+    </div>
+    {% endif %}
+  </section>
+
+  <!-- ============================================================== -->
+  <!-- 4. EMPLOYEE BENTO STATS                                        -->
+  <!-- ============================================================== -->
+  <section class="dash-bento-section emp-stats" aria-label="شاخص‌های عملکرد ماه">
+    <article class="dash-bento-card">
+      <div class="bento-card-top">
+        <div class="bento-tag emerald">سهم فروش</div>
+      </div>
+      <span class="stat-caption">سهم از کل فروش لاین‌ها</span>
+      <div class="stat-val-mid">
+        <strong>{{ metrics.total_sales_units_share|persian_digits }}</strong>
+        <span class="unit">کالا</span>
+      </div>
+      <p class="stat-sub">{{ metrics.confirmed_units_share|default:metrics.total_sales_units_share|persian_digits }} کالا تایید شده</p>
+    </article>
+
+    <article class="dash-bento-card">
+      <div class="bento-card-top">
+        <div class="bento-tag gold">پورسانت ناخالص</div>
+      </div>
+      <span class="stat-caption">پورسانت ناخالص کل ماه</span>
+      <div class="stat-val-mid">
+        <strong>{{ metrics.gross_sales_commission|persian_int }}</strong>
+        <span class="unit">تومان</span>
+      </div>
+      <p class="stat-sub">بر اساس نرخ گرید {{ employee.commission_level.code }}</p>
+    </article>
+
+    <article class="dash-bento-card {% if metrics.deduction > 0 %}is-danger{% endif %}">
+      <div class="bento-card-top">
+        <div class="bento-tag {% if metrics.deduction > 0 %}danger{% else %}slate{% endif %}">کسورات</div>
+      </div>
+      <span class="stat-caption">کسورات انضباطی</span>
+      <div class="stat-val-mid {% if metrics.deduction > 0 %}danger-text{% endif %}">
+        <strong>{{ metrics.deduction|persian_int }}</strong>
+        <span class="unit">تومان</span>
+      </div>
+      <p class="stat-sub">{{ metrics.violation_points|persian_digits }} امتیاز تخلف ثبت‌شده</p>
+    </article>
+
+    <article class="dash-bento-card">
+      <div class="bento-card-top">
+        <div class="bento-tag slate">در صف بررسی</div>
+      </div>
+      <span class="stat-caption">کارکرد در انتظار بررسی</span>
+      <div class="stat-val-mid warn-text">
+        <strong>{{ metrics.pending_commission|persian_int }}</strong>
+        <span class="unit">تومان</span>
+      </div>
+      <p class="stat-sub">{{ metrics.pending_shift_logs_count|default:'۰'|persian_digits }} شیفت در انتظار تأیید</p>
+    </article>
+  </section>
+
+  <!-- ============================================================== -->
+  <!-- 5. LINE TARGET PROGRESS                                        -->
+  <!-- ============================================================== -->
+  {% if metrics.line_target_result %}
+  <section class="dash-section-card target-progress-card" aria-label="تارگت لاین">
+    <div class="target-card-top">
+      <div>
+        <span class="dash-kicker" style="background:var(--elinor-emerald-soft);color:var(--elinor-emerald);">
+          تارگت لاین {{ employee.primary_department.name }}
+        </span>
+        <h3 class="target-title">{{ metrics.line_target_result.achieved_title }}</h3>
+        <p class="target-desc">
+          عملکرد ثبت‌شده این ماه: <strong>{{ metrics.line_target_result.units_sold|persian_digits }} کالا</strong>
+          {% if metrics.line_target_result.next_target_units %}
+          · هدف بعدی: <strong>{{ metrics.line_target_result.next_target_title }} — {{ metrics.line_target_result.next_target_units|persian_digits }} کالا</strong>
+          {% endif %}
+        </p>
+      </div>
+      <div class="target-score-box">
+        <span class="target-percent">{{ metrics.line_target_result.progress_percent }}٪</span>
+        {% if metrics.line_target_result.reward_amount > 0 %}
+        <span class="target-reward-pill">پاداش: {{ metrics.line_target_result.reward_amount|persian_int }} تومان</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="target-progress-track" role="progressbar" aria-valuenow="{{ metrics.line_target_result.progress_percent }}" aria-valuemin="0" aria-valuemax="100">
+      <div class="target-progress-fill" style="width:{{ metrics.line_target_result.progress_percent }}%;"></div>
+    </div>
+
+    <div class="target-tiers-bar">
+      <div class="tier-chip bronze">
+        <span>برنز:</span> <b>{{ metrics.line_target_result.bronze_units|persian_digits }} کالا</b>
+        <small>({{ metrics.line_target_result.bronze_reward|persian_int }} تومان)</small>
+      </div>
+      <div class="tier-chip silver">
+        <span>نقره:</span> <b>{{ metrics.line_target_result.silver_units|persian_digits }} کالا</b>
+        <small>({{ metrics.line_target_result.silver_reward|persian_int }} تومان)</small>
+      </div>
+      <div class="tier-chip gold">
+        <span>طلا:</span> <b>{{ metrics.line_target_result.gold_units|persian_digits }} کالا</b>
+        <small>({{ metrics.line_target_result.gold_reward|persian_int }} تومان)</small>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  <!-- ============================================================== -->
+  <!-- 6. RECENT SHIFT LOGS TABLE                                     -->
+  <!-- ============================================================== -->
+  <section class="dash-section-card dash-table-card" aria-label="آخرین کارکردهای ثبت‌شده">
+    <div class="section-card-header">
+      <div>
+        <h2>آخرین کارکردهای ثبت‌شده شما</h2>
+        <p>ساعات حضور، کار در لاین کمکی، اضافه‌کاری و وضعیت تایید سرپرست</p>
+      </div>
+      <div class="section-actions">
+        <a href="{% url 'shift_logs' %}" class="dash-ghost-btn">
+          <span>مشاهده تمامی کارکردها</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        </a>
+      </div>
+    </div>
+
+    <div class="table-wrap dash-table-wrapper">
+      <table class="cards-mobile dash-leaderboard-table">
+        <thead>
+          <tr>
+            <th>تاریخ</th>
+            <th>شیفت</th>
+            <th>لاین اصلی</th>
+            <th>لاین کمکی</th>
+            <th>اضافه‌کاری</th>
+            <th>سهم کالا</th>
+            <th>پورسانت</th>
+            <th>وضعیت تایید</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in metrics.shift_log_details|slice:":6" %}
+          <tr>
+            <td data-label="تاریخ" class="card-title">
+              <strong>{{ d.shift_log.date|jalali }}</strong>
+            </td>
+            <td data-label="شیفت">
+              <span class="dash-shift-tag">{{ d.shift_log.shift.title }}</span>
+            </td>
+            <td data-label="لاین اصلی">
+              <div class="cell-data">
+                <b>{{ d.shift_log.main_department.name }}</b>
+                <small class="meta-sub">({{ d.shift_log.main_hours|persian_digits }} ساعت)</small>
+              </div>
+            </td>
+            <td data-label="لاین کمکی">
+              <div class="cell-data">
+                {% if d.shift_log.has_support_line %}
+                <span>{{ d.shift_log.support_departments_display }}</span>
+                <small class="meta-sub">({{ d.shift_log.support_hours|persian_digits }} ساعت)</small>
+                {% else %}
+                <span style="color:var(--elinor-slate-400);">—</span>
+                {% endif %}
+              </div>
+            </td>
+            <td data-label="اضافه‌کاری">
+              <div class="cell-data">
+                {% if d.shift_log.has_overtime %}
+                <span class="dash-tag overtime">{{ d.shift_log.overtime_hours|persian_digits }} ساعت</span>
+                <small class="meta-sub">{{ d.shift_log.overtime_department.name|default:d.shift_log.main_department.name }}</small>
+                {% else %}
+                <span style="color:var(--elinor-slate-400);">—</span>
+                {% endif %}
+              </div>
+            </td>
+            <td data-label="سهم کالا">
+              <div class="cell-data">
+                <strong style="color:var(--elinor-emerald);">{{ d.total_units_share|persian_digits }}</strong>
+              </div>
+            </td>
+            <td data-label="پورسانت">
+              <div class="cell-data">
+                <strong style="color:var(--elinor-emerald);">{{ d.total_commission|persian_int }} تومان</strong>
+              </div>
+            </td>
+            <td data-label="وضعیت">
+              <div class="cell-data">
+                {% if d.shift_log.status == 'APPROVED' %}
+                <span class="status-pill-sub approved">تأیید شد</span>
+                {% elif d.shift_log.status == 'REJECTED' %}
+                <span class="status-pill-sub rejected">رد شد</span>
+                {% else %}
+                <span class="status-pill-sub pending">در انتظار</span>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="8" class="empty-table-state">
+              <div class="empty-box">
+                <p>هنوز کارکردی در این ماه ثبت نشده است.</p>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</div>
 {% endblock %}

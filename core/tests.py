@@ -730,6 +730,43 @@ class SupportLineIntervalTests(BaseEmployeeTest):
         self.client.post(reverse("shift_log_edit", args=[log.pk]), data)
         self.assertTrue(AuditLog.objects.filter(action="support_interval.deleted").exists())
 
+    def test_branch_manager_can_edit_employee_shift_log(self):
+        self.client.force_login(self.employee_user)
+        self.client.post(reverse("shift_log_create"), self.payload([(self.shirt, "10:30", "11:30")]))
+        log = DailyShiftLog.objects.get()
+        interval = log.support_intervals.get()
+
+        # Manager of the same branch edits the employee's shift log
+        self.client.force_login(self.manager_user)
+        data = self.payload([(self.accessories, "13:00", "14:30")])
+        data.update({"support-INITIAL_FORMS": "1", "support-0-id": str(interval.pk)})
+        response = self.client.post(reverse("shift_log_edit", args=[log.pk]), data)
+        self.assertEqual(response.status_code, 302)
+        log.refresh_from_db()
+        self.assertEqual(log.support_intervals.first().department, self.accessories)
+
+    def test_other_branch_manager_cannot_edit_shift_log(self):
+        branch2 = Branch.objects.create(name="شعبه بابل")
+        manager2_user = User.objects.create_user("manager2", password="StrongPass123!")
+        Employee.objects.create(
+            user=manager2_user,
+            employee_code="M002",
+            first_name="مدیر ۲",
+            last_name="شعبه بابل",
+            mobile="09120000099",
+            role=Employee.Role.MANAGER,
+            commission_level=self.level_a,
+            branch=branch2,
+        )
+        self.client.force_login(self.employee_user)
+        self.client.post(reverse("shift_log_create"), self.payload([(self.shirt, "10:30", "11:30")]))
+        log = DailyShiftLog.objects.get()
+
+        self.client.force_login(manager2_user)
+        data = self.payload([(self.shirt, "10:30", "12:00")])
+        response = self.client.post(reverse("shift_log_edit", args=[log.pk]), data)
+        self.assertEqual(response.status_code, 403)
+
 class LineShiftPerformanceTests(BaseEmployeeTest):
     def setUp(self):
         super().setUp()
@@ -1019,22 +1056,22 @@ class LineCommissionEngineTests(BaseEmployeeTest):
         )
 
         # Check metrics for Emp1 (Fatemeh equivalent)
-        # Morning: 6 / (6+6) * 60 = 30 units
-        # Overtime in Evening: 2 / (6 + 2) * 40 = 10 units
-        # Total for Emp1: 30 + 10 = 40 units
+        # Morning base share: 6 / (6+6) * 60 = 30 units
+        # Overtime bonus: 30 units * (2 hours * 0.20) = 12.0 units
+        # Total for Emp1: 30 + 12 = 42 units
         c1 = calculate_single_shift_log(log1)
-        self.assertEqual(c1["total_units_share"], Decimal("40.0"))
+        self.assertEqual(c1["total_units_share"], Decimal("42.0"))
         self.assertIsNotNone(c1["overtime_info"])
-        self.assertEqual(c1["overtime_info"]["share_units"], Decimal("10.0"))
+        self.assertEqual(c1["overtime_info"]["share_units"], Decimal("12.0"))
         self.assertEqual(c1["main_info"]["share_units"], Decimal("30.0"))
 
-        # Check metrics for Emp2 (Mahsa equivalent - Morning only): 30 units
+        # Check metrics for Emp2 (Morning only): 30 units
         m2 = employee_metrics(self.emp2, date(2026, 8, 30), date(2026, 8, 30))
         self.assertEqual(m2["total_sales_units_share"], Decimal("30.0"))
 
-        # Check metrics for emp_eve (Evening only): 6 / 8 * 40 = 30 units
+        # Check metrics for emp_eve (Evening only): 100% of evening sales (40 units) without dilution
         m_eve = employee_metrics(emp_eve, date(2026, 8, 30), date(2026, 8, 30))
-        self.assertEqual(m_eve["total_sales_units_share"], Decimal("30.0"))
+        self.assertEqual(m_eve["total_sales_units_share"], Decimal("40.0"))
 
     def test_manager_can_update_rates_and_targets_from_department_detail(self):
         self.client.force_login(self.manager_user)
@@ -1128,11 +1165,20 @@ class LineCommissionEngineTests(BaseEmployeeTest):
             quantity=5,
             unit_multiplier_snapshot=returns.unit_multiplier,
         )
+        LineShiftPerformance.objects.create(
+            date=date(2026, 9, 1),
+            shift=self.shift_morning,
+            department=warehouse,
+            sold_units=60,
+            recorded_by=self.manager_user,
+        )
 
         calc = calculate_single_shift_log(log)
-        self.assertTrue(calc["main_info"]["is_activity_based"])
-        self.assertEqual(calc["main_info"]["share_units"], Decimal("40.0"))
-        self.assertEqual(calc["total_commission"], 40000)
+        self.assertFalse(calc["main_info"]["is_activity_based"])
+        self.assertEqual(calc["main_info"]["share_units"], Decimal("60.0"))
+        self.assertEqual(calc["activity_info"]["share_units"], Decimal("40.0"))
+        self.assertEqual(calc["total_units_share"], Decimal("100.0"))
+        self.assertEqual(calc["total_commission"], 100000)
 
     def test_checkmark_activity_counts_as_one_unit_when_done(self):
         dept = Department.objects.create(name="لاین تیک")
@@ -1164,9 +1210,10 @@ class LineCommissionEngineTests(BaseEmployeeTest):
         )
 
         calc = calculate_single_shift_log(log)
-        self.assertEqual(calc["main_info"]["share_units"], Decimal("3.0"))
+        self.assertEqual(calc["main_info"]["share_units"], Decimal("0.0"))
+        self.assertEqual(calc["activity_info"]["share_units"], Decimal("3.0"))
         self.assertEqual(calc["total_commission"], 1500)
-        self.assertEqual(calc["main_info"]["activity_details"][0]["count_method"], "CHECKMARK")
+        self.assertEqual(calc["activity_info"]["activity_details"][0]["count_method"], "CHECKMARK")
 
 class CommissionTests(BaseEmployeeTest):
     def test_violation_is_deduction(self):
@@ -1574,6 +1621,10 @@ class ShiftLineLeaveTests(BaseEmployeeTest):
         self.assertContains(page, "ثبت مرخصی")
         self.assertContains(page, "فاطمه ظاهری")
         self.assertNotContains(page, "تمام کارمندان این شیفت")
+        html = page.content.decode()
+        self.assertNotIn("leave-gap-list", html)
+        self.assertEqual(html.count("ثبت مرخصی"), 2)
+        self.assertEqual(html.count("leave-action-cell"), 2)
         marked = self.client.post(reverse("management_shift_log_mark_leave"), {
             "employee_id": fatemeh.pk,
             "shift_id": self.shift_morning.pk,
@@ -1588,3 +1639,41 @@ class ShiftLineLeaveTests(BaseEmployeeTest):
         self.assertEqual(approved.status, DailyShiftLog.Status.APPROVED)
         self.assertEqual(approved.frozen_total_units_share, Decimal("40.0"))
         self.assertFalse(DailyShiftLog.objects.filter(employee=warehouse_emp, status=DailyShiftLog.Status.LEAVE).exists())
+
+    def test_other_shift_log_covers_default_shift_without_leave(self):
+        from core.services import approve_shift_log
+
+        self.employee.primary_department = self.department
+        self.employee.default_shift = self.shift_morning
+        self.employee.save()
+
+        evening_user = User.objects.create_user("evening_swap", password="StrongPass123!")
+        swapped = Employee.objects.create(
+            user=evening_user, employee_code="SW100", first_name="فاطمه", last_name="عصر",
+            mobile="09120000883", commission_level=self.level_a, primary_department=self.department,
+            default_shift=self.shift_morning,
+        )
+        day = date(2026, 8, 30)
+        morning = DailyShiftLog.objects.create(
+            employee=self.employee, date=day, shift=self.shift_morning,
+            main_department=self.department, main_hours=Decimal("6.0"),
+        )
+        DailyShiftLog.objects.create(
+            employee=swapped, date=day, shift=self.shift_evening,
+            main_department=self.department, main_hours=Decimal("6.0"),
+        )
+        LineShiftPerformance.objects.create(
+            date=day, shift=self.shift_morning, department=self.department,
+            sold_units=30, recorded_by=self.manager_user,
+        )
+
+        approve_shift_log(morning, self.manager_user, "بدون مرخصی")
+        self.assertEqual(morning.status, DailyShiftLog.Status.APPROVED)
+        self.assertFalse(
+            DailyShiftLog.objects.filter(employee=swapped, shift=self.shift_morning).exists()
+        )
+
+        self.client.force_login(self.manager_user)
+        page = self.client.get(reverse("management_shift_log_reviews") + "?status=")
+        self.assertContains(page, "فاطمه عصر")
+        self.assertNotContains(page, f'name="employee_id" value="{swapped.pk}"')

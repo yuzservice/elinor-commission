@@ -22,17 +22,17 @@
     </article>
     <article>
         <span>پورسانت ناخالص فروش</span>
-        <strong>{{ metrics.gross_sales_commission|persian_int }} ریال</strong>
+        <strong>{{ metrics.gross_sales_commission|persian_int }} تومان</strong>
         <small>بر اساس ضرایب لاین و گرید</small>
     </article>
     <article>
         <span>کسورات تخلفات</span>
-        <strong style="color: #c53030;">{{ metrics.deduction|persian_int }} ریال</strong>
+        <strong style="color: #c53030;">{{ metrics.deduction|persian_int }} تومان</strong>
         <small>{{ metrics.violation_points }} امتیاز تخلف</small>
     </article>
     <article>
         <span>پورسانت خالص نهایی</span>
-        <strong style="color: var(--green, #237554); font-size: 1.6rem;">{{ metrics.commission|persian_int }} ریال</strong>
+        <strong style="color: var(--green, #237554); font-size: 1.6rem;">{{ metrics.commission|persian_int }} تومان</strong>
         <small>مبلغ قابل پرداخت</small>
     </article>
 </div>
@@ -67,7 +67,7 @@
                                 · فروش کل: <strong>{{ p.total_sold_units }}</strong>
                                 · سهم شما: <strong style="color: var(--green, #237554);">{{ p.share_units }}</strong>
                                 · نرخ: {{ p.rate_per_unit|persian_int }}
-                                → <strong>{{ p.commission|persian_int }} ریال</strong>
+                                → <strong>{{ p.commission|persian_int }} تومان</strong>
                             </div>
                             {% endfor %}
                         {% elif d.main_info %}
@@ -77,10 +77,17 @@
                             · فروش کل: <strong>{{ d.main_info.total_sold_units }}</strong>
                             · سهم شما: <strong style="color: var(--green, #237554);">{{ d.main_info.share_units }}</strong>
                             · نرخ: {{ d.main_info.rate_per_unit|persian_int }}
-                            → <strong>{{ d.main_info.commission|persian_int }} ریال</strong>
+                            → <strong>{{ d.main_info.commission|persian_int }} تومان</strong>
                         </div>
                         {% else %}
                         —
+                        {% endif %}
+                        {% if d.activity_info %}
+                        <div style="margin-top: 6px;">
+                            <b>فعالیت {{ d.activity_info.department_name }}:</b>
+                            سهم <strong style="color: var(--green, #237554);">{{ d.activity_info.share_units }}</strong>
+                            → <strong>{{ d.activity_info.commission|persian_int }} تومان</strong>
+                        </div>
                         {% endif %}
                     </td>
                     <td>
@@ -92,7 +99,7 @@
                                 · فروش کل: <strong>{{ s.total_sold_units }}</strong>
                                 · سهم شما: <strong style="color: var(--green, #237554);">{{ s.share_units }}</strong>
                                 · نرخ: {{ s.rate_per_unit|persian_int }}
-                                → <strong>{{ s.commission|persian_int }} ریال</strong>
+                                → <strong>{{ s.commission|persian_int }} تومان</strong>
                             </div>
                             {% endfor %}
                         {% elif d.support_info %}
@@ -102,7 +109,7 @@
                                 · فروش کل: <strong>{{ d.support_info.total_sold_units }}</strong>
                                 · سهم شما: <strong style="color: var(--green, #237554);">{{ d.support_info.share_units }}</strong>
                                 · نرخ: {{ d.support_info.rate_per_unit|persian_int }}
-                                → <strong>{{ d.support_info.commission|persian_int }} ریال</strong>
+                                → <strong>{{ d.support_info.commission|persian_int }} تومان</strong>
                             </div>
                         {% else %}
                             <span style="color: #888;">—</span>
@@ -111,12 +118,12 @@
                         <div style="margin-top: 6px; padding: 4px 8px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; font-size: 11.5px; color: #166534;">
                             ⚡ <b>اضافه‌کاری:</b> {{ d.overtime_info.hours }}h در {{ d.overtime_info.department_name }} (شیفت {{ d.overtime_info.target_shift_title }})
                             · سهم: <strong>{{ d.overtime_info.share_units }}</strong>
-                            → <strong>{{ d.overtime_info.commission|persian_int }} ریال</strong>
+                            → <strong>{{ d.overtime_info.commission|persian_int }} تومان</strong>
                         </div>
                         {% endif %}
                     </td>
                     <td><strong style="color: var(--green, #237554);">{{ d.total_units_share }}</strong></td>
-                    <td><strong>{{ d.total_commission|persian_int }} ریال</strong></td>
+                    <td><strong>{{ d.total_commission|persian_int }} تومان</strong></td>
                 </tr>
                 {% empty %}
                 <tr>

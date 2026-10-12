@@ -7,7 +7,7 @@
     <div class="card-head">
         <div>
             <h2>ضرایب پورسانت لاین</h2>
-            <p>مبلغ ریالی پورسانت به ازای هر کالای فروخته‌شده برای هر گرید در لاین «{{ department.name }}»</p>
+            <p>مبلغ پورسانت به ازای هر کالای فروخته‌شده برای هر گرید در لاین «{{ department.name }}»</p>
         </div>
     </div>
     <form method="post">
@@ -23,7 +23,7 @@
                 </label>
                 <div style="position: relative; display: flex; align-items: center;">
                     <input type="number" min="0" name="rate_{{ row.level.pk }}" value="{% if row.rate %}{{ row.rate.rate_per_unit }}{% else %}{{ row.level.performance_rate }}{% endif %}" style="padding-left: 42px; font-weight: 700;">
-                    <span style="position: absolute; left: 10px; font-size: 11px; color: var(--muted); pointer-events: none;">ریال</span>
+                    <span style="position: absolute; left: 10px; font-size: 11px; color: var(--muted); pointer-events: none;">تومان</span>
                 </div>
             </div>
             {% empty %}
@@ -43,10 +43,10 @@
                     <input type="text" name="new_level_code" placeholder="مثلاً B یا C" maxlength="2" style="text-transform: uppercase; text-align: center; font-weight: 800; font-size: 15px;">
                 </div>
                 <div class="field" style="margin-bottom: 0;">
-                    <label style="font-size: 12px; font-weight: 700;">ضریب پورسانت در این لاین (ریال به ازای هر کالا)</label>
+                    <label style="font-size: 12px; font-weight: 700;">ضریب پورسانت در این لاین (تومان به ازای هر کالا)</label>
                     <div style="position: relative; display: flex; align-items: center;">
                         <input type="number" min="0" name="new_level_rate" placeholder="مثال: ۱۵۰۰ یا ۲۰۰۰" style="padding-left: 42px;">
-                        <span style="position: absolute; left: 10px; font-size: 11px; color: var(--muted); pointer-events: none;">ریال</span>
+                        <span style="position: absolute; left: 10px; font-size: 11px; color: var(--muted); pointer-events: none;">تومان</span>
                     </div>
                 </div>
             </div>
@@ -60,9 +60,9 @@
         </div>
     </form>
 </article>
-<article class="card control-section" id="targets"><div class="card-head"><div><h2>تارگت‌های لاین</h2><p>سه سطح موجود برنزی، نقره‌ای و طلایی</p></div></div><form method="post">{% csrf_token %}<input type="hidden" name="section" value="target"><div class="target-level-grid"><fieldset><legend>🥉 برنزی</legend><label>تعداد کالا<input type="number" min="1" name="bronze_units" value="{{ target.bronze_units }}"></label><label>پاداش (ریال)<input type="number" min="0" name="bronze_reward" value="{{ target.bronze_reward }}"></label></fieldset><fieldset><legend>🥈 نقره‌ای</legend><label>تعداد کالا<input type="number" min="1" name="silver_units" value="{{ target.silver_units }}"></label><label>پاداش (ریال)<input type="number" min="0" name="silver_reward" value="{{ target.silver_reward }}"></label></fieldset><fieldset><legend>🥇 طلایی</legend><label>تعداد کالا<input type="number" min="1" name="gold_units" value="{{ target.gold_units }}"></label><label>پاداش (ریال)<input type="number" min="0" name="gold_reward" value="{{ target.gold_reward }}"></label></fieldset></div><label class="toggle-row"><input type="checkbox" name="is_active" {% if target.is_active %}checked{% endif %}><span><b>تارگت فعال باشد</b><small>در خلاصه عملکرد و محاسبات فعلی نمایش داده می‌شود.</small></span></label><button class="primary" type="submit">ذخیره تارگت‌ها</button></form></article>
+<article class="card control-section" id="targets"><div class="card-head"><div><h2>تارگت‌های لاین</h2><p>سه سطح موجود برنزی، نقره‌ای و طلایی</p></div></div><form method="post">{% csrf_token %}<input type="hidden" name="section" value="target"><div class="target-level-grid"><fieldset><legend>🥉 برنزی</legend><label>تعداد کالا<input type="number" min="1" name="bronze_units" value="{{ target.bronze_units }}"></label><label>پاداش (تومان)<input type="number" min="0" name="bronze_reward" value="{{ target.bronze_reward }}"></label></fieldset><fieldset><legend>🥈 نقره‌ای</legend><label>تعداد کالا<input type="number" min="1" name="silver_units" value="{{ target.silver_units }}"></label><label>پاداش (تومان)<input type="number" min="0" name="silver_reward" value="{{ target.silver_reward }}"></label></fieldset><fieldset><legend>🥇 طلایی</legend><label>تعداد کالا<input type="number" min="1" name="gold_units" value="{{ target.gold_units }}"></label><label>پاداش (تومان)<input type="number" min="0" name="gold_reward" value="{{ target.gold_reward }}"></label></fieldset></div><label class="toggle-row"><input type="checkbox" name="is_active" {% if target.is_active %}checked{% endif %}><span><b>تارگت فعال باشد</b><small>در خلاصه عملکرد و محاسبات فعلی نمایش داده می‌شود.</small></span></label><button class="primary" type="submit">ذخیره تارگت‌ها</button></form></article>
 <article class="card control-section" id="violations"><div class="card-head"><div><h2>تخلفات</h2><p>فهرست تخلفات برای همه لاین‌ها یکی است و از بخش فعالیت‌ها و تخلفات تنظیم می‌شود.</p></div><a class="secondary" href="{% url 'management_activities' %}#violations">تنظیم تخلفات</a></div><div class="rule-chips">{% for rule in rules %}<a href="{% url 'management_activities' %}#violations"><b>{{ rule.title }}</b><small>ضریب {{ rule.base_multiplier }} · تکرار ×{{ rule.repeat_multiplier }}</small></a>{% empty %}<p class="empty">هنوز تخلفی تعریف نشده است.</p>{% endfor %}</div></article>
 <article class="card control-section" id="history"><div class="card-head"><h2>تاریچه تغییرات مهم</h2></div><div class="history-list">{% for item in history %}<div><b>{{ item.action }}</b><span>{{ item.created_at|date:'Y/m/d H:i' }} · {{ item.actor|default:'سیستم' }}</span></div>{% empty %}<p class="empty">هنوز تغییری برای این لاین ثبت نشده است.</p>{% endfor %}</div></article>
-<article class="card control-section"><div class="card-head"><h2>عملکردهای اخیر</h2></div><div class="table-wrap"><table><thead><tr><th>تاریخ</th><th>شیفت</th><th>فروش</th><th>مبلغ فروش</th></tr></thead><tbody>{% for item in recent_performances %}<tr><td>{{ item.date }}</td><td>{{ item.shift.title }}</td><td>{{ item.sold_units }} کالا</td><td>{{ item.sales_amount }} ریال</td></tr>{% empty %}<tr><td colspan="4" class="empty">هنوز عملکردی برای این لاین ثبت نشده است.</td></tr>{% endfor %}</tbody></table></div></article>
+<article class="card control-section"><div class="card-head"><h2>عملکردهای اخیر</h2></div><div class="table-wrap"><table><thead><tr><th>تاریخ</th><th>شیفت</th><th>فروش</th><th>مبلغ فروش</th></tr></thead><tbody>{% for item in recent_performances %}<tr><td>{{ item.date }}</td><td>{{ item.shift.title }}</td><td>{{ item.sold_units }} کالا</td><td>{{ item.sales_amount }} تومان</td></tr>{% empty %}<tr><td colspan="4" class="empty">هنوز عملکردی برای این لاین ثبت نشده است.</td></tr>{% endfor %}</tbody></table></div></article>
 <article class="card control-section" style="border:1px solid #fecaca;background:#fffafa"><div class="card-head"><div><h2 style="color:#b42318">منطقه خطر</h2><p>حذف خود لاین فقط زمانی انجام می‌شود که هیچ وابستگی عملیاتی یا تنظیماتی باقی نمانده باشد.</p></div></div><form method="post" action="{% url 'management_department_delete' department.pk %}" onsubmit="return confirm('لاین «{{ department.name|escapejs }}» برای همیشه حذف شود؟');">{% csrf_token %}<button class="secondary" type="submit" style="color:#b42318;border-color:#ef4444">حذف لاین</button></form></article>
 {% endblock %}

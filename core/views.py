@@ -89,6 +89,7 @@ from .services import (
     employee_metrics,
     next_violation_occurrence,
     reject_shift_log,
+    resolved_employee_ids_for_day,
     revert_shift_log_to_pending,
     save_shift_log_activity_entries,
     sync_shift_logs_for_performance,
@@ -117,6 +118,31 @@ def month_range(day=None):
     end = start.replace(month=start.month % 12 + 1, year=start.year + (start.month == 12)) - timedelta(days=1)
     return start, end
 
+def get_recent_jalali_months(num=5, current_start=None):
+    today = timezone.localdate()
+    j_today = jdatetime.date.fromgregorian(date=today)
+    months_list = []
+    for offset in range(num):
+        y = j_today.year
+        m = j_today.month - offset
+        while m < 1:
+            m += 12
+            y -= 1
+        j_first = jdatetime.date(y, m, 1)
+        g_first = j_first.togregorian()
+        m_name = JALALI_MONTHS[m - 1]
+        m_label = f"{m_name} {str(y).translate(FA_DIGITS)}"
+        if offset == 0:
+            m_label = f"{m_label} (جاری)"
+        is_sel = bool(current_start and g_first.year == current_start.year and g_first.month == current_start.month)
+        months_list.append({
+            "label": m_label,
+            "short_name": m_name,
+            "date_param": j_first.strftime("%Y/%m/%d"),
+            "is_selected": is_sel,
+        })
+    return months_list
+
 def supervised_employees(employee):
     return Employee.objects.filter(is_active=True, role=Employee.Role.EMPLOYEE)
 
@@ -131,10 +157,20 @@ def dashboard(request):
 def employee_dashboard(request):
     emp = request.user.employee
     start, end = month_range()
+    date_val = request.GET.get("date", "").strip()
+    if date_val:
+        try:
+            target_date = JalaliDateField().clean(date_val)
+            start, end = month_range(target_date)
+        except ValidationError:
+            pass
     metrics = employee_metrics(emp, start, end)
     today = timezone.localdate()
     today_log = emp.shift_logs.filter(date=today).select_related("shift", "main_department", "overtime_department").first()
     recent_shift_logs = emp.shift_logs.select_related("shift", "main_department", "overtime_department").prefetch_related("support_departments")[:6]
+    j_start = jdatetime.date.fromgregorian(date=start)
+    selected_month_name = JALALI_MONTHS[j_start.month - 1]
+    selected_month_label = f"{selected_month_name} {str(j_start.year).translate(FA_DIGITS)}"
     return render(
         request,
         "core/employee_dashboard.html",
@@ -144,19 +180,60 @@ def employee_dashboard(request):
             "today_log": today_log,
             "recent_shift_logs": recent_shift_logs,
             "start": start,
+            "end": end,
+            "selected_month_label": selected_month_label,
+            "filters": request.GET,
         },
     )
 
 @login_required
 @reviewer_required
 def manager_dashboard(request):
-    start, end = month_range()
+    # پشتیبانی از تغییر شعبه توسط سوپر ادمین از طریق پارامتر یا فیلتر
+    if getattr(request.user, "employee", None) and request.user.employee.is_super_admin and request.GET.get("branch"):
+        try:
+            b_id = int(request.GET.get("branch"))
+            b_obj = Branch.objects.filter(pk=b_id, is_active=True).first()
+            if b_obj:
+                request.session["active_branch_id"] = b_obj.pk
+                from .scoping import activate_scope
+                request.branch = b_obj
+                activate_scope(branch_id=b_obj.pk, employee_id=request.user.employee.pk)
+        except (ValueError, TypeError):
+            pass
+
     today = timezone.localdate()
     yesterday = today - timedelta(days=1)
+
+    start, end = month_range()
+    date_val = request.GET.get("date", "").strip()
+    if date_val:
+        try:
+            target_date = JalaliDateField().clean(date_val)
+            start, end = month_range(target_date)
+        except ValidationError:
+            pass
+
+    j_start = jdatetime.date.fromgregorian(date=start)
+    selected_month_name = JALALI_MONTHS[j_start.month - 1]
+    selected_month_label = f"{selected_month_name} {str(j_start.year).translate(FA_DIGITS)}"
+    selected_date_jalali = j_start.strftime("%Y/%m/%d")
+    is_current_month = (start <= today <= end)
+    recent_months = get_recent_jalali_months(num=5, current_start=start)
 
     employees = supervised_employees(request.user.employee).select_related("commission_level", "primary_department")
     rows = [{"employee": e, **employee_metrics(e, start, end)} for e in employees]
     rows.sort(key=lambda r: r.get("total_sales_units_share", 0), reverse=True)
+
+    max_share = max((r.get("total_sales_units_share", 0) for r in rows), default=0)
+    for idx, r in enumerate(rows, 1):
+        r["rank"] = idx
+        share = r.get("total_sales_units_share", 0)
+        r["share_percentage"] = round((share / max_share * 100), 1) if max_share > 0 else 0
+        emp = r["employee"]
+        first = emp.first_name or ""
+        last = emp.last_name or ""
+        r["initials"] = f"{first[:1]} {last[:1]}".strip() or emp.full_name[:2]
 
     pending_shift_logs = DailyShiftLog.objects.filter(status=DailyShiftLog.Status.PENDING)
     pending_count = pending_shift_logs.count()
@@ -215,8 +292,16 @@ def manager_dashboard(request):
     month_performances = LineShiftPerformance.objects.filter(date__range=(start, end))
     total_store_sold_month = month_performances.aggregate(total=Sum("sold_units"))["total"] or 0
     total_commission = sum(r.get("commission", 0) for r in rows)
+    total_gross_commission = sum(r.get("gross", 0) for r in rows)
+    total_deductions = sum(r.get("deduction", 0) for r in rows)
+    total_pending_commission = sum(r.get("pending_commission", 0) for r in rows)
     total_wallet_balance = sum(r.get("wallet_balance", 0) for r in rows)
     total_score = sum(r.get("total_sales_units_share", 0) for r in rows)
+    settlement_rate = round((total_wallet_balance / total_commission * 100), 1) if total_commission > 0 else 0
+    top_performer = rows[0] if rows else None
+    active_emp_count = len(employees)
+    avg_sales_per_employee = round(total_store_sold_month / active_emp_count, 1) if active_emp_count else 0
+    avg_commission_per_employee = int(round(total_commission / active_emp_count)) if active_emp_count else 0
 
     return render(
         request,
@@ -229,11 +314,23 @@ def manager_dashboard(request):
             "total_store_sold_month": total_store_sold_month,
             "total_score": total_score,
             "total_commission": total_commission,
+            "total_gross_commission": total_gross_commission,
+            "total_deductions": total_deductions,
+            "total_pending_commission": total_pending_commission,
             "total_wallet_balance": total_wallet_balance,
-            "active_employees_count": len(employees),
+            "settlement_rate": settlement_rate,
+            "top_performer": top_performer,
+            "avg_sales_per_employee": avg_sales_per_employee,
+            "avg_commission_per_employee": avg_commission_per_employee,
+            "active_employees_count": active_emp_count,
             "today": today,
             "start": start,
             "end": end,
+            "selected_date_jalali": selected_date_jalali,
+            "selected_month_label": selected_month_label,
+            "is_current_month": is_current_month,
+            "recent_months": recent_months,
+            "filters": request.GET,
         },
     )
 
@@ -308,6 +405,9 @@ def save_support_intervals(*, request, log, formset, previous=None):
     previous = previous or {}
     old_by_id = {item["id"]: item for item in previous.get("support_intervals", [])}
     formset.save()
+    if hasattr(log, "_prefetched_objects_cache"):
+        log._prefetched_objects_cache.pop("support_intervals", None)
+        log._prefetched_objects_cache.pop("support_departments", None)
     log.recalculate_allocations()
     current = shift_log_snapshot(log)
     new_by_id = {item["id"]: item for item in current["support_intervals"]}
@@ -389,6 +489,9 @@ def shift_log_create(request):
         "yesterday": shift_log_date_pill(yesterday),
         "two_days_ago": shift_log_date_pill(two_days_ago),
     }
+    start, end = month_range()
+    metrics = employee_metrics(employee, start, end)
+    next_url = request.POST.get("next") or request.GET.get("next") or ""
 
     return render(
         request,
@@ -398,6 +501,8 @@ def shift_log_create(request):
             "formset": formset,
             "title": "ثبت کارکرد شیفت امروزت",
             "employee": employee,
+            "metrics": metrics,
+            "next_url": next_url,
             "submit": "✅ ثبت نهایی کارکرد",
             "date_pills": date_pills,
             "standard_hours": employee.standard_daily_hours or Decimal("6.0"),
@@ -460,18 +565,35 @@ def shift_log_detail(request, pk):
 
 @login_required
 def shift_log_edit(request, pk):
-    employee = getattr(request.user, "employee", None)
-    if not employee:
+    requester = getattr(request.user, "employee", None)
+    if not requester:
         raise PermissionDenied
-    log = get_object_or_404(
-        DailyShiftLog.objects.prefetch_related("support_intervals__department"), pk=pk, employee=employee
+    qs = DailyShiftLog.objects.select_related(
+        "employee", "shift", "main_department", "overtime_department"
+    ).prefetch_related(
+        "support_departments", "support_intervals__department", "activity_entries__activity_type"
     )
-    if log.status == DailyShiftLog.Status.APPROVED and not employee.can_review:
+    if not requester.can_review:
+        qs = qs.filter(employee=requester)
+
+    log = get_object_or_404(qs, pk=pk)
+
+    if requester.can_review and not requester.is_super_admin:
+        if (log.branch_id and requester.branch_id and log.branch_id != requester.branch_id) or (
+            log.employee.branch_id and requester.branch_id and log.employee.branch_id != requester.branch_id
+        ):
+            raise PermissionDenied("شما فقط مجاز به ویرایش کارکرد پرسنل شعبه خود هستید.")
+
+    if log.status == DailyShiftLog.Status.APPROVED and not requester.can_review:
         messages.error(request, "این کارکرد توسط مدیر تأیید و فریز شده و امکان ویرایش آن وجود ندارد.")
         return redirect("shift_log_detail", pk=log.pk)
 
+    target_employee = log.employee
+    is_manager_editing = requester.can_review and (requester.pk != target_employee.pk)
+    next_url = request.POST.get("next") or request.GET.get("next") or ""
+
     old = shift_log_snapshot(log)
-    form = DailyShiftLogForm(request.POST or None, instance=log, employee=employee)
+    form = DailyShiftLogForm(request.POST or None, instance=log, employee=target_employee)
     formset = SupportLineIntervalFormSet(
         support_formset_data(request), prefix="support", instance=log
     )
@@ -480,7 +602,7 @@ def shift_log_edit(request, pk):
             with transaction.atomic():
                 obj = form.save(commit=False)
                 # If edited by employee, it goes back to PENDING for manager review
-                if not employee.can_review:
+                if not requester.can_review:
                     obj.status = DailyShiftLog.Status.PENDING
                     obj.is_frozen = False
                 obj.main_hours = obj.shift.standard_hours
@@ -489,6 +611,20 @@ def shift_log_edit(request, pk):
                 obj.save()
                 save_support_intervals(request=request, log=obj, formset=formset, previous=old)
                 save_shift_log_activity_entries(shift_log=obj, post_data=request.POST)
+
+                obj.refresh_from_db()
+                if requester.can_review:
+                    if obj.status == DailyShiftLog.Status.APPROVED:
+                        try:
+                            approve_shift_log(obj, actor=request.user, manager_note=obj.manager_note or "ویرایش توسط مدیر")
+                        except ValidationError:
+                            obj.status = DailyShiftLog.Status.PENDING
+                            obj.is_frozen = False
+                            obj.save()
+                    sync_shift_logs_for_performance(obj.date, obj.shift)
+                else:
+                    sync_shift_logs_for_performance(obj.date, obj.shift)
+
                 new = shift_log_snapshot(obj)
                 audit(
                     actor=request.user,
@@ -500,7 +636,11 @@ def shift_log_edit(request, pk):
         except IntegrityError:
             form.add_error(None, "برای این تاریخ و شیفت قبلاً کارکرد ثبت شده است.")
         else:
-            messages.success(request, "کارکرد شیفت با موفقیت به‌روزرسانی شد.")
+            messages.success(request, f"کارکرد شیفت {target_employee.full_name} با موفقیت به‌روزرسانی شد.")
+            if next_url:
+                return redirect(next_url)
+            if is_manager_editing:
+                return redirect("management_shift_log_review_detail", pk=obj.pk)
             return redirect("shift_log_detail", pk=obj.pk)
 
     today = timezone.localdate()
@@ -511,6 +651,8 @@ def shift_log_edit(request, pk):
         "yesterday": shift_log_date_pill(yesterday),
         "two_days_ago": shift_log_date_pill(two_days_ago),
     }
+    start, end = month_range(log.date or today)
+    metrics = employee_metrics(target_employee, start, end)
 
     return render(
         request,
@@ -518,12 +660,17 @@ def shift_log_edit(request, pk):
         {
             "form": form,
             "formset": formset,
-            "title": "ویرایش کارکرد شیفت",
+            "title": f"ویرایش کارکرد {target_employee.full_name}" if is_manager_editing else "ویرایش کارکرد شیفت",
             "log": log,
-            "employee": employee,
+            "employee": target_employee,
+            "target_employee": target_employee,
+            "requester_employee": requester,
+            "is_manager_editing": is_manager_editing,
+            "next_url": next_url,
+            "metrics": metrics,
             "submit": "💾 ذخیره تغییرات کارکرد",
             "date_pills": date_pills,
-            "standard_hours": employee.standard_daily_hours or Decimal("6.0"),
+            "standard_hours": target_employee.standard_daily_hours or Decimal("6.0"),
             "activity_catalog": activity_catalog(),
             "activity_values": shift_log_activity_values(log),
         },
@@ -594,9 +741,13 @@ def management_shift_log_reviews(request):
             .prefetch_related("support_departments", "support_intervals__department")
         )
 
-        expected = [e for e in active_employees if e.default_shift_id == s_shift_id]
         work_logs = [log for log in logs if log.status != DailyShiftLog.Status.LEAVE]
-        resolved_ids = {log.employee_id for log in logs if log.status != DailyShiftLog.Status.REJECTED}
+        resolved_ids = resolved_employee_ids_for_day(s_date)
+        logged_here = {log.employee_id for log in logs if log.status != DailyShiftLog.Status.REJECTED}
+        expected = [
+            employee for employee in active_employees
+            if employee.default_shift_id == s_shift_id and employee.pk not in (resolved_ids - logged_here)
+        ]
 
         performances = list(
             LineShiftPerformance.objects.filter(date=s_date, shift_id=s_shift_id).select_related("department")
@@ -665,23 +816,23 @@ def management_shift_log_reviews(request):
 
         if all_approved and work_logs:
             session_status = "APPROVED"
-            status_badge = "✅ تأیید و فریز شده"
+            status_badge = "تأیید و فریز شده"
             status_class = "approved"
         elif missing and ready_pending:
             session_status = "PARTIAL"
-            status_badge = "✨ بعضی لاین‌ها آماده‌اند"
+            status_badge = "بعضی لاین‌ها آماده‌اند"
             status_class = "approved"
         elif missing:
             session_status = "INCOMPLETE"
-            status_badge = f"⏳ ثبت‌نشده ({len(missing)} نفر باقی‌مانده)"
+            status_badge = f"ثبت‌نشده ({len(missing)} نفر باقی‌مانده)"
             status_class = "pending"
         elif not has_required_performance:
             session_status = "NO_SALES"
-            status_badge = "⚠️ فروش لاین‌ها ثبت نشده"
+            status_badge = "فروش لاین‌ها ثبت نشده"
             status_class = "rejected"
         else:
             session_status = "READY"
-            status_badge = "✨ آماده تأیید نهایی مدیر"
+            status_badge = "آماده تأیید نهایی مدیر"
             status_class = "approved"
 
         if status_filter == "PENDING" and not any_pending:
@@ -785,7 +936,7 @@ def management_shift_session_approve(request):
     if count:
         messages.success(
             request,
-            f"در تاریخ {j_date} کارکرد {count} نفر تأیید شد و مجموع پورسانت قطعی {total_comm:,} ریال واریز گردید."
+            f"در تاریخ {j_date} کارکرد {count} نفر تأیید شد و مجموع پورسانت قطعی {total_comm:,} تومان واریز گردید."
         )
     if blocked:
         messages.error(request, "این لاین‌ها هنوز منتظر کارکرد یا مرخصی هستند: " + " — ".join(blocked))
@@ -835,7 +986,7 @@ def management_shift_log_review_detail(request, pk):
         if action == "APPROVED":
             try:
                 approve_shift_log(log, request.user, note)
-                messages.success(request, f"کارکرد روز {log.date} کارمند {log.employee.full_name} با موفقیت تأیید شد و پورسانت به مبلغ {log.frozen_commission_amount:,} ریال قطعی و واریز گردید.")
+                messages.success(request, f"کارکرد روز {log.date} کارمند {log.employee.full_name} با موفقیت تأیید شد و پورسانت به مبلغ {log.frozen_commission_amount:,} تومان قطعی و واریز گردید.")
                 return redirect("management_shift_log_reviews")
             except ValidationError as exc:
                 err_msg = exc.message if hasattr(exc, "message") else (exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc))
@@ -2412,7 +2563,7 @@ def management_shift_log_delete(request, pk):
     date_str = str(log.date)
     desc = f"حذف کارکرد {name} در {date_str}"
     if was_approved:
-        desc += f" (تأییدشده با پورسانت فریز: {log.frozen_commission_amount:,} ریال)"
+        desc += f" (تأییدشده با پورسانت فریز: {log.frozen_commission_amount:,} تومان)"
 
     delete_with_audit(
         request=request,

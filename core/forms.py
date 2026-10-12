@@ -140,8 +140,12 @@ class DailyShiftLogForm(forms.ModelForm):
         self.employee = employee
 
         self.fields["shift"].queryset = Shift.objects.filter(is_active=True)
-        self.fields["main_department"].queryset = Department.objects.filter(is_active=True)
-        self.fields["overtime_department"].queryset = Department.objects.filter(is_active=True)
+        dept_qs = Department.objects.filter(is_active=True)
+        branch_id = getattr(self.instance, "branch_id", None) or (employee.branch_id if employee else None)
+        if branch_id:
+            dept_qs = Department._base_manager.filter(branch_id=branch_id, is_active=True)
+        self.fields["main_department"].queryset = dept_qs
+        self.fields["overtime_department"].queryset = dept_qs
         self.fields["shift"].label = "شیفت کاری"
         self.fields["main_department"].label = "لاین اصلی"
         self.fields["has_overtime"].label = "ثبت اضافه‌کاری"
@@ -206,7 +210,13 @@ class SupportLineIntervalForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["department"].queryset = Department.objects.filter(is_active=True)
+        dept_qs = Department.objects.filter(is_active=True)
+        branch_id = None
+        if self.instance and getattr(self.instance, "shift_log_id", None):
+            branch_id = self.instance.shift_log.branch_id
+        if branch_id:
+            dept_qs = Department._base_manager.filter(branch_id=branch_id, is_active=True)
+        self.fields["department"].queryset = dept_qs
 
 
 SupportLineIntervalFormSet = forms.inlineformset_factory(
@@ -228,7 +238,7 @@ class LineShiftPerformanceForm(forms.ModelForm):
         widget=forms.NumberInput(attrs={"min": "0", "inputmode": "numeric"}),
     )
     sales_amount = forms.IntegerField(
-        label="مبلغ فروش (ریال)",
+        label="مبلغ فروش (تومان)",
         min_value=0,
         initial=0,
         required=False,
@@ -550,8 +560,18 @@ class ProfilePhotoForm(forms.ModelForm):
 class BrandingForm(forms.ModelForm):
     class Meta:
         model = SystemSettings
-        fields = ["panel_name", "organization_name", "logo", "favicon", "primary_color"]
-        widgets = {"primary_color": forms.TextInput(attrs={"type": "color"})}
+        fields = [
+            "panel_name",
+            "organization_name",
+            "logo",
+            "favicon",
+            "primary_color",
+            "overtime_hourly_multiplier",
+        ]
+        widgets = {
+            "primary_color": forms.TextInput(attrs={"type": "color"}),
+            "overtime_hourly_multiplier": forms.NumberInput(attrs={"step": "0.05", "min": "0", "max": "2.0"}),
+        }
 
     def clean_logo(self):
         file = self.cleaned_data.get("logo")

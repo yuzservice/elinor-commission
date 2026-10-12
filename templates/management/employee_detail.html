@@ -161,7 +161,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <div>
             <small>کیف پول تأییدشده این ماه</small>
             <strong>{{ metrics.wallet_balance|persian_int }}</strong>
-            <span>ریال پورسانت قطعی فریز شده</span>
+            <span>تومان پورسانت قطعی فریز شده</span>
         </div>
     </article>
     <article>
@@ -209,16 +209,16 @@ document.addEventListener('DOMContentLoaded', function() {
             <b>{{ metrics.line_target_result.progress_percent|persian_digits }}٪</b>
             {% if metrics.line_target_result.reward_amount > 0 %}
             <small style="color: var(--green); font-weight: 700;">
-                🎁 پاداش: {{ metrics.line_target_result.reward_amount|persian_int }} ریال
+                🎁 پاداش: {{ metrics.line_target_result.reward_amount|persian_int }} تومان
             </small>
             {% endif %}
         </div>
     </div>
     <div class="progress-track" style="height: 10px; margin-top: 12px;"><i style="width: {{ metrics.line_target_result.progress_percent }}%"></i></div>
     <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 12px; color: var(--muted); flex-wrap: wrap; gap: 8px;">
-        <span>🥉 برنزی: <b>{{ metrics.line_target_result.bronze_units|persian_digits }}</b> کالا / {{ metrics.line_target_result.bronze_reward|persian_int }} ریال</span>
-        <span>🥈 نقره‌ای: <b>{{ metrics.line_target_result.silver_units|persian_digits }}</b> کالا / {{ metrics.line_target_result.silver_reward|persian_int }} ریال</span>
-        <span>🥇 طلایی: <b>{{ metrics.line_target_result.gold_units|persian_digits }}</b> کالا / {{ metrics.line_target_result.gold_reward|persian_int }} ریال</span>
+        <span>🥉 برنزی: <b>{{ metrics.line_target_result.bronze_units|persian_digits }}</b> کالا / {{ metrics.line_target_result.bronze_reward|persian_int }} تومان</span>
+        <span>🥈 نقره‌ای: <b>{{ metrics.line_target_result.silver_units|persian_digits }}</b> کالا / {{ metrics.line_target_result.silver_reward|persian_int }} تومان</span>
+        <span>🥇 طلایی: <b>{{ metrics.line_target_result.gold_units|persian_digits }}</b> کالا / {{ metrics.line_target_result.gold_reward|persian_int }} تومان</span>
     </div>
 </article>
 {% else %}
@@ -237,7 +237,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <div><small>نام کاربری ورود</small><b style="color: var(--green);">{{ employee.user.username }}</b></div>
         <div><small>شماره موبایل</small><b dir="ltr">{{ employee.mobile }}</b></div>
         <div><small>شماره کارت بانکی</small><b dir="ltr" style="font-family: monospace; letter-spacing: 1px;">{% if employee.card_number %}{{ employee.card_number }}{% else %}—{% endif %}</b></div>
-        <div><small>نرخ پورسانت روی لاین اصلی</small><b>{% if line_rate %}{{ line_rate.rate_per_unit|persian_int }} ریال (گرید {{ employee.commission_level.code }}){% else %}—{% endif %}</b></div>
+        <div><small>نرخ پورسانت روی لاین اصلی</small><b>{% if line_rate %}{{ line_rate.rate_per_unit|persian_int }} تومان (گرید {{ employee.commission_level.code }}){% else %}—{% endif %}</b></div>
         <div><small>شیفت پیش‌فرض</small><b>{{ employee.default_shift.title|default:'—' }} ({{ employee.standard_daily_hours|persian_digits }} ساعت)</b></div>
         <div><small>تاریخ شروع همکاری</small><b>{{ employee.start_date|jalali|default:'—' }}</b></div>
     </div>
@@ -260,7 +260,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <div>
             <small>کیف پول تأییدشده این ماه</small>
             <strong>{{ metrics.wallet_balance|persian_int }}</strong>
-            <span>ریال پورسانت واریز قطعی</span>
+            <span>تومان پورسانت واریز قطعی</span>
         </div>
     </article>
     <article>
@@ -337,7 +337,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     </td>
                     <td>
                         <strong style="color: var(--green, #237554); font-size: 13.5px;">
-                            {{ row.calc.total_commission|persian_int }} ریال
+                            {{ row.calc.total_commission|persian_int }} تومان
                         </strong>
                         {% if row.log.is_frozen %}
                         <small style="color: #059669; display: block;">🔒 فریز قطعی</small>
