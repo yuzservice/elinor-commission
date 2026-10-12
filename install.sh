@@ -81,6 +81,63 @@ else
 fi
 echo -e "${GREEN}✓ Docker Compose ready.${NC}"
 
+configure_docker_mirrors() {
+    echo -e "${YELLOW}Configuring anti-sanction Docker registry mirrors...${NC}"
+    sudo mkdir -p /etc/docker
+    local daemon_file="/etc/docker/daemon.json"
+
+    if [ -f "$daemon_file" ] && command -v python3 &>/dev/null; then
+        sudo python3 -c '
+import json
+path = "/etc/docker/daemon.json"
+mirrors = [
+    "https://docker.arvancloud.ir",
+    "https://docker.iranserver.com",
+    "https://fdocker.ir"
+]
+try:
+    with open(path, "r") as f:
+        data = json.load(f)
+except Exception:
+    data = {}
+existing = data.get("registry-mirrors", [])
+for m in mirrors:
+    if m not in existing:
+        existing.append(m)
+data["registry-mirrors"] = existing
+with open(path, "w") as f:
+    json.dump(data, f, indent=2)
+' 2>/dev/null || true
+    else
+        sudo tee "$daemon_file" > /dev/null <<EOF
+{
+  "registry-mirrors": [
+    "https://docker.arvancloud.ir",
+    "https://docker.iranserver.com",
+    "https://fdocker.ir"
+  ]
+}
+EOF
+    fi
+
+    echo -e "${YELLOW}Restarting Docker service to apply registry mirrors...${NC}"
+    sudo systemctl daemon-reload 2>/dev/null || true
+    sudo systemctl restart docker 2>/dev/null || sudo service docker restart 2>/dev/null || true
+    echo -e "${GREEN}✓ Docker registry mirrors configured successfully.${NC}"
+}
+
+check_and_prepare_docker_registry() {
+    if [ -f "/etc/docker/daemon.json" ] && grep -q "registry-mirrors" "/etc/docker/daemon.json" 2>/dev/null; then
+        return 0
+    fi
+    local http_code
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" -m 4 "https://registry-1.docker.io/v2/" 2>/dev/null || true)
+    if [ "$http_code" = "403" ]; then
+        echo -e "${YELLOW}Notice: Docker Hub access is restricted (HTTP 403). Applying registry mirrors...${NC}"
+        configure_docker_mirrors
+    fi
+}
+
 # 3. Domain & SSL Configuration
 echo -e "\n${BLUE}▶ [3/5] Domain & Security (SSL / HTTPS) Configuration...${NC}"
 HAS_SSL="n"
@@ -158,12 +215,29 @@ echo -e "${GREEN}✓ Configuration saved to .env${NC}"
 
 # 4. Build and Run Containers
 echo -e "\n${BLUE}▶ [4/5] Building & Launching Docker Services...${NC}"
-if [ "$HAS_SSL" = "y" ]; then
-    echo -e "Starting Web, PostgreSQL, and Caddy (Automatic SSL Proxy)..."
-    $COMPOSE_CMD -f compose.yaml -f compose.prod.yaml up -d --build
-else
-    echo -e "Starting Web and PostgreSQL on port 8010..."
-    $COMPOSE_CMD up -d --build
+check_and_prepare_docker_registry
+
+start_docker_services() {
+    if [ "$HAS_SSL" = "y" ]; then
+        echo -e "Starting Web, PostgreSQL, and Caddy (Automatic SSL Proxy)..."
+        $COMPOSE_CMD -f compose.yaml -f compose.prod.yaml up -d --build
+    else
+        echo -e "Starting Web and PostgreSQL on port 8010..."
+        $COMPOSE_CMD up -d --build
+    fi
+}
+
+set +e
+start_docker_services
+launch_status=$?
+set -e
+
+if [ $launch_status -ne 0 ]; then
+    echo -e "\n${YELLOW}⚠ Initial service launch or image download failed.${NC}"
+    echo -e "${YELLOW}Configuring anti-sanction Docker registry mirrors and retrying...${NC}"
+    configure_docker_mirrors
+    echo -e "${BLUE}Retrying launch with alternative registry mirrors...${NC}"
+    start_docker_services
 fi
 
 echo -e "Waiting for database and auto-migrations to initialize..."
