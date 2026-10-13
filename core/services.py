@@ -55,17 +55,26 @@ def change_employee_level(employee, new_level, actor, reason=""):
     )
     return True
 
-@transaction.atomic
-def get_line_rate(department, commission_level):
+def get_line_rate(department, commission_level, rates_cache=None):
     """نرخ پورسانت به ازای هر کالا را بر اساس لاین و گرید کارمند برمی‌گرداند."""
+    dept_id = department.pk if department else None
+    level_id = commission_level.pk if commission_level else None
+    if rates_cache is not None:
+        rate = rates_cache.get((dept_id, level_id))
+        if rate is not None:
+            return rate
     rate_obj = LineCommissionRate.objects.filter(
         department=department,
         commission_level=commission_level,
         is_active=True,
     ).first()
     if rate_obj:
-        return rate_obj.rate_per_unit
-    return commission_level.performance_rate if commission_level else 1000
+        rate = rate_obj.rate_per_unit
+    else:
+        rate = commission_level.performance_rate if commission_level else 1000
+    if rates_cache is not None:
+        rates_cache[(dept_id, level_id)] = rate
+    return rate
 
 def find_target_shift_for_overtime(overtime_start_time, current_shift):
     """یافتن شیفت متناظری که بازه اضافه‌کاری در محدوده آن واقع شده است."""
@@ -115,9 +124,12 @@ def activity_performance_for_shift_log(shift_log, department=None):
         return Decimal("0.0"), []
     details = []
     total = Decimal("0.0")
-    entries = shift_log.activity_entries.filter(
-        activity_type__is_active=True,
-    ).select_related("activity_type")
+    if hasattr(shift_log, "_prefetched_objects_cache") and "activity_entries" in shift_log._prefetched_objects_cache:
+        entries = [e for e in shift_log.activity_entries.all() if getattr(e.activity_type, "is_active", True)]
+    else:
+        entries = shift_log.activity_entries.filter(
+            activity_type__is_active=True,
+        ).select_related("activity_type")
     for entry in entries:
         multiplier = entry.unit_multiplier_snapshot or entry.activity_type.unit_multiplier
         units = Decimal(entry.quantity) * Decimal(multiplier)
@@ -236,7 +248,13 @@ def serialize_main_info_snapshot(main_info):
     }
 
 
-def calculate_single_shift_log(shift_log, force_dynamic=False):
+def calculate_single_shift_log(
+    shift_log,
+    force_dynamic=False,
+    sibling_logs=None,
+    performances_by_dept=None,
+    rates_cache=None,
+):
     """محاسبه جزئیات سهم فروش و پورسانت یک رکورد کارکرد شیفت (پشتیبانی از فریز، چند لاین کمکی و اضافه‌کاری)."""
     # در صورت فریز بودن و عدم درخواست محاسبه مجدد، مقادیر فریز شده برگردانده می‌شوند
     if shift_log.is_frozen and not force_dynamic and shift_log.frozen_snapshot_data:
@@ -259,13 +277,14 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
     level = employee.commission_level
 
     # ساعت هر لاین فقط از کارکرد واقعی همان لاین می‌آید، نه از لاین‌های دیگر پرونده کارمند.
-    sibling_logs = list(
-        DailyShiftLog.objects.filter(date=date, shift=shift).exclude(
-            status__in=[DailyShiftLog.Status.REJECTED, DailyShiftLog.Status.LEAVE]
-        ).select_related(
-            "employee", "main_department"
-        ).prefetch_related("support_departments", "support_intervals__department")
-    )
+    if sibling_logs is None:
+        sibling_logs = list(
+            DailyShiftLog.objects.filter(date=date, shift=shift).exclude(
+                status__in=[DailyShiftLog.Status.REJECTED, DailyShiftLog.Status.LEAVE]
+            ).select_related(
+                "employee", "main_department"
+            ).prefetch_related("support_departments", "support_intervals__department")
+        )
 
     def support_hours_by_department(log):
         intervals = list(log.support_intervals.all())
@@ -312,7 +331,10 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
         total_dept_hours = line_pool_hours(dept)
 
         # خواندن آمار فروش ثبت‌شده توسط مدیر
-        perf = LineShiftPerformance.objects.filter(date=date, shift=shift, department=dept).first()
+        if performances_by_dept is not None:
+            perf = performances_by_dept.get(dept.pk)
+        else:
+            perf = LineShiftPerformance.objects.filter(date=date, shift=shift, department=dept).first()
         total_sold = perf.sold_units if perf else 0
 
         # محاسبه سهم کارمند
@@ -321,7 +343,7 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
         else:
             share_units = Decimal("0.0")
 
-        rate = get_line_rate(dept, level)
+        rate = get_line_rate(dept, level, rates_cache=rates_cache)
         commission = int(share_units * Decimal(rate))
 
         return {
@@ -379,7 +401,7 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
     if shift_log.main_department_id:
         activity_units, activity_details = activity_performance_for_shift_log(shift_log, shift_log.main_department)
         if activity_units > Decimal("0.0"):
-            rate = get_line_rate(shift_log.main_department, level)
+            rate = get_line_rate(shift_log.main_department, level, rates_cache=rates_cache)
             for d in activity_details:
                 d["rate_per_unit"] = rate
                 d["commission"] = int(Decimal(str(d["performance_units"])) * Decimal(rate))
@@ -422,7 +444,7 @@ def calculate_single_shift_log(shift_log, force_dynamic=False):
 
         total_multiplier = ot_hours * hourly_multiplier
         ot_share_units = round(base_units * total_multiplier, 2)
-        ot_rate = get_line_rate(ot_dept, level) if ot_dept else (level.performance_rate if level else 1000)
+        ot_rate = get_line_rate(ot_dept, level, rates_cache=rates_cache) if ot_dept else (level.performance_rate if level else 1000)
         ot_commission = int(ot_share_units * Decimal(ot_rate))
 
         overtime_info = {
@@ -761,15 +783,58 @@ def revert_shift_log_to_pending(shift_log, actor, reason=""):
     return shift_log
 
 def employee_metrics(employee, start, end):
-    """محاسبه جامع پورسانت، عملکرد فروش، تخلفات و تارگت برای دوره مشخص."""
+    """محاسبه جامع پورسانت، عملکرد فروش، تخلفات و تارگت برای دوره مشخص (با واکشی یکجا و حذف N+1)."""
+    from django.db.models import Q
+
     # ۱. کارکردهای شیفت در بازه زمانی
     shift_logs = list(
         employee.shift_logs.filter(date__range=(start, end)).select_related(
-            "shift", "main_department", "reviewed_by"
-        ).prefetch_related("support_departments")
+            "shift", "main_department", "overtime_department", "reviewed_by"
+        ).prefetch_related(
+            "support_departments",
+            "support_intervals__department",
+            "activity_entries__activity_type",
+        )
     )
 
-    shift_log_details = [calculate_single_shift_log(log) for log in shift_logs]
+    dynamic_sessions = {
+        (log.date, log.shift_id)
+        for log in shift_logs
+        if not (log.is_frozen and log.frozen_snapshot_data)
+    }
+    siblings_by_session = {}
+    perfs_by_session = {}
+    rates_cache = None
+
+    if dynamic_sessions:
+        rates_cache = {
+            (r.department_id, r.commission_level_id): r.rate_per_unit
+            for r in LineCommissionRate.objects.filter(is_active=True)
+        }
+        session_q = Q()
+        for s_date, s_shift_id in dynamic_sessions:
+            session_q |= Q(date=s_date, shift_id=s_shift_id)
+
+        for sib in (
+            DailyShiftLog.objects.filter(session_q)
+            .exclude(status__in=[DailyShiftLog.Status.REJECTED, DailyShiftLog.Status.LEAVE])
+            .select_related("employee", "shift", "main_department")
+            .prefetch_related("support_departments", "support_intervals__department")
+        ):
+            siblings_by_session.setdefault((sib.date, sib.shift_id), []).append(sib)
+
+        for perf in LineShiftPerformance.objects.filter(session_q):
+            perfs_by_session.setdefault((perf.date, perf.shift_id), {})[perf.department_id] = perf
+
+    shift_log_details = [
+        calculate_single_shift_log(
+            log,
+            sibling_logs=siblings_by_session.get((log.date, log.shift_id)),
+            performances_by_dept=perfs_by_session.get((log.date, log.shift_id)),
+            rates_cache=rates_cache,
+        )
+        for log in shift_logs
+    ]
 
     total_sales_units_share = sum(d["total_units_share"] for d in shift_log_details)
     gross_sales_commission = sum(d["total_commission"] for d in shift_log_details)

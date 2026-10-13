@@ -449,6 +449,10 @@ class DailyShiftLog(BranchScoped, models.Model):
         verbose_name = "کارکرد روزانه شیفت"
         verbose_name_plural = "کارکردهای روزانه شیفت"
         unique_together = [("employee", "date", "shift")]
+        indexes = [
+            models.Index(fields=["date", "shift"], name="core_dsl_date_shift_idx"),
+            models.Index(fields=["status", "date", "shift"], name="core_dsl_status_dt_sh_idx"),
+        ]
 
     def __str__(self):
         return f"{self.employee.full_name} - {self.date} - {self.shift.title}"
@@ -608,6 +612,9 @@ class LineShiftPerformance(BranchScoped, models.Model):
         verbose_name = "عملکرد فروش لاین در شیفت"
         verbose_name_plural = "عملکرد فروش لاین‌ها در شیفت"
         unique_together = [("date", "shift", "department")]
+        indexes = [
+            models.Index(fields=["date", "shift"], name="core_lsp_date_shift_idx"),
+        ]
 
     def __str__(self):
         return f"{self.date} - {self.shift.title} - {self.department.name}: {self.sold_units} عدد"

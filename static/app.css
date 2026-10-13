@@ -5935,3 +5935,786 @@ main,
     max-width: 100%;
   }
 }
+
+/* ==========================================================================
+   EMPLOYEE DASHBOARD 2026 — NEW DESIGN SYSTEM
+   Replaces old .dash-command-header / .ever-executive-wallet-card classes
+   ========================================================================== */
+
+/* CSS Variables for employee dashboard */
+.emp-dash-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-bottom: 32px;
+}
+
+/* ── 1. TODAY'S SHIFT STATUS BANNER ── */
+.emp-shift-banner {
+  border-radius: 14px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: nowrap;
+  box-shadow: 0 1px 4px rgba(15,37,26,.04);
+  transition: background .25s;
+}
+
+.emp-shift-banner.is-warning {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+}
+
+.emp-shift-banner.is-pending {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.emp-shift-banner.is-approved {
+  background: #ecfdf5;
+  border: 1px solid #86efac;
+}
+
+.banner-side-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.banner-icon-blob {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.is-warning  .banner-icon-blob { background: #f59e0b; color:#fff; }
+.is-pending  .banner-icon-blob { background: #1c7254; color:#fff; }
+.is-approved .banner-icon-blob { background: #059669; color:#fff; }
+
+.banner-copy h3 {
+  font-size: .88rem;
+  font-weight: 800;
+  line-height: 1.25;
+  margin: 0;
+}
+.banner-copy p {
+  font-size: .74rem;
+  margin: 2px 0 0;
+  color: #6b7280;
+}
+
+.is-warning  .banner-copy h3 { color: #92400e; }
+.is-pending  .banner-copy h3 { color: #0b251a; }
+.is-approved .banner-copy h3 { color: #065f46; }
+.is-warning  .banner-copy p  { color: #b45309; }
+.is-pending  .banner-copy p  { color: #1c7254; }
+.is-approved .banner-copy p  { color: #047857; }
+
+.banner-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  font-size: .8rem;
+  font-weight: 800;
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+  white-space: nowrap;
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: background .15s;
+}
+
+.is-warning  .banner-action-btn { background: #d97706; color:#fff; }
+.is-warning  .banner-action-btn:hover { background: #b45309; }
+.is-pending  .banner-action-btn,
+.is-approved .banner-action-btn {
+  background: #fff;
+  color: #1c7254;
+  border: 1px solid #a7f3d0;
+}
+
+/* ── 2. EXECUTIVE WALLET HERO CARD ── */
+.emp-wallet-hero {
+  background: linear-gradient(135deg, #0b251a 0%, #0f3f2e 60%, #15553e 100%);
+  color: #fff;
+  border-radius: 24px;
+  padding: 22px 24px;
+  box-shadow: 0 4px 16px rgba(15,37,26,.08), 0 12px 32px rgba(15,37,26,.06), 0 0 0 1px rgba(255,255,255,.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.emp-wallet-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.emp-wallet-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.emp-wallet-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #dfb969, #9c762d);
+  color: #061710;
+  font-weight: 900;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(223,185,105,.35);
+  flex-shrink: 0;
+}
+
+.emp-wallet-name strong {
+  font-size: .95rem;
+  font-weight: 800;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.emp-grade-badge {
+  background: rgba(223,185,105,.2);
+  border: 1px solid #dfb969;
+  color: #dfb969;
+  font-size: .65rem;
+  font-weight: 800;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.emp-wallet-name small {
+  font-size: .72rem;
+  color: rgba(255,255,255,.65);
+  display: block;
+  margin-top: 1px;
+}
+
+.emp-medal-pill {
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(223,185,105,.3);
+  padding: 5px 12px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .78rem;
+  font-weight: 800;
+  color: #fef08a;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.emp-wallet-fin {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 20px;
+  align-items: center;
+}
+
+.emp-balance-col {
+  border-left: 1px solid rgba(255,255,255,.12);
+  padding-left: 18px;
+}
+
+.emp-balance-label {
+  font-size: .74rem;
+  color: rgba(255,255,255,.7);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.emp-balance-digits {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.emp-balance-amount {
+  font-size: 2.1rem;
+  font-weight: 900;
+  letter-spacing: -.5px;
+  color: #fff;
+  line-height: 1.1;
+}
+
+.emp-balance-currency {
+  font-size: .88rem;
+  color: #dfb969;
+  font-weight: 700;
+}
+
+.emp-sub-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.emp-sub-pill {
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 12px;
+  padding: 7px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.emp-sub-pill span {
+  font-size: .72rem;
+  color: rgba(255,255,255,.7);
+  flex: 1;
+}
+
+.emp-sub-pill strong {
+  font-size: .84rem;
+  font-weight: 800;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.emp-sub-pill.is-warn strong { color: #fde68a; }
+
+.emp-wallet-milestone {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255,255,255,.1);
+}
+
+.emp-milestone-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: .74rem;
+  margin-bottom: 6px;
+}
+
+.emp-milestone-row span { color: rgba(255,255,255,.85); }
+.emp-milestone-row strong { color: #dfb969; font-weight: 800; }
+
+.emp-milestone-track {
+  height: 6px;
+  background: rgba(255,255,255,.15);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.emp-milestone-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #dfb969, #fef08a);
+  border-radius: 9999px;
+  transition: width .6s ease;
+}
+
+/* ── 3. BENTO KPI GRID (4 cards) ── */
+.emp-bento-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.emp-bento-card {
+  background: #fff;
+  border: 1px solid #e5ece8;
+  border-radius: 14px;
+  padding: 15px 16px;
+  box-shadow: 0 1px 3px rgba(15,37,26,.04);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: transform .15s, box-shadow .15s;
+}
+
+.emp-bento-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(15,37,26,.07);
+}
+
+.emp-bento-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.emp-kpi-tag {
+  font-size: .68rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+
+.emp-kpi-tag.emerald { background: #f0f9f5; color: #15553e; }
+.emp-kpi-tag.gold    { background: #fdfaf3; color: #8c6a28; }
+.emp-kpi-tag.slate   { background: #eef2ef; color: #33443a; }
+
+.emp-kpi-caption {
+  font-size: .74rem;
+  color: #5c7064;
+  font-weight: 500;
+}
+
+.emp-kpi-val {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin: 2px 0;
+}
+
+.emp-kpi-val strong {
+  font-size: 1.4rem;
+  font-weight: 900;
+  color: #0f1914;
+  line-height: 1.2;
+}
+
+.emp-kpi-val .kpi-unit {
+  font-size: .76rem;
+  color: #5c7064;
+  font-weight: 600;
+}
+
+.emp-kpi-note {
+  font-size: .68rem;
+  color: #8ba094;
+}
+
+/* ── 4. TARGET ROADMAP CARD (Bronze / Silver / Gold) ── */
+.emp-target-card {
+  background: #fff;
+  border: 1px solid #e5ece8;
+  border-radius: 18px;
+  padding: 18px 20px;
+  box-shadow: 0 1px 3px rgba(15,37,26,.04);
+}
+
+.emp-target-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.emp-target-head h3 {
+  font-size: .93rem;
+  font-weight: 800;
+  color: #0f1914;
+  margin: 0;
+}
+
+.emp-tier-achieved-pill {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: .74rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.emp-tiers-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.emp-tier-card {
+  border: 1px solid #ccd8d1;
+  background: #f9fbf9;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.emp-tier-card.achieved {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.emp-tier-card.current {
+  background: #fefce8;
+  border-color: #fde047;
+  box-shadow: 0 0 0 1.5px #fde047;
+}
+
+.emp-tier-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: .78rem;
+  font-weight: 800;
+}
+
+.emp-tier-card.bronze .emp-tier-title { color: #9a3412; }
+.emp-tier-card.silver .emp-tier-title { color: #b45309; }
+.emp-tier-card.gold   .emp-tier-title { color: #5c7064; }
+
+.emp-tier-units {
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: #0f1914;
+}
+
+.emp-tier-reward {
+  font-size: .72rem;
+  font-weight: 700;
+  color: #1c7254;
+  background: rgba(36,143,106,.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  width: fit-content;
+}
+
+/* ── 5. RECENT SHIFTS CARD (table + mobile cards) ── */
+.emp-shifts-card {
+  background: #fff;
+  border: 1px solid #e5ece8;
+  border-radius: 18px;
+  padding: 18px 20px;
+  box-shadow: 0 1px 3px rgba(15,37,26,.04);
+}
+
+.emp-shifts-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.emp-shifts-head h3 {
+  font-size: .93rem;
+  font-weight: 800;
+  color: #0f1914;
+  margin: 0;
+}
+
+.emp-shifts-head p {
+  font-size: .74rem;
+  color: #5c7064;
+  margin: 2px 0 0;
+}
+
+.emp-view-all-link {
+  font-size: .78rem;
+  font-weight: 700;
+  color: #15553e;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.emp-view-all-link:hover { text-decoration: underline; }
+
+/* Desktop table */
+.emp-shifts-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: right;
+  font-size: .8rem;
+}
+
+.emp-shifts-table th {
+  padding: 9px 12px;
+  background: #f9fbf9;
+  color: #5c7064;
+  font-weight: 700;
+  border-bottom: 1px solid #ccd8d1;
+  white-space: nowrap;
+}
+
+.emp-shifts-table td {
+  padding: 12px;
+  border-bottom: 1px solid #e5ece8;
+  color: #1e2d25;
+  vertical-align: middle;
+}
+
+.emp-shifts-table tbody tr:hover { background: #f9fbf9; cursor: pointer; }
+
+.shift-type-tag {
+  background: #eef2ef;
+  color: #33443a;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: .74rem;
+}
+
+.emp-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: .7rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+
+.emp-status-pill.approved { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
+.emp-status-pill.pending  { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
+.emp-status-pill.rejected { background: #fff1f2; color: #e11d48; border: 1px solid #fecdd3; }
+
+.emp-calc-link {
+  background: none;
+  border: none;
+  color: #15553e;
+  cursor: pointer;
+  font-weight: 700;
+  font-family: inherit;
+  font-size: .8rem;
+  padding: 0;
+}
+
+/* Mobile shift cards (hidden on desktop) */
+.emp-mobile-shifts { display: none; flex-direction: column; gap: 10px; }
+
+.emp-mobile-shift-item {
+  background: #fff;
+  border: 1px solid #ccd8d1;
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.emp-mobile-shift-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.emp-mobile-shift-date {
+  font-weight: 800;
+  font-size: .84rem;
+  color: #0f1914;
+}
+
+.emp-mobile-shift-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: .76rem;
+  color: #1e2d25;
+  padding: 6px 0;
+  border-top: 1px dashed #e5ece8;
+  border-bottom: 1px dashed #e5ece8;
+}
+
+.emp-mobile-shift-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: .74rem;
+  color: #5c7064;
+}
+
+.emp-mobile-shift-footer strong { color: #0f1914; }
+
+/* ── 6. MOBILE BOTTOM NAV ── */
+.emp-mobile-bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  height: 62px;
+  background: #ffffff !important;
+  border-top: 1px solid #e5ece8;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, .08);
+  padding: 6px 12px;
+  padding-bottom: max(8px, env(safe-area-inset-bottom, 8px));
+  z-index: 1200;
+  flex-direction: row !important;
+  justify-content: space-around;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.emp-bot-nav-item {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 2px !important;
+  color: #8ba094 !important;
+  text-decoration: none !important;
+  font-size: .66rem !important;
+  font-weight: 700 !important;
+  padding: 3px 6px !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  transition: color .15s !important;
+  flex: 1 1 0 !important;
+  max-width: 68px !important;
+  line-height: 1.1 !important;
+}
+
+.emp-bot-nav-item svg {
+  width: 20px !important;
+  height: 20px !important;
+  flex-shrink: 0 !important;
+}
+
+.emp-bot-nav-item.active,
+.emp-bot-nav-item:hover {
+  color: #15553e !important;
+  background: transparent !important;
+}
+
+.emp-bot-nav-fab {
+  margin-top: -24px !important;
+  background: linear-gradient(135deg, #248f6a, #0f3f2e) !important;
+  color: #fff !important;
+  width: 48px !important;
+  height: 48px !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: 0 4px 14px rgba(28, 114, 84, .35) !important;
+  border: 3px solid #fff !important;
+  cursor: pointer !important;
+  transition: transform .15s !important;
+  text-decoration: none !important;
+  flex-shrink: 0 !important;
+}
+
+.emp-bot-nav-fab svg {
+  width: 22px !important;
+  height: 22px !important;
+  stroke: #ffffff !important;
+}
+
+.emp-bot-nav-fab:hover {
+  transform: scale(1.06) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   EMPLOYEE DASHBOARD RESPONSIVE RULES
+   ═══════════════════════════════════════════════════════════ */
+
+/* Tablet (≤960px) */
+@media (max-width: 960px) {
+  .emp-bento-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Mobile (≤640px) — bottom nav appears, tiers stack, table hides */
+@media (max-width: 640px) {
+  .emp-dash-page { gap: 14px; padding-bottom: 84px; }
+
+  /* Header action buttons side-by-side compact row */
+  .emp-dash-page .dash-header-actions {
+    width: 100%;
+    flex-direction: row;
+    gap: 8px;
+  }
+  .emp-dash-page .dash-header-actions .dash-btn-primary,
+  .emp-dash-page .dash-header-actions .dash-btn-secondary {
+    flex: 1;
+    justify-content: center;
+    padding: 9px 12px;
+    font-size: .78rem;
+    border-radius: 10px;
+  }
+
+  .emp-bento-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+
+  /* Wallet: single column, large number stays readable */
+  .emp-wallet-hero { padding: 16px; border-radius: 18px; }
+  .emp-wallet-top  { margin-bottom: 14px; }
+  .emp-wallet-avatar { width: 36px; height: 36px; font-size: 1rem; }
+  .emp-wallet-name strong { font-size: .88rem; }
+  .emp-medal-pill  { padding: 4px 10px; font-size: .72rem; }
+
+  .emp-wallet-fin  {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .emp-balance-col {
+    border-left: none;
+    padding-left: 0;
+    border-bottom: 1px solid rgba(255,255,255,.12);
+    padding-bottom: 12px;
+  }
+
+  .emp-balance-amount { font-size: 1.9rem; }
+
+  .emp-sub-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .emp-sub-pill {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 8px 10px;
+  }
+
+  .emp-milestone-row { font-size: .72rem; }
+
+  /* Target tiers: stack vertically on mobile */
+  .emp-tiers-row { grid-template-columns: 1fr; gap: 8px; }
+
+  /* Shifts: hide table, show cards */
+  .emp-shifts-table-wrap { display: none; }
+  .emp-mobile-shifts { display: flex; }
+
+  /* Bottom nav visible on mobile horizontally */
+  .emp-mobile-bottom-nav {
+    display: flex !important;
+    flex-direction: row !important;
+  }
+
+  /* Shift banner inline (icon + text + btn) */
+  .emp-shift-banner {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+  .banner-side-left { flex: 1; min-width: 0; }
+  .banner-copy h3 { font-size: .82rem; }
+  .banner-copy p  { font-size: .7rem; }
+  .banner-action-btn {
+    flex-shrink: 0;
+    padding: 7px 12px;
+    font-size: .74rem;
+  }
+}
+/* END EMPLOYEE DASHBOARD 2026 */

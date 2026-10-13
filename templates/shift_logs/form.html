@@ -20,7 +20,7 @@
       <p style="color: #64748b; font-size: 13.5px; margin: 0; line-height: 1.6;">سلام {{ employee.first_name }} جان. تاریخ، شیفت و لاین اصلی را انتخاب کن؛ در صورت کمک به لاین دیگر، فعالیت یا اضافه‌کاری، ثبت فرمایید.</p>
       {% endif %}
     </div>
-    <a class="secondary" href="{% if next_url %}{{ next_url }}{% elif is_manager_editing %}{% url 'management_shift_log_reviews' %}{% elif log %}{% url 'shift_log_detail' log.pk %}{% else %}{% url 'shift_logs' %}{% endif %}" style="padding: 8px 18px; font-size: 13px; border-radius: 10px; font-weight: 700;">بازگشت</a>
+    <a class="secondary" href="{% if next_url %}{{ next_url }}{% elif is_manager_editing %}{% url 'management_shift_log_reviews' %}{% elif log %}{% url 'shift_log_detail' log.pk %}{% else %}{% url 'my_commission_report' %}{% endif %}" style="padding: 8px 18px; font-size: 13px; border-radius: 10px; font-weight: 700;">بازگشت</a>
   </div>
 
   <form method="post" id="shift-log-form">

@@ -6,7 +6,6 @@ urlpatterns = [
     path("switch-branch/", views.switch_branch, name="switch_branch"),
 
     # Employee Shift Logs & Commission
-    path("shift-logs/", views.shift_log_list, name="shift_logs"),
     path("shift-logs/new/", views.shift_log_create, name="shift_log_create"),
     path("shift-logs/<int:pk>/", views.shift_log_detail, name="shift_log_detail"),
     path("shift-logs/<int:pk>/edit/", views.shift_log_edit, name="shift_log_edit"),
@@ -35,7 +34,6 @@ urlpatterns = [
     path("management/branch-comparison/", views.management_branch_comparison, name="management_branch_comparison"),
 
     # Violations
-    path("violations/", views.violation_list, name="violations"),
     path("violations/new/", views.violation_create, name="violation_create"),
     path("violations/preview/", views.violation_occurrence_preview, name="violation_occurrence_preview"),
     path("management/violations/<int:pk>/", views.management_violation_detail, name="management_violation_detail"),

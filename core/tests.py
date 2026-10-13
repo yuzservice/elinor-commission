@@ -854,7 +854,6 @@ class ManagementMenuSmokeTests(BaseEmployeeTest):
             "management_line_performance_create",
             "management_commission_report",
             "violation_create",
-            "violations",
             "management_employees",
             "management_departments",
             "management_activities",
@@ -863,7 +862,6 @@ class ManagementMenuSmokeTests(BaseEmployeeTest):
             "management_backup",
             "profile",
             "employees",
-            "shift_logs",
             "shift_log_create",
             "my_commission_report",
         ]
@@ -887,7 +885,7 @@ class ManagementMenuSmokeTests(BaseEmployeeTest):
         self.assertEqual(self.client.get(reverse("management_branch_comparison")).status_code, 403)
 
         self.client.force_login(self.employee_user)
-        for name in ("dashboard", "shift_log_create", "shift_logs", "my_commission_report", "violations", "profile"):
+        for name in ("dashboard", "shift_log_create", "my_commission_report", "profile"):
             response = self.client.get(reverse(name), follow=True)
             self.assertEqual(response.status_code, 200, name)
 

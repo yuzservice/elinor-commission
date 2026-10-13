@@ -12,7 +12,7 @@
         {% if log.employee.user == request.user or user.employee.can_review %}
         <a class="primary" href="{% url 'shift_log_edit' log.pk %}">ویرایش کارکرد</a>
         {% endif %}
-        <a class="secondary" href="{% url 'shift_logs' %}">بازگشت به فهرست</a>
+        <a class="secondary" href="{% url 'my_commission_report' %}">بازگشت به کارنامه</a>
     </div>
 </div>
 

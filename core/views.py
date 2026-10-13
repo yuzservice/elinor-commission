@@ -167,7 +167,6 @@ def employee_dashboard(request):
     metrics = employee_metrics(emp, start, end)
     today = timezone.localdate()
     today_log = emp.shift_logs.filter(date=today).select_related("shift", "main_department", "overtime_department").first()
-    recent_shift_logs = emp.shift_logs.select_related("shift", "main_department", "overtime_department").prefetch_related("support_departments")[:6]
     j_start = jdatetime.date.fromgregorian(date=start)
     selected_month_name = JALALI_MONTHS[j_start.month - 1]
     selected_month_label = f"{selected_month_name} {str(j_start.year).translate(FA_DIGITS)}"
@@ -178,7 +177,6 @@ def employee_dashboard(request):
             "employee": emp,
             "metrics": metrics,
             "today_log": today_log,
-            "recent_shift_logs": recent_shift_logs,
             "start": start,
             "end": end,
             "selected_month_label": selected_month_label,
@@ -238,27 +236,37 @@ def manager_dashboard(request):
     pending_shift_logs = DailyShiftLog.objects.filter(status=DailyShiftLog.Status.PENDING)
     pending_count = pending_shift_logs.count()
 
-    # جلسات شیفت نیازمند توجه (امروز و دیروز با وضعیت در انتظار یا بدون فروش ثبت‌شده)
-    recent_session_keys = list(
-        DailyShiftLog.objects.filter(date__in=[today, yesterday])
-        .values_list("date", "shift_id")
-        .distinct()
-        .order_by("-date", "shift_id")
-    )
+    # جلسات شیفت نیازمند توجه و نمای زنده امروز (با واکشی یکجای بهینه)
     all_shifts = {s.pk: s for s in Shift.objects.all()}
     lines_needing_shift_sales = count_active_departments_needing_shift_sales()
+
+    recent_logs = list(
+        DailyShiftLog.objects.filter(date__in=[today, yesterday])
+        .select_related("main_department")
+        .prefetch_related("support_departments")
+    )
+    recent_perfs = list(LineShiftPerformance.objects.filter(date__in=[today, yesterday]))
+
+    recent_logs_by_session = {}
+    for l in recent_logs:
+        recent_logs_by_session.setdefault((l.date, l.shift_id), []).append(l)
+
+    recent_perfs_by_session = {}
+    for p in recent_perfs:
+        recent_perfs_by_session.setdefault((p.date, p.shift_id), []).append(p)
+
+    recent_session_keys = sorted(
+        recent_logs_by_session.keys(),
+        key=lambda k: (-k[0].toordinal(), k[1])
+    )
 
     attention_sessions = []
     for s_date, s_shift_id in recent_session_keys:
         s_shift = all_shifts.get(s_shift_id)
         if not s_shift:
             continue
-        s_logs = list(
-            DailyShiftLog.objects.filter(date=s_date, shift_id=s_shift_id).select_related(
-                "main_department"
-            ).prefetch_related("support_departments")
-        )
-        s_perfs = list(LineShiftPerformance.objects.filter(date=s_date, shift_id=s_shift_id))
+        s_logs = recent_logs_by_session.get((s_date, s_shift_id), [])
+        s_perfs = recent_perfs_by_session.get((s_date, s_shift_id), [])
         has_pending = any(l.status == DailyShiftLog.Status.PENDING for l in s_logs)
         needed_perf = departments_needing_performance_for_logs(s_logs)
         perf_dept_ids = {p.department_id for p in s_perfs}
@@ -277,8 +285,8 @@ def manager_dashboard(request):
     # نمای زنده شیفت‌های امروز
     today_shifts_overview = []
     for s in Shift.objects.filter(is_active=True).order_by("sort_order"):
-        s_logs = list(DailyShiftLog.objects.filter(date=today, shift=s))
-        s_perfs = list(LineShiftPerformance.objects.filter(date=today, shift=s))
+        s_logs = recent_logs_by_session.get((today, s.pk), [])
+        s_perfs = recent_perfs_by_session.get((today, s.pk), [])
         today_shifts_overview.append({
             "shift": s,
             "logs_count": len(s_logs),
@@ -512,44 +520,6 @@ def shift_log_create(request):
     )
 
 @login_required
-def shift_log_list(request):
-    employee = getattr(request.user, "employee", None)
-    if not employee:
-        raise PermissionDenied
-    qs = DailyShiftLog.objects.select_related("employee", "shift", "main_department").prefetch_related("support_departments", "support_intervals__department")
-    if not employee.can_review:
-        qs = qs.filter(employee=employee)
-
-    date_val = request.GET.get("date", "")
-    shift_val = request.GET.get("shift", "")
-    dept_val = request.GET.get("department", "")
-    status_val = request.GET.get("status", "")
-
-    if date_val:
-        try:
-            qs = qs.filter(date=JalaliDateField().clean(date_val))
-        except ValidationError:
-            pass
-    if shift_val:
-        qs = qs.filter(shift_id=shift_val)
-    if dept_val:
-        qs = qs.filter(Q(main_department_id=dept_val) | Q(support_departments__id=dept_val)).distinct()
-    if status_val:
-        qs = qs.filter(status=status_val)
-
-    return render(
-        request,
-        "shift_logs/list.html",
-        {
-            "logs": qs[:200],
-            "shifts": Shift.objects.filter(is_active=True),
-            "departments": Department.objects.filter(is_active=True),
-            "employee": employee,
-            "statuses": DailyShiftLog.Status.choices,
-        },
-    )
-
-@login_required
 def shift_log_detail(request, pk):
     employee = getattr(request.user, "employee", None)
     if not employee:
@@ -692,8 +662,12 @@ def management_shift_log_reviews(request):
     q = request.GET.get("q", "").strip()
 
     base_qs = DailyShiftLog.objects.select_related(
-        "employee", "shift", "main_department", "reviewed_by"
-    ).prefetch_related("support_departments", "support_intervals__department")
+        "employee", "employee__commission_level", "shift", "main_department", "reviewed_by"
+    ).prefetch_related(
+        "support_departments",
+        "support_intervals__department",
+        "activity_entries__activity_type",
+    )
 
     filtered_qs = base_qs
     if date_val:
@@ -715,47 +689,112 @@ def management_shift_log_reviews(request):
             | Q(employee_note__icontains=q)
         )
 
-    # استخراج جلسات شیفت (تاریخ، شیفت) یکتا
-    session_keys = list(
-        filtered_qs.values_list("date", "shift_id")
-        .distinct()
-        .order_by("-date", "shift_id")
-    )
+    # استخراج جلسات شیفت (تاریخ، شیفت) با فیلتر در سطح دیتابیس برای جلوگیری از پردازش کل تاریخچه
+    if status_filter == "PENDING":
+        session_keys = list(
+            filtered_qs.filter(status=DailyShiftLog.Status.PENDING)
+            .values_list("date", "shift_id")
+            .distinct()
+            .order_by("-date", "shift_id")
+        )
+    elif status_filter == "REJECTED":
+        session_keys = list(
+            filtered_qs.filter(status=DailyShiftLog.Status.REJECTED)
+            .values_list("date", "shift_id")
+            .distinct()
+            .order_by("-date", "shift_id")
+        )
+    elif status_filter == "APPROVED":
+        pending_sessions = set(
+            DailyShiftLog.objects.filter(status=DailyShiftLog.Status.PENDING)
+            .values_list("date", "shift_id")
+            .distinct()
+        )
+        approved_candidate_keys = list(
+            filtered_qs.filter(status=DailyShiftLog.Status.APPROVED)
+            .values_list("date", "shift_id")
+            .distinct()
+            .order_by("-date", "shift_id")
+        )
+        session_keys = [k for k in approved_candidate_keys if k not in pending_sessions]
+    else:
+        session_keys = list(
+            filtered_qs.values_list("date", "shift_id")
+            .distinct()
+            .order_by("-date", "shift_id")
+        )
+
+    # صفحه‌بندی جلسات قبل از محاسبات سنگین (فقط ۱۰ جلسه صفحه جاری پردازش می‌شوند)
+    paginator = Paginator(session_keys, 10)
+    page_num = request.GET.get("page")
+    page = paginator.get_page(page_num)
+    target_sessions = page.object_list
 
     all_shifts = {s.pk: s for s in Shift.objects.all()}
     active_employees = list(
         Employee.objects.filter(is_active=True, role=Employee.Role.EMPLOYEE)
-        .select_related("default_shift", "primary_department")
+        .select_related("default_shift", "primary_department", "commission_level")
         .prefetch_related("primary_departments")
     )
 
+    # کش در سطح ریکوئست برای نرخ‌های پورسانت
+    rates_cache = {
+        (r.department_id, r.commission_level_id): r.rate_per_unit
+        for r in LineCommissionRate.objects.filter(is_active=True)
+    }
+
+    # واکشی یکجای لاگ‌ها، عملکردها و وضعیت حضور برای جلسات صفحه جاری
+    target_dates = {s_date for s_date, _ in target_sessions}
+    logs_by_session = {}
+    performances_by_session = {}
+    resolved_ids_by_date = {}
+
+    if target_sessions:
+        target_conditions = Q()
+        for s_date, s_shift_id in target_sessions:
+            target_conditions |= Q(date=s_date, shift_id=s_shift_id)
+
+        all_page_logs = list(
+            base_qs.filter(target_conditions).order_by("created_at")
+        )
+        for log in all_page_logs:
+            logs_by_session.setdefault((log.date, log.shift_id), []).append(log)
+
+        all_page_performances = list(
+            LineShiftPerformance.objects.filter(target_conditions).select_related("department")
+        )
+        for perf in all_page_performances:
+            performances_by_session.setdefault((perf.date, perf.shift_id), []).append(perf)
+
+        resolved_pairs = list(
+            DailyShiftLog.objects.filter(date__in=target_dates)
+            .exclude(status=DailyShiftLog.Status.REJECTED)
+            .values_list("date", "employee_id")
+        )
+        for r_date, r_emp_id in resolved_pairs:
+            resolved_ids_by_date.setdefault(r_date, set()).add(r_emp_id)
+
     session_cards = []
-    for s_date, s_shift_id in session_keys:
+    for s_date, s_shift_id in target_sessions:
         s_shift = all_shifts.get(s_shift_id)
         if not s_shift:
             continue
 
-        logs = list(
-            base_qs.filter(date=s_date, shift_id=s_shift_id)
-            .select_related("employee", "main_department")
-            .prefetch_related("support_departments", "support_intervals__department")
-        )
-
+        logs = logs_by_session.get((s_date, s_shift_id), [])
         work_logs = [log for log in logs if log.status != DailyShiftLog.Status.LEAVE]
-        resolved_ids = resolved_employee_ids_for_day(s_date)
+        resolved_ids = resolved_ids_by_date.get(s_date, set())
         logged_here = {log.employee_id for log in logs if log.status != DailyShiftLog.Status.REJECTED}
         expected = [
             employee for employee in active_employees
             if employee.default_shift_id == s_shift_id and employee.pk not in (resolved_ids - logged_here)
         ]
 
-        performances = list(
-            LineShiftPerformance.objects.filter(date=s_date, shift_id=s_shift_id).select_related("department")
-        )
+        performances = performances_by_session.get((s_date, s_shift_id), [])
         total_sold = sum(p.sold_units for p in performances)
         needed_perf_dept_ids = departments_needing_performance_for_logs(work_logs)
         perf_dept_ids = {p.department_id for p in performances}
         has_required_performance = not (needed_perf_dept_ids - perf_dept_ids)
+        performances_by_dept = {p.department_id: p for p in performances}
 
         department_map = {}
         for employee in expected:
@@ -804,7 +843,12 @@ def management_shift_log_reviews(request):
         any_rejected = False
 
         for log in logs:
-            calc = calculate_single_shift_log(log)
+            calc = calculate_single_shift_log(
+                log,
+                sibling_logs=work_logs,
+                performances_by_dept=performances_by_dept,
+                rates_cache=rates_cache,
+            )
             log_rows.append({"log": log, "calc": calc})
             session_total_comm += calc["total_commission"]
             if log.status == DailyShiftLog.Status.PENDING:
@@ -835,13 +879,6 @@ def management_shift_log_reviews(request):
             status_badge = "آماده تأیید نهایی مدیر"
             status_class = "approved"
 
-        if status_filter == "PENDING" and not any_pending:
-            continue
-        if status_filter == "APPROVED" and not all_approved:
-            continue
-        if status_filter == "REJECTED" and not any_rejected:
-            continue
-
         session_cards.append({
             "date": s_date,
             "date_jalali": jdatetime.date.fromgregorian(date=s_date).strftime("%Y/%m/%d"),
@@ -867,10 +904,6 @@ def management_shift_log_reviews(request):
             "all_approved": all_approved,
         })
 
-    paginator = Paginator(session_cards, 10)
-    page_num = request.GET.get("page")
-    page = paginator.get_page(page_num)
-
     pending_count = DailyShiftLog.objects.filter(status=DailyShiftLog.Status.PENDING).count()
     approved_count = DailyShiftLog.objects.filter(status=DailyShiftLog.Status.APPROVED).count()
     rejected_count = DailyShiftLog.objects.filter(status=DailyShiftLog.Status.REJECTED).count()
@@ -880,7 +913,7 @@ def management_shift_log_reviews(request):
         "management/shift_log_review_list.html",
         {
             "page": page,
-            "session_cards": page.object_list,
+            "session_cards": session_cards,
             "status_filter": status_filter,
             "pending_count": pending_count,
             "approved_count": approved_count,
@@ -891,6 +924,7 @@ def management_shift_log_reviews(request):
             "filters": request.GET,
         },
     )
+
 
 @login_required
 @manager_required
@@ -1400,7 +1434,7 @@ def my_commission_report(request):
     if not employee:
         raise PermissionDenied
     start, end = month_range()
-    date_val = request.GET.get("date", "")
+    date_val = request.GET.get("date", "").strip()
     if date_val:
         try:
             target_date = JalaliDateField().clean(date_val)
@@ -1408,7 +1442,214 @@ def my_commission_report(request):
         except ValidationError:
             pass
 
+    today = timezone.localdate()
+    j_start = jdatetime.date.fromgregorian(date=start)
+    selected_month_name = JALALI_MONTHS[j_start.month - 1]
+    selected_month_label = f"{selected_month_name} {str(j_start.year).translate(FA_DIGITS)}"
+    is_current_month = (start <= today <= end)
+    recent_months = get_recent_jalali_months(num=3, current_start=start)
+
     metrics = employee_metrics(employee, start, end)
+
+    def _fa_num(val):
+        if val is None or val == "":
+            return "۰"
+        return str(val).translate(FA_DIGITS)
+
+    def _fa_int(val):
+        try:
+            num = int(round(float(val or 0)))
+            return f"{num:,}".translate(FA_DIGITS)
+        except (ValueError, TypeError):
+            return str(val or 0).translate(FA_DIGITS)
+
+    emp_grade = employee.commission_level.code if employee.commission_level_id else "—"
+    violation_rate = employee.commission_level.violation_rate if employee.commission_level_id else 0
+
+    raw_violations = list(
+        employee.violations.filter(violation_date__range=(start, end))
+        .select_related("rule", "recorded_by")
+        .order_by("-violation_date", "-created_at")
+    )
+    tier_names = {
+        1: "مرتبه اول در ماه (پله ۱)",
+        2: "مرتبه دوم در ماه (پله ۲)",
+        3: "مرتبه سوم در ماه (پله ۳)",
+    }
+    month_violations = []
+    for v in raw_violations:
+        j_vdate = jdatetime.date.fromgregorian(date=v.violation_date)
+        v_weekday = PERSIAN_WEEKDAYS[v.violation_date.weekday()]
+        v_date_str = f"{v_weekday} {_fa_num(j_vdate.day)} {JALALI_MONTHS[j_vdate.month - 1]} {_fa_num(j_vdate.year)}"
+        month_violations.append({
+            "id": v.pk,
+            "title": v.rule.title if v.rule_id else "تخلف انضباطی",
+            "date_display": v_date_str,
+            "tier_label": tier_names.get(v.occurrence, f"مرتبه {_fa_num(v.occurrence)} در ماه"),
+            "points": v.points_snapshot,
+            "points_display": f"{_fa_num(v.points_snapshot)} امتیاز منفی",
+            "deduction_amount": int(v.points_snapshot * violation_rate),
+            "deduction_display": f"−{_fa_int(v.points_snapshot * violation_rate)} تومان",
+            "note": v.description or "ثبت‌شده در پرونده انضباطی دوره.",
+        })
+
+    drawer_shifts_data = []
+    for d in metrics.get("shift_log_details", []):
+        log = d["shift_log"]
+        j_d = jdatetime.date.fromgregorian(date=log.date)
+        day_num = _fa_num(j_d.day)
+        month_short = JALALI_MONTHS[j_d.month - 1]
+        weekday = PERSIAN_WEEKDAYS[log.date.weekday()]
+        shift_title = log.shift.title if log.shift_id else "شیفت کاری"
+
+        if log.status == DailyShiftLog.Status.APPROVED:
+            status_text = "🔒 فریز شده"
+            if log.reviewed_at:
+                j_rev = jdatetime.datetime.fromgregorian(datetime=timezone.localtime(log.reviewed_at))
+                rev_str = j_rev.strftime("%Y/%m/%d ساعت %H:%M").translate(FA_DIGITS)
+                audit_text = f"تأیید و فریز شده توسط مدیریت در {rev_str}"
+            else:
+                audit_text = "تأیید و فریز شده در کیف پول"
+            cta_url = reverse("shift_log_detail", args=[log.pk])
+            cta_label = "برگه کارکرد ←"
+        elif log.status == DailyShiftLog.Status.PENDING:
+            status_text = "⏳ در انتظار تأیید"
+            audit_text = "در انتظار بررسی مدیر شعبه (امکان ویرایش کارکرد فعال است)"
+            cta_url = reverse("shift_log_edit", args=[log.pk])
+            cta_label = "✏️ ویرایش کارکرد"
+        else:
+            status_text = log.get_status_display()
+            audit_text = f"وضعیت کارکرد: {status_text}"
+            cta_url = reverse("shift_log_detail", args=[log.pk])
+            cta_label = "برگه کارکرد ←"
+
+        pills = []
+        steps = []
+
+        primaries = d.get("primary_infos") or ([d["main_info"]] if d.get("main_info") else [])
+        for p in primaries:
+            if not p:
+                continue
+            dept_name = p.get("department_name") or (p["department"].name if p.get("department") else "لاین اصلی")
+            h_val = float(p.get("hours") or 0)
+            pool_val = float(p.get("total_dept_hours") or 0)
+            pct = int(round((h_val / pool_val) * 100)) if pool_val > 0 else 100
+            pct = max(0, min(100, pct))
+            pills.append({
+                "text": f"لاین اصلی: {dept_name} ({_fa_num(p.get('hours', 0))} س)",
+                "cls": "main",
+            })
+            steps.append({
+                "badge": "لاین اصلی",
+                "badgeCls": "",
+                "dept": dept_name,
+                "money": f"{_fa_int(p.get('commission', 0))} تومان",
+                "hourLabel": f"{_fa_num(p.get('hours', 0))} ساعت حضور شما از {_fa_num(p.get('total_dept_hours', 0))} ساعت کل لاین",
+                "hourPercent": pct,
+                "box1Label": "فروش کل لاین",
+                "box1Val": f"{_fa_num(p.get('total_sold_units', 0))} کالا",
+                "box2Label": f"سهم شما ({_fa_num(pct)}٪)",
+                "box2Val": f"{_fa_num(p.get('share_units', 0))} کالا",
+                "box3Label": f"نرخ گرید {emp_grade}",
+                "box3Val": f"{_fa_int(p.get('rate_per_unit', 0))} ت",
+            })
+
+        supports = d.get("support_infos") or ([d["support_info"]] if d.get("support_info") else [])
+        for s in supports:
+            if not s:
+                continue
+            s_dept = s.get("department_name") or (s["department"].name if s.get("department") else "لاین کمکی")
+            sh_val = float(s.get("hours") or 0)
+            spool_val = float(s.get("total_dept_hours") or 0)
+            spct = int(round((sh_val / spool_val) * 100)) if spool_val > 0 else 100
+            spct = max(0, min(100, spct))
+            pills.append({
+                "text": f"+ کمکی: {s_dept} ({_fa_num(s.get('hours', 0))} س)",
+                "cls": "support",
+            })
+            steps.append({
+                "badge": "لاین کمکی",
+                "badgeCls": "support",
+                "dept": s_dept,
+                "money": f"{_fa_int(s.get('commission', 0))} تومان",
+                "hourLabel": f"{_fa_num(s.get('hours', 0))} ساعت حضور کمکی از {_fa_num(s.get('total_dept_hours', 0))} ساعت مخرج لاین",
+                "hourPercent": spct,
+                "box1Label": "فروش کل لاین",
+                "box1Val": f"{_fa_num(s.get('total_sold_units', 0))} کالا",
+                "box2Label": "سهم شما",
+                "box2Val": f"{_fa_num(s.get('share_units', 0))} کالا",
+                "box3Label": f"نرخ گرید {emp_grade}",
+                "box3Val": f"{_fa_int(s.get('rate_per_unit', 0))} ت",
+            })
+
+        act = d.get("activity_info")
+        if act:
+            act_dept = act.get("department_name") or (act["department"].name if act.get("department") else "فعالیت لاین")
+            act_count = len(act.get("activity_details") or []) or 1
+            pills.append({
+                "text": f"✦ {_fa_num(act_count)} فعالیت ثبت‌شده",
+                "cls": "overtime",
+            })
+            steps.append({
+                "badge": "فعالیت لاین",
+                "badgeCls": "overtime",
+                "dept": act_dept,
+                "money": f"{_fa_int(act.get('commission', 0))} تومان",
+                "hourLabel": f"{_fa_num(act_count)} مورد فعالیت ثبت‌شده روی کارکرد روزانه",
+                "hourPercent": 100,
+                "box1Label": "تعداد فعالیت",
+                "box1Val": f"{_fa_num(act_count)} مورد",
+                "box2Label": "معادل واحد",
+                "box2Val": f"{_fa_num(act.get('share_units', 0))} کالا",
+                "box3Label": f"نرخ گرید {emp_grade}",
+                "box3Val": f"{_fa_int(act.get('rate_per_unit', 0))} ت",
+            })
+
+        ot = d.get("overtime_info")
+        if ot:
+            ot_dept = ot.get("department_name") or (ot["department"].name if ot.get("department") else "اضافه‌کاری")
+            pills.append({
+                "text": f"⚡ اضافه‌کاری ({_fa_num(ot.get('hours', 0))} س)",
+                "cls": "overtime",
+            })
+            steps.append({
+                "badge": "⚡ اضافه‌کاری",
+                "badgeCls": "overtime",
+                "dept": ot_dept,
+                "money": f"{_fa_int(ot.get('commission', 0))} تومان",
+                "hourLabel": f"{_fa_num(ot.get('hours', 0))} ساعت اضافه‌کاری در {ot_dept}",
+                "hourPercent": 100,
+                "box1Label": "ساعت اضافه‌کاری",
+                "box1Val": f"{_fa_num(ot.get('hours', 0))} ساعت",
+                "box2Label": "سهم اضافه",
+                "box2Val": f"{_fa_num(ot.get('share_units', 0))} کالا",
+                "box3Label": f"نرخ گرید {emp_grade}",
+                "box3Val": f"{_fa_int(ot.get('rate_per_unit', 0))} ت",
+            })
+
+        d["day_num"] = day_num
+        d["month_short"] = month_short
+        d["weekday"] = weekday
+        d["shift_title"] = shift_title
+        d["status_text"] = status_text
+        d["pills"] = pills
+
+        drawer_shifts_data.append({
+            "id": log.pk,
+            "dayNum": day_num,
+            "monthShort": month_short,
+            "weekday": weekday,
+            "shiftTitle": shift_title,
+            "status": log.status,
+            "statusText": status_text,
+            "totalUnits": _fa_num(d.get("total_units_share", 0)),
+            "totalCommission": _fa_int(d.get("total_commission", 0)),
+            "audit": audit_text,
+            "ctaUrl": cta_url,
+            "ctaLabel": cta_label,
+            "steps": steps,
+        })
+
     return render(
         request,
         "shift_logs/my_commission.html",
@@ -1417,6 +1658,11 @@ def my_commission_report(request):
             "metrics": metrics,
             "start": start,
             "end": end,
+            "selected_month_label": selected_month_label,
+            "is_current_month": is_current_month,
+            "recent_months": recent_months,
+            "month_violations": month_violations,
+            "drawer_shifts_data": drawer_shifts_data,
             "filters": request.GET,
         },
     )
@@ -1684,16 +1930,6 @@ def management_activities(request):
 
 
 @login_required
-def violation_list(request):
-    employee = getattr(request.user, "employee", None)
-    if not employee:
-        raise PermissionDenied
-    qs = Violation.objects.select_related("employee", "rule", "recorded_by")
-    if not employee.can_review:
-        qs = qs.filter(employee=employee)
-    return render(request, "core/violation_list.html", {"violations": qs[:100], "employee": employee})
-
-@login_required
 @reviewer_required
 def violation_create(request):
     form = ViolationForm(request.POST or None)
@@ -1731,7 +1967,7 @@ def violation_create(request):
             request,
             f"تخلف ثبت شد. مرتبه {obj.occurrence} این ماه، امتیاز {obj.points_snapshot}.",
         )
-        return redirect("violations")
+        return redirect(f"{reverse('management_employee_detail', args=[obj.employee_id])}?tab=violations")
     return render(request, "core/violation_form.html", {"form": form})
 
 
@@ -1800,13 +2036,14 @@ def management_violation_detail(request, pk):
 @require_POST
 def management_violation_delete(request, pk):
     violation = get_object_or_404(Violation.objects.select_related("employee", "rule"), pk=pk)
+    emp_id = violation.employee_id
     snapshot = {"employee": violation.employee.full_name, "rule": violation.rule.title,
                 "date": str(violation.violation_date), "points": violation.points_snapshot}
     label = f"{violation.rule.title} برای {violation.employee.full_name}"
     delete_with_audit(request=request, obj=violation, action="violation.deleted",
                       description=f"حذف تخلف ثبت‌شده: {label}", old_values=snapshot)
     messages.success(request, f"تخلف «{label}» حذف شد.")
-    return redirect("violations")
+    return redirect(f"{reverse('management_employee_detail', args=[emp_id])}?tab=violations")
 
 # ==========================================
 # Shifts Management

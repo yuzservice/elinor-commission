@@ -1,137 +1,1846 @@
 {% extends 'base.html' %}
-{% load persian %}
-{% block title %}کارنامه و جزئیات پورسانت من{% endblock %}
+{% load persian static %}
+
+{% block title %}کارنامه پورسانت من | {{ system_settings.panel_name|default:'الینور' }}{% endblock %}
+
 {% block content %}
-<div class="page-head">
-    <div>
-        <p class="eyebrow">گزارش مالی و عملکرد</p>
+<style>
+  /* ==========================================================================
+     ELINOR MY COMMISSION V2 (SEPARATED CARDS, LUXURY EMERALD & MOBILE-FIRST)
+     ========================================================================== */
+  :root,
+  .mc-v2-page,
+  .mc-shift-drawer {
+    --mc-brand-950: #061710;
+    --mc-brand-900: #0b251a;
+    --mc-brand-800: #113a29;
+    --mc-brand-700: #18523b;
+    --mc-brand-600: #237554;
+    --mc-brand-500: #2b8a64;
+    --mc-brand-100: #dff4e9;
+    --mc-brand-50:  #effaf4;
+
+    --mc-gold-700: #806020;
+    --mc-gold-600: #a67d2d;
+    --mc-gold-400: #dfb969;
+    --mc-gold-200: #f3e2b8;
+    --mc-gold-100: #fbf4e3;
+    --mc-gold-50:  #fefcf6;
+
+    --mc-surface: #ffffff;
+    --mc-subtle: #f6f9f7;
+    --mc-muted-bg: #e4ece7;
+
+    --mc-ink-900: #0f1c16;
+    --mc-ink-800: #1e2e26;
+    --mc-ink-700: #35473e;
+    --mc-ink-500: #5e7167;
+    --mc-ink-400: #84968c;
+    --mc-border-soft: #dce5df;
+    --mc-border-card: #d5e0d9;
+
+    --mc-emerald-text: #0f6848;
+    --mc-emerald-bg: #e8f7f0;
+    --mc-emerald-border: #bce6d1;
+
+    --mc-amber-text: #9a5b08;
+    --mc-amber-bg: #fff8e6;
+    --mc-amber-border: #f7dc9c;
+
+    --mc-rose-text: #be233c;
+    --mc-rose-bg: #fff2f4;
+    --mc-rose-border: #fbc4cd;
+
+    --mc-blue-text: #1d5696;
+    --mc-blue-bg: #eef5fc;
+    --mc-blue-border: #c7dff7;
+
+    --mc-r-xs: 8px;
+    --mc-r-sm: 12px;
+    --mc-r-md: 16px;
+    --mc-r-lg: 20px;
+    --mc-r-xl: 24px;
+    --mc-r-full: 9999px;
+
+    --mc-shadow-card: 0 4px 14px rgba(15, 37, 26, 0.05), 0 1px 3px rgba(15, 37, 26, 0.04);
+    --mc-shadow-hover: 0 10px 26px rgba(15, 37, 26, 0.09), 0 2px 6px rgba(15, 37, 26, 0.04);
+    --mc-shadow-hero: 0 14px 34px rgba(11, 37, 26, 0.20);
+    --mc-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .mc-v2-page {
+    max-width: 1020px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding-bottom: 48px;
+    color: var(--mc-ink-900);
+  }
+
+  .mc-tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ─── 1. TOP IDENTITY & ACTION HEADER ─── */
+  .mc-topbar-card {
+    background: var(--mc-surface);
+    border: 1px solid var(--mc-border-card);
+    border-radius: var(--mc-r-lg);
+    padding: 14px 20px;
+    box-shadow: var(--mc-shadow-card);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .mc-user-identity {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .mc-user-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+    background: linear-gradient(135deg, var(--mc-brand-700), var(--mc-brand-900));
+    color: var(--mc-gold-400);
+    border: 1.5px solid var(--mc-gold-400);
+    display: grid;
+    place-items: center;
+    font-weight: 900;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  .mc-user-meta h1 {
+    font-size: 17px;
+    font-weight: 800;
+    color: var(--mc-ink-900);
+    margin: 0;
+    line-height: 1.25;
+  }
+
+  .mc-user-meta p {
+    font-size: 12px;
+    color: var(--mc-ink-500);
+    margin: 2px 0 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .mc-grade-pill {
+    background: var(--mc-gold-100);
+    color: var(--mc-gold-700);
+    border: 1px solid var(--mc-gold-200);
+    font-weight: 800;
+    font-size: 10.5px;
+    padding: 1px 8px;
+    border-radius: var(--mc-r-full);
+  }
+
+  .mc-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .mc-btn-print {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--mc-subtle);
+    border: 1px solid var(--mc-border-card);
+    color: var(--mc-ink-700);
+    padding: 8px 14px;
+    border-radius: var(--mc-r-sm);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: 0.15s;
+  }
+
+  .mc-btn-print:hover {
+    background: #fff;
+    border-color: var(--mc-brand-600);
+    color: var(--mc-brand-600);
+  }
+
+  /* ─── 2. FLOATING MONTH SWITCHER BAR ─── */
+  .mc-month-bar {
+    background: var(--mc-surface);
+    border: 1px solid var(--mc-border-card);
+    border-radius: var(--mc-r-md);
+    padding: 6px;
+    box-shadow: var(--mc-shadow-card);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .mc-month-pills {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    flex: 1;
+    min-width: 260px;
+  }
+
+  .mc-month-pill {
+    border: 0;
+    background: transparent;
+    color: var(--mc-ink-500);
+    padding: 9px 10px;
+    border-radius: var(--mc-r-sm);
+    font-size: 12.5px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    text-decoration: none;
+    transition: all 0.18s var(--mc-ease);
+    white-space: nowrap;
+  }
+
+  .mc-month-pill:hover {
+    color: var(--mc-ink-900);
+    background: var(--mc-subtle);
+  }
+
+  .mc-month-pill.active {
+    background: var(--mc-brand-900);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(11, 37, 26, 0.22);
+  }
+
+  .mc-month-pill.active::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--mc-gold-400);
+  }
+
+  .mc-custom-date-form {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .mc-custom-date-form input {
+    width: 138px;
+    padding: 7px 10px;
+    font-size: 12px;
+    border-radius: var(--mc-r-sm);
+    border: 1px solid var(--mc-border-card);
+    background: var(--mc-subtle);
+  }
+
+  .mc-custom-date-form button {
+    padding: 7px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: var(--mc-r-sm);
+    border: 0;
+    background: var(--mc-brand-600);
+    color: #fff;
+    cursor: pointer;
+  }
+
+  /* ─── 3. LUXURY EMERALD HERO WALLET CARD ─── */
+  .mc-hero-payslip {
+    background:
+      radial-gradient(circle at 12% 18%, rgba(223, 185, 105, 0.18), transparent 48%),
+      linear-gradient(135deg, #092218 0%, #113c2a 55%, #1a583f 100%);
+    color: #fff;
+    border-radius: var(--mc-r-xl);
+    padding: 22px 24px;
+    box-shadow: var(--mc-shadow-hero);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .mc-hero-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .mc-hero-lock-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: #e2f8ee;
+    font-size: 11.5px;
+    font-weight: 700;
+    padding: 4px 11px;
+    border-radius: var(--mc-r-full);
+  }
+
+  .mc-hero-period-chip {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--mc-gold-400);
+    background: rgba(223, 185, 105, 0.14);
+    border: 1px solid rgba(223, 185, 105, 0.32);
+    padding: 3px 10px;
+    border-radius: var(--mc-r-full);
+  }
+
+  .mc-hero-balance {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .mc-hero-caption {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.74);
+  }
+
+  .mc-hero-digits {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .mc-hero-digits strong {
+    font-size: 36px;
+    font-weight: 900;
+    letter-spacing: -0.6px;
+    color: #fff;
+    line-height: 1.08;
+  }
+
+  .mc-hero-digits span {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--mc-gold-400);
+  }
+
+  .mc-hero-pending-strip {
+    background: rgba(6, 23, 16, 0.42);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--mc-r-md);
+    padding: 11px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .mc-pending-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.86);
+  }
+
+  .mc-pulse-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #fbbf24;
+    box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.22);
+    flex-shrink: 0;
+  }
+
+  .mc-pulse-dot.settled {
+    background: #34d399;
+    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.22);
+  }
+
+  .mc-pending-left {
+    font-size: 13px;
+    font-weight: 800;
+    color: #fde68a;
+  }
+
+  .mc-pending-left.settled {
+    color: #6ee7b7;
+  }
+
+  /* ─── 4. THREE SEPARATED BENTO EQUATION CARDS ─── */
+  .mc-bento-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+
+  .mc-eq-card {
+    background: var(--mc-surface);
+    border: 1px solid var(--mc-border-card);
+    border-radius: var(--mc-r-lg);
+    padding: 16px;
+    box-shadow: var(--mc-shadow-card);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 10px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.16s var(--mc-ease), box-shadow 0.16s var(--mc-ease);
+  }
+
+  .mc-eq-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--mc-shadow-hover);
+  }
+
+  .mc-eq-card.is-deduction {
+    cursor: pointer;
+    border-color: #ebd5d8;
+    background: linear-gradient(180deg, #ffffff 0%, #fffafb 100%);
+  }
+
+  .mc-eq-card.is-deduction.is-clean {
+    border-color: var(--mc-emerald-border);
+    background: linear-gradient(180deg, #ffffff 0%, #f7fcf9 100%);
+  }
+
+  .mc-eq-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .mc-eq-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  .mc-eq-icon.emerald {
+    background: var(--mc-emerald-bg);
+    color: var(--mc-emerald-text);
+    border: 1px solid var(--mc-emerald-border);
+  }
+
+  .mc-eq-icon.gold {
+    background: var(--mc-gold-100);
+    color: var(--mc-gold-700);
+    border: 1px solid var(--mc-gold-200);
+  }
+
+  .mc-eq-icon.rose {
+    background: var(--mc-rose-bg);
+    color: var(--mc-rose-text);
+    border: 1px solid var(--mc-rose-border);
+  }
+
+  .mc-eq-pill {
+    font-size: 10.5px;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: var(--mc-r-full);
+    background: var(--mc-subtle);
+    color: var(--mc-ink-700);
+    border: 1px solid var(--mc-border-soft);
+    white-space: nowrap;
+  }
+
+  .mc-eq-pill.gold {
+    background: var(--mc-gold-100);
+    color: var(--mc-gold-700);
+    border-color: var(--mc-gold-200);
+  }
+
+  .mc-eq-pill.rose {
+    background: var(--mc-rose-bg);
+    color: var(--mc-rose-text);
+    border-color: var(--mc-rose-border);
+  }
+
+  .mc-eq-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--mc-ink-500);
+    margin-top: 2px;
+  }
+
+  .mc-eq-val {
+    font-size: 20px;
+    font-weight: 900;
+    color: var(--mc-ink-900);
+    line-height: 1.15;
+  }
+
+  .mc-eq-val.positive {
+    color: var(--mc-emerald-text);
+  }
+
+  .mc-eq-val.negative {
+    color: var(--mc-rose-text);
+  }
+
+  .mc-eq-val small {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--mc-ink-400);
+  }
+
+  .mc-eq-foot {
+    font-size: 11px;
+    color: var(--mc-ink-400);
+    padding-top: 8px;
+    border-top: 1px dashed var(--mc-border-soft);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .mc-ded-mob-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .mc-ded-mob-left {
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
+
+  .mc-ded-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--mc-rose-text);
+    background: var(--mc-rose-bg);
+    padding: 3px 9px;
+    border-radius: var(--mc-r-full);
+  }
+
+  .mc-eq-card.is-deduction.is-clean .mc-ded-cta {
+    color: var(--mc-emerald-text);
+    background: var(--mc-emerald-bg);
+  }
+
+  /* ─── 5. SEGMENTED TABS & FILTER PILLS ─── */
+  .mc-controls-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+  }
+
+  .mc-seg-tabs {
+    background: var(--mc-muted-bg);
+    border: 1px solid var(--mc-border-card);
+    border-radius: var(--mc-r-md);
+    padding: 4px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    width: 100%;
+    max-width: 420px;
+  }
+
+  .mc-seg-btn {
+    border: 0;
+    background: transparent;
+    color: var(--mc-ink-500);
+    padding: 9px 12px;
+    border-radius: var(--mc-r-sm);
+    font-size: 12.5px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    cursor: pointer;
+    transition: 0.16s var(--mc-ease);
+  }
+
+  .mc-seg-btn.active {
+    background: var(--mc-surface);
+    color: var(--mc-ink-900);
+    box-shadow: 0 2px 8px rgba(15, 37, 26, 0.08);
+  }
+
+  .mc-seg-badge {
+    font-size: 11px;
+    padding: 1px 7px;
+    border-radius: var(--mc-r-full);
+    background: var(--mc-subtle);
+    color: var(--mc-ink-700);
+  }
+
+  .mc-seg-btn.active .mc-seg-badge.emerald {
+    background: var(--mc-emerald-bg);
+    color: var(--mc-emerald-text);
+  }
+
+  .mc-seg-btn.active .mc-seg-badge.rose {
+    background: var(--mc-rose-bg);
+    color: var(--mc-rose-text);
+  }
+
+  .mc-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+  }
+
+  .mc-filter-pill {
+    border: 1px solid var(--mc-border-card);
+    background: var(--mc-surface);
+    color: var(--mc-ink-500);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 13px;
+    border-radius: var(--mc-r-full);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: 0.15s;
+  }
+
+  .mc-filter-pill.active {
+    background: var(--mc-emerald-bg);
+    color: var(--mc-emerald-text);
+    border-color: var(--mc-brand-600);
+  }
+
+  /* ─── 6. SEPARATED DAILY SHIFT CARDS ─── */
+  .mc-tab-pane {
+    display: none;
+  }
+
+  .mc-tab-pane.active {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .mc-shift-card {
+    background: var(--mc-surface);
+    border: 1px solid var(--mc-border-card);
+    border-radius: var(--mc-r-lg);
+    padding: 16px 18px;
+    box-shadow: var(--mc-shadow-card);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.16s var(--mc-ease), box-shadow 0.16s var(--mc-ease), border-color 0.16s;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .mc-shift-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--mc-shadow-hover);
+    border-color: #b4cec0;
+  }
+
+  .mc-shift-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 5px;
+    background: var(--mc-brand-600);
+  }
+
+  .mc-shift-card.is-pending::before {
+    background: #f59e0b;
+  }
+
+  .mc-sc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .mc-sc-date-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .mc-sc-cal-box {
+    width: 46px;
+    height: 46px;
+    border-radius: 13px;
+    background: var(--mc-emerald-bg);
+    border: 1px solid var(--mc-emerald-border);
+    color: var(--mc-emerald-text);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.1;
+    flex-shrink: 0;
+  }
+
+  .mc-shift-card.is-pending .mc-sc-cal-box {
+    background: var(--mc-amber-bg);
+    border-color: var(--mc-amber-border);
+    color: var(--mc-amber-text);
+  }
+
+  .mc-sc-cal-box strong {
+    font-size: 16px;
+    font-weight: 900;
+  }
+
+  .mc-sc-cal-box small {
+    font-size: 10px;
+    font-weight: 700;
+    opacity: 0.85;
+  }
+
+  .mc-sc-title-meta strong {
+    display: block;
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--mc-ink-900);
+  }
+
+  .mc-sc-title-meta span {
+    font-size: 11.5px;
+    color: var(--mc-ink-500);
+    font-weight: 500;
+  }
+
+  .mc-sc-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 4px 10px;
+    border-radius: var(--mc-r-full);
+    white-space: nowrap;
+  }
+
+  .mc-sc-status.approved {
+    background: var(--mc-emerald-bg);
+    color: var(--mc-emerald-text);
+    border: 1px solid var(--mc-emerald-border);
+  }
+
+  .mc-sc-status.pending {
+    background: var(--mc-amber-bg);
+    color: var(--mc-amber-text);
+    border: 1px solid var(--mc-amber-border);
+  }
+
+  .mc-sc-lines-box {
+    background: var(--mc-subtle);
+    border: 1px solid var(--mc-border-soft);
+    border-radius: var(--mc-r-sm);
+    padding: 9px 11px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .mc-line-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: var(--mc-r-xs);
+    background: #fff;
+    border: 1px solid var(--mc-border-card);
+    color: var(--mc-ink-800);
+  }
+
+  .mc-line-pill.main {
+    border-color: var(--mc-emerald-border);
+    color: var(--mc-emerald-text);
+  }
+
+  .mc-line-pill.support {
+    border-color: var(--mc-blue-border);
+    color: var(--mc-blue-text);
+    background: var(--mc-blue-bg);
+  }
+
+  .mc-line-pill.overtime {
+    border-color: var(--mc-gold-200);
+    color: var(--mc-gold-700);
+    background: var(--mc-gold-50);
+  }
+
+  .mc-sc-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-top: 2px;
+  }
+
+  .mc-sc-share {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+  }
+
+  .mc-sc-share span {
+    font-size: 11.5px;
+    color: var(--mc-ink-500);
+    font-weight: 600;
+  }
+
+  .mc-sc-share strong {
+    font-size: 14px;
+    font-weight: 900;
+    color: var(--mc-ink-900);
+  }
+
+  .mc-sc-payout-cta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .mc-sc-payout-val {
+    font-size: 16px;
+    font-weight: 900;
+    color: var(--mc-emerald-text);
+  }
+
+  .mc-sc-payout-val small {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--mc-ink-500);
+  }
+
+  .mc-sc-formula-btn {
+    background: var(--mc-brand-50);
+    border: 1px solid var(--mc-emerald-border);
+    color: var(--mc-emerald-text);
+    font-size: 11.5px;
+    font-weight: 800;
+    padding: 5px 10px;
+    border-radius: var(--mc-r-sm);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: 0.15s;
+  }
+
+  .mc-shift-card:hover .mc-sc-formula-btn {
+    background: var(--mc-brand-600);
+    color: #fff;
+    border-color: var(--mc-brand-600);
+  }
+
+  /* ─── 7. VIOLATIONS TAB CARDS ─── */
+  .mc-violation-explainer {
+    background: var(--mc-rose-bg);
+    border: 1px solid var(--mc-rose-border);
+    border-radius: var(--mc-r-md);
+    padding: 13px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--mc-ink-800);
+  }
+
+  .mc-violation-explainer strong {
+    color: var(--mc-rose-text);
+    font-weight: 900;
+  }
+
+  .mc-violation-card {
+    background: var(--mc-surface);
+    border: 1px solid var(--mc-rose-border);
+    border-right: 5px solid var(--mc-rose-text);
+    border-radius: var(--mc-r-lg);
+    padding: 16px 18px;
+    box-shadow: var(--mc-shadow-card);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .mc-vc-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .mc-vc-title strong {
+    display: block;
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--mc-ink-900);
+  }
+
+  .mc-vc-title small {
+    font-size: 11.5px;
+    color: var(--mc-ink-500);
+  }
+
+  .mc-vc-deduction-pill {
+    background: var(--mc-rose-bg);
+    border: 1px solid var(--mc-rose-border);
+    color: var(--mc-rose-text);
+    padding: 5px 11px;
+    border-radius: var(--mc-r-sm);
+    font-size: 14px;
+    font-weight: 900;
+    white-space: nowrap;
+  }
+
+  .mc-vc-badges {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .mc-vc-badge {
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 9px;
+    border-radius: var(--mc-r-full);
+    background: var(--mc-subtle);
+    border: 1px solid var(--mc-border-card);
+    color: var(--mc-ink-700);
+  }
+
+  .mc-vc-badge.tier {
+    background: #fff0f2;
+    color: var(--mc-rose-text);
+    border-color: var(--mc-rose-border);
+  }
+
+  .mc-vc-note {
+    background: var(--mc-subtle);
+    border-radius: var(--mc-r-sm);
+    padding: 10px 12px;
+    font-size: 12px;
+    color: var(--mc-ink-700);
+    border-right: 3px solid #cbd5e1;
+  }
+
+  .mc-empty-card {
+    background: var(--mc-surface);
+    border: 1px solid var(--mc-emerald-border);
+    border-radius: var(--mc-r-lg);
+    padding: 36px 20px;
+    text-align: center;
+    box-shadow: var(--mc-shadow-card);
+  }
+
+  .mc-empty-icon {
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    background: var(--mc-emerald-bg);
+    color: var(--mc-emerald-text);
+    display: grid;
+    place-items: center;
+    font-size: 24px;
+    margin: 0 auto 12px;
+  }
+
+  /* ─── 8. SIDE DRAWER (DESKTOP) & BOTTOM SHEET (MOBILE) ─── */
+  .mc-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(6, 23, 16, 0.55);
+    backdrop-filter: blur(3px);
+    z-index: 2000;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.25s var(--mc-ease), visibility 0.25s;
+  }
+
+  .mc-drawer-backdrop.is-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  /* استفاده از div به جای aside برای جلوگیری از تداخل با استایل سراسری سایدبار در app.css */
+  .mc-shift-drawer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: auto;
+    bottom: 0;
+    width: min(460px, 100%);
+    height: 100dvh;
+    background: #edf2ef;
+    color: var(--mc-ink-900);
+    z-index: 2100;
+    box-shadow: 12px 0 45px rgba(6, 23, 16, 0.28);
+    display: flex;
+    flex-direction: column;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(-105%);
+    transition: transform 0.3s var(--mc-ease), visibility 0.3s;
+  }
+
+  .mc-shift-drawer.is-open {
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateX(0);
+  }
+
+  .mc-drawer-dark-head {
+    background: linear-gradient(135deg, #092218, #144330);
+    color: #fff;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+
+  .mc-sheet-handle {
+    display: none;
+    width: 42px;
+    height: 4px;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.28);
+    margin: -4px auto 2px;
+  }
+
+  .mc-d-head-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .mc-d-head-title h3 {
+    font-size: 16px;
+    font-weight: 900;
+    color: #fff !important;
+    margin: 0;
+  }
+
+  .mc-d-head-title p {
+    font-size: 11.5px;
+    color: var(--mc-gold-400) !important;
+    margin: 3px 0 0;
+    font-weight: 600;
+  }
+
+  .mc-d-nav-btns {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .mc-d-btn-circle {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff !important;
+    display: grid;
+    place-items: center;
+    font-size: 14px;
+    cursor: pointer;
+    transition: 0.15s;
+  }
+
+  .mc-d-btn-circle:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  .mc-d-btn-circle:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  .mc-d-summary-boxes {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 10px;
+  }
+
+  .mc-d-sum-box {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--mc-r-sm);
+    padding: 10px 12px;
+  }
+
+  .mc-d-sum-box small {
+    display: block;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.68) !important;
+  }
+
+  .mc-d-sum-box strong {
+    font-size: 17px;
+    font-weight: 900;
+    color: #6ee7b7 !important;
+  }
+
+  .mc-d-sum-box.units strong {
+    color: #fff !important;
+  }
+
+  .mc-drawer-body {
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1;
+    background: #edf2ef;
+    color: var(--mc-ink-900);
+  }
+
+  .mc-fsc-card {
+    background: #ffffff;
+    border: 1px solid var(--mc-border-card);
+    border-radius: var(--mc-r-md);
+    padding: 14px 15px;
+    box-shadow: var(--mc-shadow-card);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    color: var(--mc-ink-900);
+  }
+
+  .mc-fsc-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .mc-fsc-title-group {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .mc-fsc-badge {
+    font-size: 10.5px;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: var(--mc-r-xs);
+    background: var(--mc-emerald-bg);
+    color: var(--mc-emerald-text) !important;
+  }
+
+  .mc-fsc-badge.support {
+    background: var(--mc-blue-bg);
+    color: var(--mc-blue-text) !important;
+  }
+
+  .mc-fsc-badge.overtime {
+    background: var(--mc-gold-100);
+    color: var(--mc-gold-700) !important;
+  }
+
+  .mc-fsc-dept {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: var(--mc-ink-900) !important;
+  }
+
+  .mc-fsc-money {
+    font-size: 15px;
+    font-weight: 900;
+    color: var(--mc-emerald-text) !important;
+  }
+
+  .mc-fsc-hour-wrap {
+    background: var(--mc-subtle);
+    border: 1px solid var(--mc-border-soft);
+    border-radius: var(--mc-r-sm);
+    padding: 9px 11px;
+  }
+
+  .mc-fsc-hour-labels {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11.5px;
+    margin-bottom: 6px;
+  }
+
+  .mc-fsc-hour-labels span {
+    color: var(--mc-ink-500) !important;
+    font-weight: 600;
+  }
+
+  .mc-fsc-hour-labels strong {
+    color: var(--mc-ink-900) !important;
+    font-weight: 800;
+  }
+
+  .mc-fsc-track {
+    height: 6px;
+    background: #dce5df;
+    border-radius: 99px;
+    overflow: hidden;
+  }
+
+  .mc-fsc-fill {
+    height: 100%;
+    background: var(--mc-brand-600);
+    border-radius: 99px;
+  }
+
+  .mc-fsc-3grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .mc-fsc-mini {
+    background: var(--mc-subtle);
+    border: 1px solid var(--mc-border-soft);
+    border-radius: var(--mc-r-xs);
+    padding: 8px 6px;
+    text-align: center;
+  }
+
+  .mc-fsc-mini small {
+    display: block;
+    font-size: 10px;
+    color: var(--mc-ink-500) !important;
+    margin-bottom: 2px;
+  }
+
+  .mc-fsc-mini strong {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--mc-ink-900) !important;
+  }
+
+  .mc-fsc-mini.highlight {
+    background: var(--mc-emerald-bg);
+    border-color: var(--mc-emerald-border);
+  }
+
+  .mc-fsc-mini.highlight strong {
+    color: var(--mc-emerald-text) !important;
+  }
+
+  .mc-drawer-footer {
+    background: #ffffff;
+    border-top: 1px solid var(--mc-border-soft);
+    padding: 12px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 11.5px;
+    color: var(--mc-ink-500) !important;
+    flex-shrink: 0;
+  }
+
+  .mc-drawer-footer span {
+    color: var(--mc-ink-500) !important;
+  }
+
+  .mc-drawer-cta {
+    background: var(--mc-brand-900) !important;
+    color: #fff !important;
+    text-decoration: none;
+    padding: 8px 14px;
+    border-radius: var(--mc-r-sm);
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  /* ─── MOBILE RESPONSIVE (MAX-WIDTH: 768PX) ─── */
+  @media (max-width: 768px) {
+    .mc-v2-page {
+      gap: 14px;
+      padding-bottom: 84px;
+    }
+
+    .mc-topbar-card {
+      padding: 12px 14px;
+    }
+
+    .mc-btn-print span {
+      display: none;
+    }
+
+    .mc-month-bar {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .mc-month-pill {
+      font-size: 11.5px;
+      padding: 8px 6px;
+    }
+
+    .mc-custom-date-form {
+      display: none;
+    }
+
+    .mc-hero-payslip {
+      padding: 18px;
+      border-radius: var(--mc-r-lg);
+      gap: 14px;
+    }
+
+    .mc-hero-digits strong {
+      font-size: 30px;
+    }
+
+    /* در موبایل: ۲ کارت بالا کنار هم + کارت سوم (کسورات) افقی و تمام‌عرض */
+    .mc-bento-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .mc-eq-card {
+      padding: 14px;
+      border-radius: var(--mc-r-md);
+    }
+
+    .mc-eq-val {
+      font-size: 17.5px;
+    }
+
+    .mc-eq-card.is-deduction {
+      grid-column: 1 / -1;
+      flex-direction: row;
+      align-items: center;
+      padding: 14px 16px;
+    }
+
+    .mc-seg-tabs {
+      max-width: 100%;
+    }
+
+    .mc-shift-card {
+      padding: 14px 15px;
+      border-radius: var(--mc-r-md);
+      gap: 11px;
+    }
+
+    /* تبدیل دراور به Bottom Sheet در موبایل */
+    .mc-shift-drawer {
+      top: auto;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100%;
+      height: auto;
+      max-height: 88dvh;
+      border-radius: 26px 26px 0 0;
+      box-shadow: 0 -12px 45px rgba(6, 23, 16, 0.28);
+      transform: translateY(105%);
+    }
+
+    .mc-shift-drawer.is-open {
+      transform: translateY(0);
+    }
+
+    .mc-sheet-handle {
+      display: block;
+    }
+  }
+
+  @media print {
+    .mc-btn-print, .mc-month-bar, .mc-drawer-backdrop, .mc-shift-drawer, .emp-mobile-bottom-nav {
+      display: none !important;
+    }
+  }
+</style>
+
+<div class="mc-v2-page">
+
+  {# ─── 1. هدر هویت پرسنلی و دکمه چاپ فیش ─── #}
+  <header class="mc-topbar-card">
+    <div class="mc-user-identity">
+      <div class="mc-user-avatar">{{ employee.first_name|slice:":1"|default:"ا" }}</div>
+      <div class="mc-user-meta">
         <h1>کارنامه پورسانت من</h1>
-        <p>دوره: از {{ start|jalali }} تا {{ end|jalali }} · گرید فعلی: <strong>سطح {{ employee.commission_level.code }}</strong></p>
+        <p>
+          <span>{{ employee.full_name }}</span>
+          <span>·</span>
+          <span class="mc-grade-pill">گرید {{ employee.commission_level.code }}</span>
+          <span>·</span>
+          <span>لاین {{ employee.primary_department.name|default:'اصلی' }}</span>
+        </p>
+      </div>
     </div>
-    <form method="get" class="date-filter-form" style="margin-bottom: 0;">
-        <input name="date" value="{{ filters.date }}" placeholder="انتخاب تاریخ ماه (۱۴۰۵/۰۶/۰۱)" class="jalali-date" autocomplete="off">
-        <button class="primary" type="submit">مشاهده دوره</button>
+
+    <div class="mc-head-actions">
+      <button type="button" class="mc-btn-print" onclick="window.print()" title="چاپ فیش پورسانت">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+        <span>چاپ فیش</span>
+      </button>
+    </div>
+  </header>
+
+  {# ─── 2. نوار شناور انتخاب ماه شمسی ─── #}
+  <nav class="mc-month-bar" aria-label="انتخاب دوره ماهانه">
+    <div class="mc-month-pills">
+      {% if recent_months %}
+        {% for m in recent_months %}
+        <a href="?date={{ m.date_param }}" class="mc-month-pill {% if m.is_selected %}active{% endif %}">
+          {{ m.label }}
+        </a>
+        {% endfor %}
+      {% else %}
+        <span class="mc-month-pill active">دوره: {{ start|jalali }} تا {{ end|jalali }}</span>
+      {% endif %}
+    </div>
+
+    <form method="get" class="mc-custom-date-form">
+      <input name="date" value="{{ filters.date }}" placeholder="تاریخ دلخواه (۱۴۰۵/۰۶/۰۱)" class="jalali-date" autocomplete="off">
+      <button type="submit">مشاهده</button>
     </form>
+  </nav>
+
+  {# ─── 3. کارت لوکس زمردی «خالص دریافتی ماه» ─── #}
+  <section class="mc-hero-payslip" aria-label="خالص دریافتی ماه">
+    <div class="mc-hero-top">
+      <span class="mc-hero-lock-badge">
+        🔒 خالص قابل پرداخت ({{ selected_month_label|default:'دوره انتخابی' }})
+      </span>
+      <span class="mc-hero-period-chip mc-tabular">
+        {{ metrics.shift_logs_count|persian_digits }} شیفت کاری
+      </span>
+    </div>
+
+    <div class="mc-hero-balance">
+      <span class="mc-hero-caption">مبلغ خالص نهایی (پورسانت فروش + پاداش تارگت − کسورات تخلفات)</span>
+      <div class="mc-hero-digits">
+        <strong class="mc-tabular">{{ metrics.commission|persian_int }}</strong>
+        <span>تومان</span>
+      </div>
+    </div>
+
+    <div class="mc-hero-pending-strip">
+      {% if metrics.pending_shift_logs_count > 0 %}
+      <div class="mc-pending-right">
+        <span class="mc-pulse-dot"></span>
+        <span>در انتظار تأیید مدیر ({{ metrics.pending_shift_logs_count|persian_digits }} شیفت):</span>
+      </div>
+      <span class="mc-pending-left mc-tabular">+ {{ metrics.pending_commission|persian_int }} تومان</span>
+      {% else %}
+      <div class="mc-pending-right">
+        <span class="mc-pulse-dot settled"></span>
+        <span>وضعیت کارکردهای ثبت‌شده دوره:</span>
+      </div>
+      <span class="mc-pending-left settled mc-tabular">
+        کیف پول قطعی: {{ metrics.wallet_balance|persian_int }} تومان
+      </span>
+      {% endif %}
+    </div>
+  </section>
+
+  {# ─── 4. سه کارت مستقل Bento برای اجزای معادله مالی ─── #}
+  <section class="mc-bento-grid" aria-label="اجزای محاسبه فیش">
+
+    {# کارت ۱: پورسانت ناخالص فروش #}
+    <article class="mc-eq-card" onclick="mcSwitchTab('shifts')" style="cursor:pointer;">
+      <div class="mc-eq-head">
+        <div class="mc-eq-icon emerald">📦</div>
+        <span class="mc-eq-pill mc-tabular">{{ metrics.total_sales_units_share|persian_digits }} کالا</span>
+      </div>
+      <div>
+        <div class="mc-eq-label">پورسانت ناخالص فروش</div>
+        <div class="mc-eq-val mc-tabular">{{ metrics.gross_sales_commission|persian_int }} <small>تومان</small></div>
+      </div>
+      <div class="mc-eq-foot">
+        <span>{{ metrics.approved_shift_logs_count|persian_digits }} شیفت فریز شده</span>
+      </div>
+    </article>
+
+    {# کارت ۲: پاداش تارگت لاین اصلی #}
+    <article class="mc-eq-card">
+      <div class="mc-eq-head">
+        <div class="mc-eq-icon gold">🏆</div>
+        <span class="mc-eq-pill gold">
+          {% if metrics.line_target_result %}
+            {{ metrics.line_target_result.achieved_title|default:'در مسیر تارگت' }}
+          {% else %}
+            تارگت لاین
+          {% endif %}
+        </span>
+      </div>
+      <div>
+        <div class="mc-eq-label">پاداش تارگت لاین</div>
+        <div class="mc-eq-val positive mc-tabular">+{{ metrics.reward|default:0|persian_int }} <small>تومان</small></div>
+      </div>
+      <div class="mc-eq-foot">
+        <span>
+          {% if metrics.line_target_result %}
+            {{ metrics.line_target_result.progress_percent|persian_digits }}٪ پیشرفت تارگت ماه
+          {% else %}
+            بر اساس فروش لاین اصلی
+          {% endif %}
+        </span>
+      </div>
+    </article>
+
+    {# کارت ۳: کسورات و تخلفات ماه (در موبایل تمام‌عرض و افقی) #}
+    <article class="mc-eq-card is-deduction {% if metrics.deduction == 0 %}is-clean{% endif %}" onclick="mcSwitchTab('violations')">
+      <div class="mc-ded-mob-right">
+        <div class="mc-eq-icon {% if metrics.deduction > 0 %}rose{% else %}emerald{% endif %}">
+          {% if metrics.deduction > 0 %}⚠️{% else %}🛡️{% endif %}
+        </div>
+        <div>
+          <div class="mc-eq-label" style="margin:0;">کسورات تخلفات</div>
+          <div style="font-size:11.5px; color:var(--mc-ink-500); font-weight:600; margin-top:2px;">
+            {% if metrics.violation_points > 0 %}
+              {{ metrics.violation_points|persian_digits }} امتیاز منفی ثبت‌شده
+            {% else %}
+              بدون تخلف · پرونده سفید انضباطی
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="mc-ded-mob-left">
+        <div class="mc-eq-val {% if metrics.deduction > 0 %}negative{% else %}positive{% endif %} mc-tabular">
+          {% if metrics.deduction > 0 %}−{% endif %}{{ metrics.deduction|persian_int }} <small>تومان</small>
+        </div>
+        <span class="mc-ded-cta">
+          {% if metrics.deduction > 0 %}مشاهده علت کسر ‹{% else %}پرونده سفید 🛡️{% endif %}
+        </span>
+      </div>
+    </article>
+
+  </section>
+
+  {# ─── 5. نوار تب‌ها (کارکردهای شیفت / کسورات و تخلفات) + فیلترها ─── #}
+  <section class="mc-controls-row">
+    <div class="mc-seg-tabs" role="tablist">
+      <button type="button" class="mc-seg-btn active" id="mcTabBtnShifts" onclick="mcSwitchTab('shifts')">
+        <span>📅 کارکردهای شیفت</span>
+        <span class="mc-seg-badge emerald mc-tabular">{{ metrics.shift_logs_count|persian_digits }}</span>
+      </button>
+      <button type="button" class="mc-seg-btn" id="mcTabBtnViolations" onclick="mcSwitchTab('violations')">
+        <span>⚠️ کسورات و تخلفات</span>
+        <span class="mc-seg-badge rose mc-tabular">{{ month_violations|length|persian_digits }}</span>
+      </button>
+    </div>
+
+    <div class="mc-filter-bar" id="mcShiftFilterBar">
+      <button type="button" class="mc-filter-pill active" onclick="mcFilterShifts('ALL', this)">همه شیفت‌ها</button>
+      <button type="button" class="mc-filter-pill" onclick="mcFilterShifts('APPROVED', this)">🔒 فریز شده</button>
+      <button type="button" class="mc-filter-pill" onclick="mcFilterShifts('PENDING', this)">⏳ در انتظار</button>
+    </div>
+  </section>
+
+  {# ─── 6A. لیست کارت‌های روزانه کارکرد شیفت ─── #}
+  <section class="mc-tab-pane active" id="mcPaneShifts">
+    {% for d in metrics.shift_log_details %}
+    <article
+      class="mc-shift-card {% if d.shift_log.status != 'APPROVED' %}is-pending{% endif %}"
+      data-status="{{ d.shift_log.status }}"
+      data-idx="{{ forloop.counter0 }}"
+      onclick="mcOpenDrawer({{ forloop.counter0 }})"
+    >
+      <div class="mc-sc-header">
+        <div class="mc-sc-date-group">
+          <div class="mc-sc-cal-box mc-tabular">
+            <strong>{{ d.day_num|default:d.shift_log.date|jalali:"%d" }}</strong>
+            <small>{{ d.month_short|default:"" }}</small>
+          </div>
+          <div class="mc-sc-title-meta">
+            <strong>{{ d.weekday }} {{ d.day_num }} {{ d.month_short }} ({{ d.shift_log.date|jalali }})</strong>
+            <span>{{ d.shift_log.shift.title }}</span>
+          </div>
+        </div>
+
+        <span class="mc-sc-status {% if d.shift_log.status == 'APPROVED' %}approved{% else %}pending{% endif %}">
+          {{ d.status_text|default:d.shift_log.get_status_display }}
+        </span>
+      </div>
+
+      <div class="mc-sc-lines-box">
+        {% if d.pills %}
+          {% for pill in d.pills %}
+          <span class="mc-line-pill {{ pill.cls }}">{{ pill.text }}</span>
+          {% endfor %}
+        {% else %}
+          <span class="mc-line-pill main">لاین اصلی: {{ d.shift_log.main_department.name }} ({{ d.shift_log.main_hours|persian_digits }} س)</span>
+          {% if d.shift_log.has_support_line %}
+          <span class="mc-line-pill support">+ کمکی ({{ d.shift_log.support_hours|persian_digits }} س)</span>
+          {% endif %}
+        {% endif %}
+      </div>
+
+      <div class="mc-sc-footer">
+        <div class="mc-sc-share mc-tabular">
+          <span>سهم فروش:</span>
+          <strong>{{ d.total_units_share|persian_digits }} کالا</strong>
+        </div>
+
+        <div class="mc-sc-payout-cta">
+          <span class="mc-sc-payout-val mc-tabular">{{ d.total_commission|persian_int }} <small>تومان</small></span>
+          <span class="mc-sc-formula-btn">ریز فرمول ‹</span>
+        </div>
+      </div>
+    </article>
+    {% empty %}
+    <div class="mc-empty-card">
+      <p style="color:var(--mc-ink-500); font-size:13.5px; margin:0;">در این دوره کارکردی ثبت نشده است.</p>
+    </div>
+    {% endfor %}
+  </section>
+
+  {# ─── 6B. تب کسورات و تخلفات ماه ─── #}
+  <section class="mc-tab-pane" id="mcPaneViolations">
+    {% if month_violations %}
+    <div class="mc-violation-explainer">
+      <span>قانون پلکانی تخلفات: تکرار یک تخلف در همان ماه شمسی باعث افزایش ضریب کسر (مرتبه ۱ تا ۳) می‌شود.</span>
+      <strong class="mc-tabular">جمع کسورات دوره: {{ metrics.deduction|persian_int }} تومان ({{ metrics.violation_points|persian_digits }} امتیاز)</strong>
+    </div>
+
+    {% for v in month_violations %}
+    <article class="mc-violation-card">
+      <div class="mc-vc-top">
+        <div class="mc-vc-title">
+          <strong>{{ v.title }}</strong>
+          <small>{{ v.date_display }}</small>
+        </div>
+        <span class="mc-vc-deduction-pill mc-tabular">{{ v.deduction_display }}</span>
+      </div>
+
+      <div class="mc-vc-badges">
+        <span class="mc-vc-badge tier">{{ v.tier_label }}</span>
+        <span class="mc-vc-badge">{{ v.points_display }}</span>
+      </div>
+
+      <div class="mc-vc-note">{{ v.note }}</div>
+    </article>
+    {% endfor %}
+    {% else %}
+    <div class="mc-empty-card">
+      <div class="mc-empty-icon">🛡️</div>
+      <h4 style="font-size:15px; font-weight:900; color:var(--mc-ink-900); margin:0 0 4px;">پرونده سفید انضباطی در این ماه</h4>
+      <p style="font-size:12.5px; color:var(--mc-ink-500); margin:0;">
+        هیچ تخلف یا نمره منفی برای شما در این دوره ثبت نشده و ۱۰۰٪ پورسانت بدون کسر محاسبه شده است.
+      </p>
+    </div>
+    {% endif %}
+  </section>
+
 </div>
 
-<div class="stats">
-    <article>
-        <span>سهم از کالاهای فروخته‌شده</span>
-        <strong style="color: var(--green, #237554); font-size: 1.6rem;">{{ metrics.total_sales_units_share }}</strong>
-        <small>واحد کالا در این دوره</small>
-    </article>
-    <article>
-        <span>پورسانت ناخالص فروش</span>
-        <strong>{{ metrics.gross_sales_commission|persian_int }} تومان</strong>
-        <small>بر اساس ضرایب لاین و گرید</small>
-    </article>
-    <article>
-        <span>کسورات تخلفات</span>
-        <strong style="color: #c53030;">{{ metrics.deduction|persian_int }} تومان</strong>
-        <small>{{ metrics.violation_points }} امتیاز تخلف</small>
-    </article>
-    <article>
-        <span>پورسانت خالص نهایی</span>
-        <strong style="color: var(--green, #237554); font-size: 1.6rem;">{{ metrics.commission|persian_int }} تومان</strong>
-        <small>مبلغ قابل پرداخت</small>
-    </article>
+{# ─── SIDE DRAWER / MOBILE BOTTOM SHEET (با تگ div برای عدم تداخل با aside سراسری) ─── #}
+<div class="mc-drawer-backdrop" id="mcDrawerBackdrop" onclick="mcCloseDrawer()"></div>
+
+<div class="mc-shift-drawer" id="mcShiftDrawer" role="dialog" aria-modal="true" aria-label="ریز فرمول محاسبه شیفت">
+  <div class="mc-drawer-dark-head">
+    <div class="mc-sheet-handle"></div>
+
+    <div class="mc-d-head-top">
+      <div class="mc-d-head-title">
+        <h3 id="mcDrawerTitle">جزئیات محاسبه شیفت</h3>
+        <p id="mcDrawerSubtitle">🔒 محاسبه قطعی و فریز شده</p>
+      </div>
+
+      <div class="mc-d-nav-btns">
+        <button type="button" class="mc-d-btn-circle" id="mcBtnPrevShift" onclick="mcStepShift(-1)" title="شیفت قبلی">‹</button>
+        <button type="button" class="mc-d-btn-circle" id="mcBtnNextShift" onclick="mcStepShift(1)" title="شیفت بعدی">›</button>
+        <button type="button" class="mc-d-btn-circle" onclick="mcCloseDrawer()" title="بستن">✕</button>
+      </div>
+    </div>
+
+    <div class="mc-d-summary-boxes">
+      <div class="mc-d-sum-box">
+        <small>پورسانت کل این شیفت</small>
+        <strong class="mc-tabular" id="mcDrawerTotalCommission">۰ تومان</strong>
+      </div>
+      <div class="mc-d-sum-box units">
+        <small>مجموع سهم کالا</small>
+        <strong class="mc-tabular" id="mcDrawerTotalUnits">۰ کالا</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="mc-drawer-body" id="mcDrawerBody"></div>
+
+  <div class="mc-drawer-footer">
+    <span id="mcDrawerAuditText"></span>
+    <a href="#" class="mc-drawer-cta" id="mcDrawerCtaBtn">برگه کارکرد ←</a>
+  </div>
 </div>
 
-<article class="card">
-    <div class="card-head">
-        <h2>ریز محاسبات روزانه و شیفت‌ها</h2>
-    </div>
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    <th>تاریخ</th>
-                    <th>شیفت</th>
-                    <th>لاین اصلی (ساعت / فروش کل / سهم شما / نرخ / مبلغ)</th>
-                    <th>لاین(های) کمکی (ساعت / فروش کل / سهم شما / نرخ / مبلغ)</th>
-                    <th>مجموع سهم کالا</th>
-                    <th>پورسانت شیفت</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for d in metrics.shift_log_details %}
-                <tr>
-                    <td><b>{{ d.shift_log.date|jalali }}</b></td>
-                    <td>{{ d.shift_log.shift.title }}</td>
-                    <td>
-                        {% if d.primary_infos %}
-                            {% for p in d.primary_infos %}
-                            <div style="margin-bottom: 4px; padding-bottom: 4px; {% if not forloop.last %}border-bottom: 1px dashed #eef1ef;{% endif %}">
-                                <b>{{ p.department.name }}</b>:
-                                {{ p.hours }}h از {{ p.total_dept_hours }}h
-                                · فروش کل: <strong>{{ p.total_sold_units }}</strong>
-                                · سهم شما: <strong style="color: var(--green, #237554);">{{ p.share_units }}</strong>
-                                · نرخ: {{ p.rate_per_unit|persian_int }}
-                                → <strong>{{ p.commission|persian_int }} تومان</strong>
-                            </div>
-                            {% endfor %}
-                        {% elif d.main_info %}
-                        <div>
-                            <b>{{ d.main_info.department.name }}</b>:
-                            {{ d.main_info.hours }}h از {{ d.main_info.total_dept_hours }}h
-                            · فروش کل: <strong>{{ d.main_info.total_sold_units }}</strong>
-                            · سهم شما: <strong style="color: var(--green, #237554);">{{ d.main_info.share_units }}</strong>
-                            · نرخ: {{ d.main_info.rate_per_unit|persian_int }}
-                            → <strong>{{ d.main_info.commission|persian_int }} تومان</strong>
-                        </div>
-                        {% else %}
-                        —
-                        {% endif %}
-                        {% if d.activity_info %}
-                        <div style="margin-top: 6px;">
-                            <b>فعالیت {{ d.activity_info.department_name }}:</b>
-                            سهم <strong style="color: var(--green, #237554);">{{ d.activity_info.share_units }}</strong>
-                            → <strong>{{ d.activity_info.commission|persian_int }} تومان</strong>
-                        </div>
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if d.support_infos %}
-                            {% for s in d.support_infos %}
-                            <div style="margin-bottom: 4px; padding-bottom: 4px; {% if not forloop.last %}border-bottom: 1px dashed #eef1ef;{% endif %}">
-                                <b>{{ s.department.name }}</b>:
-                                {{ s.hours }}h از {{ s.total_dept_hours }}h
-                                · فروش کل: <strong>{{ s.total_sold_units }}</strong>
-                                · سهم شما: <strong style="color: var(--green, #237554);">{{ s.share_units }}</strong>
-                                · نرخ: {{ s.rate_per_unit|persian_int }}
-                                → <strong>{{ s.commission|persian_int }} تومان</strong>
-                            </div>
-                            {% endfor %}
-                        {% elif d.support_info %}
-                            <div>
-                                <b>{{ d.support_info.department.name }}</b>:
-                                {{ d.support_info.hours }}h از {{ d.support_info.total_dept_hours }}h
-                                · فروش کل: <strong>{{ d.support_info.total_sold_units }}</strong>
-                                · سهم شما: <strong style="color: var(--green, #237554);">{{ d.support_info.share_units }}</strong>
-                                · نرخ: {{ d.support_info.rate_per_unit|persian_int }}
-                                → <strong>{{ d.support_info.commission|persian_int }} تومان</strong>
-                            </div>
-                        {% else %}
-                            <span style="color: #888;">—</span>
-                        {% endif %}
-                        {% if d.overtime_info %}
-                        <div style="margin-top: 6px; padding: 4px 8px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; font-size: 11.5px; color: #166534;">
-                            ⚡ <b>اضافه‌کاری:</b> {{ d.overtime_info.hours }}h در {{ d.overtime_info.department_name }} (شیفت {{ d.overtime_info.target_shift_title }})
-                            · سهم: <strong>{{ d.overtime_info.share_units }}</strong>
-                            → <strong>{{ d.overtime_info.commission|persian_int }} تومان</strong>
-                        </div>
-                        {% endif %}
-                    </td>
-                    <td><strong style="color: var(--green, #237554);">{{ d.total_units_share }}</strong></td>
-                    <td><strong>{{ d.total_commission|persian_int }} تومان</strong></td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="6" class="empty">در این دوره کارکردی ثبت نشده است.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</article>
+{# ─── نوار ناوبری پایین موبایل (هماهنگ با داشبورد کارمند) ─── #}
+<div class="emp-mobile-bottom-nav" role="navigation" aria-label="ناوبری اصلی">
+  <a href="{% url 'dashboard' %}" class="emp-bot-nav-item">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+    <span>میز کار</span>
+  </a>
+
+  <a href="{% url 'shift_log_create' %}" class="emp-bot-nav-fab" title="ثبت کارکرد امروز">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+  </a>
+
+  <a href="{% url 'my_commission_report' %}" class="emp-bot-nav-item active">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+    <span>کارنامه</span>
+  </a>
+
+  <a href="{% url 'profile' %}" class="emp-bot-nav-item">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+    <span>پروفایل</span>
+  </a>
+</div>
+
+{{ drawer_shifts_data|json_script:"mc-shifts-json" }}
+
+<script>
+  const MC_SHIFTS = JSON.parse(document.getElementById("mc-shifts-json")?.textContent || "[]");
+  let mcActiveIdx = 0;
+
+  function mcSwitchTab(tab) {
+    const isShifts = tab === "shifts";
+    document.getElementById("mcTabBtnShifts").classList.toggle("active", isShifts);
+    document.getElementById("mcTabBtnViolations").classList.toggle("active", !isShifts);
+    document.getElementById("mcPaneShifts").classList.toggle("active", isShifts);
+    document.getElementById("mcPaneViolations").classList.toggle("active", !isShifts);
+    const filterBar = document.getElementById("mcShiftFilterBar");
+    if (filterBar) filterBar.style.display = isShifts ? "flex" : "none";
+  }
+
+  function mcFilterShifts(status, btn) {
+    document.querySelectorAll(".mc-filter-pill").forEach(el => el.classList.remove("active"));
+    btn.classList.add("active");
+    mcCloseDrawer();
+    document.querySelectorAll("#mcPaneShifts .mc-shift-card").forEach(card => {
+      if (status === "ALL" || card.dataset.status === status) {
+        card.style.display = "flex";
+      } else {
+        card.style.display = "none";
+      }
+    });
+  }
+
+  function mcOpenDrawer(idx) {
+    const item = MC_SHIFTS[idx];
+    if (!item) return;
+    mcActiveIdx = idx;
+
+    document.getElementById("mcDrawerTitle").textContent = `${item.weekday} ${item.dayNum} ${item.monthShort} · ${item.shiftTitle}`;
+    document.getElementById("mcDrawerSubtitle").textContent =
+      item.status === "APPROVED"
+        ? "🔒 محاسبه قطعی و فریز شده در کیف پول"
+        : "⏳ محاسبه پویا — در انتظار تأیید مدیر شعبه";
+
+    document.getElementById("mcDrawerTotalCommission").textContent = `${item.totalCommission} تومان`;
+    document.getElementById("mcDrawerTotalUnits").textContent = `${item.totalUnits} کالا`;
+
+    document.getElementById("mcBtnPrevShift").disabled = idx <= 0;
+    document.getElementById("mcBtnNextShift").disabled = idx >= MC_SHIFTS.length - 1;
+
+    const body = document.getElementById("mcDrawerBody");
+    if (!item.steps || !item.steps.length) {
+      body.innerHTML = `<div class="mc-empty-card"><p style="margin:0;color:var(--mc-ink-500);font-size:12.5px;">جزئیاتی برای این شیفت ثبت نشده است.</p></div>`;
+    } else {
+      body.innerHTML = item.steps.map(st => `
+        <div class="mc-fsc-card">
+          <div class="mc-fsc-top">
+            <div class="mc-fsc-title-group">
+              <span class="mc-fsc-badge ${st.badgeCls}">${st.badge}</span>
+              <span class="mc-fsc-dept">${st.dept}</span>
+            </div>
+            <span class="mc-fsc-money mc-tabular">${st.money}</span>
+          </div>
+
+          <div class="mc-fsc-hour-wrap">
+            <div class="mc-fsc-hour-labels">
+              <span>${st.hourLabel}</span>
+              <strong class="mc-tabular">${st.hourPercent.toLocaleString("fa-IR")}٪</strong>
+            </div>
+            <div class="mc-fsc-track">
+              <div class="mc-fsc-fill" style="width:${st.hourPercent}%;"></div>
+            </div>
+          </div>
+
+          <div class="mc-fsc-3grid mc-tabular">
+            <div class="mc-fsc-mini">
+              <small>${st.box1Label}</small>
+              <strong>${st.box1Val}</strong>
+            </div>
+            <div class="mc-fsc-mini highlight">
+              <small>${st.box2Label}</small>
+              <strong>${st.box2Val}</strong>
+            </div>
+            <div class="mc-fsc-mini">
+              <small>${st.box3Label}</small>
+              <strong>${st.box3Val}</strong>
+            </div>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    document.getElementById("mcDrawerAuditText").textContent = item.audit || "";
+    const cta = document.getElementById("mcDrawerCtaBtn");
+    cta.href = item.ctaUrl || "#";
+    cta.textContent = item.ctaLabel || "برگه کارکرد ←";
+
+    document.getElementById("mcDrawerBackdrop").classList.add("is-open");
+    document.getElementById("mcShiftDrawer").classList.add("is-open");
+  }
+
+  function mcCloseDrawer() {
+    document.getElementById("mcDrawerBackdrop")?.classList.remove("is-open");
+    document.getElementById("mcShiftDrawer")?.classList.remove("is-open");
+  }
+
+  function mcStepShift(delta) {
+    const nextIdx = mcActiveIdx + delta;
+    if (nextIdx >= 0 && nextIdx < MC_SHIFTS.length) {
+      mcOpenDrawer(nextIdx);
+    }
+  }
+
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") mcCloseDrawer();
+  });
+</script>
 {% endblock %}
